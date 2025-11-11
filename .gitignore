@@ -43,3 +43,5 @@ lerna-debug.log*
 
 # OpenAI response logs
 /logs
+CLAUDE.md
+TODO.md
