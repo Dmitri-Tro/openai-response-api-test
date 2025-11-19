@@ -26,16 +26,17 @@ export default tseslint.config(
   },
   {
     rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-floating-promises': 'warn',
-      '@typescript-eslint/no-unsafe-argument': 'warn',
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-unsafe-argument': 'error',
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
   {
-    // Relax strict type checking for test files (including e2e tests)
-    files: ['**/*.spec.ts', '**/*.test.ts', '**/*.e2e-spec.ts'],
+    // Relax strict type checking for test files (unit, integration, e2e)
+    files: ['**/*.spec.ts', '**/*.test.ts', '**/*.e2e-spec.ts', '**/*.integration-spec.ts', 'test/**/*.ts'],
     rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unsafe-return': 'off',

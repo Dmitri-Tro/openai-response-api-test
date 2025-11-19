@@ -1,7 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import configuration from './config/configuration';
 import { validate } from './config/env.validation';
 import { CommonModule } from './common/common.module';
@@ -17,7 +15,7 @@ import { OpenAIModule } from './openai/openai.module';
     CommonModule,
     OpenAIModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [],
+  providers: [],
 })
 export class AppModule {}

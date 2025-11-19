@@ -149,7 +149,7 @@ export class ResponsesController {
 
   @Post('images/stream')
   @ApiOperation({
-    summary: 'Generate image with streaming (Phase 2.9)',
+    summary: 'Generate image with streaming',
     description:
       'Creates an image using gpt-image-1 with progressive rendering. Streams partial images as they are generated for better user experience.',
   })
@@ -305,7 +305,7 @@ export class ResponsesController {
 
   @Delete(':id')
   @ApiOperation({
-    summary: 'Delete stored response by ID (Phase 2.8)',
+    summary: 'Delete stored response by ID',
     description:
       'Deletes a stored response permanently. This action cannot be undone. Only responses that belong to your account can be deleted.',
   })
@@ -335,7 +335,7 @@ export class ResponsesController {
 
   @Post(':id/cancel')
   @ApiOperation({
-    summary: 'Cancel background response by ID (Phase 2.8)',
+    summary: 'Cancel background response by ID',
     description:
       'Cancels a response that is running in the background. Only works for responses created with background=true parameter. Once canceled, the response will have status="cancelled".',
   })

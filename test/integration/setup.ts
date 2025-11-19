@@ -27,11 +27,10 @@ export async function createIntegrationTestModule(
         load: [configuration],
         isGlobal: true,
       }),
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
       ...(imports as any[]),
     ],
     providers: [
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       ...(providers as any[]),
       {
         provide: 'OPENAI_CLIENT',

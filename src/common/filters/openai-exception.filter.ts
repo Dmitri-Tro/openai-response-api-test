@@ -28,7 +28,7 @@ import {
  *
  * **Architecture:**
  * Uses `@Catch()` decorator to catch ALL exceptions (OpenAI, NestJS, Network, Unknown).
- * Employs `instanceof` checks from OpenAI SDK for reliable error type detection (Phase 2.10).
+ * Employs `instanceof` checks from OpenAI SDK for reliable error type detection.
  * Returns EnhancedErrorResponse with standardized structure across all error types.
  *
  * **Error Categories Handled:**
@@ -43,7 +43,7 @@ import {
  *    - `APIConnectionTimeoutError` (504) - Timeout errors with retry hints
  *    - Generic `APIError` - Fallback for unclassified API errors
  *
- * 2. **Image-Specific Errors** (Phase 2.9/2.10):
+ * 2. **Image-Specific Errors**:
  *    Detects 15 image error codes using IMAGE_ERROR_CODE_MAPPINGS:
  *    - invalid_image_size, invalid_image_format, invalid_image_quality
  *    - invalid_image_model, invalid_image_background, invalid_input_fidelity
@@ -89,21 +89,21 @@ import {
  * }
  * ```
  *
- * **Rate Limit Header Extraction (Phase 2.10):**
+ * **Rate Limit Header Extraction:**
  * Extracts detailed rate limit information from OpenAI response headers:
  * - x-ratelimit-limit-requests, x-ratelimit-remaining-requests
  * - x-ratelimit-reset-requests, x-ratelimit-limit-tokens
  * - x-ratelimit-remaining-tokens, x-ratelimit-reset-tokens
  * Sets Retry-After header in HTTP response for client retry logic.
  *
- * **Error Code Extraction (Phase 2.10):**
+ * **Error Code Extraction:**
  * Sophisticated extraction logic for OpenAI error codes:
  * 1. Checks top-level `code` property
  * 2. Checks nested `error.code` property
  * 3. Parses JSON from error message (OpenAI SDK sometimes embeds JSON)
  * 4. Safely handles all extraction failures with type guards
  *
- * **Parameter Extraction (Phase 2.10):**
+ * **Parameter Extraction:**
  * Identifies which request parameter caused validation errors:
  * - Checks top-level `param` property
  * - Checks nested `error.param` property
@@ -162,7 +162,7 @@ export class OpenAIExceptionFilter implements ExceptionFilter {
         error: exception.getResponse(),
       };
     }
-    // Handle OpenAI SDK errors using instanceof (Phase 2.10 enhancement)
+    // Handle OpenAI SDK errors using instanceof enhancement)
     else if (exception instanceof OpenAI.APIError) {
       const requestId = exception.requestID || 'unknown';
       errorResponse = this.handleOpenAIAPIError(
@@ -220,7 +220,7 @@ export class OpenAIExceptionFilter implements ExceptionFilter {
   }
 
   /**
-   * Main handler for OpenAI SDK errors using instanceof checks (Phase 2.10)
+   * Main handler for OpenAI SDK errors using instanceof checks
    * Routes to specific error type handlers based on error class
    */
   private handleOpenAIAPIError(
@@ -253,7 +253,7 @@ export class OpenAIExceptionFilter implements ExceptionFilter {
   }
 
   /**
-   * Handle 429 Rate Limit errors with rate limit header extraction (Phase 2.10)
+   * Handle 429 Rate Limit errors with rate limit header extraction
    */
   private handleRateLimitError(
     exception: InstanceType<typeof OpenAI.RateLimitError>,
@@ -271,7 +271,7 @@ export class OpenAIExceptionFilter implements ExceptionFilter {
         : retryAfterHeader || 60;
     }
 
-    // Extract rate limit headers (Phase 2.10 enhancement)
+    // Extract rate limit headers
     const rateLimitInfo = this.extractRateLimitInfo(exception.headers);
 
     return {
@@ -341,18 +341,18 @@ export class OpenAIExceptionFilter implements ExceptionFilter {
   }
 
   /**
-   * Handle 400 Bad Request errors with image-specific error code detection (Phase 2.10)
+   * Handle 400 Bad Request errors with image-specific error code detection
    */
   private handleBadRequestError(
     exception: APIError,
     request: Request,
     requestId: string,
   ): EnhancedErrorResponse {
-    // Extract error code from exception (Phase 2.10 requirement)
+    // Extract error code from exception
     const errorCode = this.extractErrorCode(exception);
     const parameter = this.extractParameter(exception);
 
-    // Check if it's an image-specific error code (Phase 2.10)
+    // Check if it's an image-specific error code
     if (errorCode && this.isImageErrorCode(errorCode)) {
       const imageErrorMapping = IMAGE_ERROR_CODE_MAPPINGS[errorCode];
       return {
@@ -490,7 +490,7 @@ export class OpenAIExceptionFilter implements ExceptionFilter {
   }
 
   /**
-   * Handle network errors using Phase 2.10 mappings
+   * Handle network errors
    */
   private handleNetworkError(
     code: NetworkErrorCode,
@@ -521,7 +521,7 @@ export class OpenAIExceptionFilter implements ExceptionFilter {
   }
 
   /**
-   * Extract rate limit headers from OpenAI response (Phase 2.10)
+   * Extract rate limit headers from OpenAI response
    */
   private extractRateLimitInfo(
     headers?: Headers | Record<string, string | string[]>,
@@ -551,7 +551,7 @@ export class OpenAIExceptionFilter implements ExceptionFilter {
   }
 
   /**
-   * Extract error code from OpenAI exception (Phase 2.10 requirement)
+   * Extract error code from OpenAI exception
    */
   private extractErrorCode(exception: APIError): string | undefined {
     // OpenAI SDK wraps the error in various ways, try all approaches
@@ -608,7 +608,7 @@ export class OpenAIExceptionFilter implements ExceptionFilter {
   }
 
   /**
-   * Extract parameter that caused the error (Phase 2.10 requirement)
+   * Extract parameter that caused the error
    */
   private extractParameter(exception: APIError): string | null {
     // Try to extract from top-level param property
@@ -668,7 +668,7 @@ export class OpenAIExceptionFilter implements ExceptionFilter {
   }
 
   /**
-   * Check if error code is an image-specific error (Phase 2.10)
+   * Check if error code is an image-specific error
    */
   private isImageErrorCode(code: string): code is ImageErrorCode {
     return code in IMAGE_ERROR_CODE_MAPPINGS;

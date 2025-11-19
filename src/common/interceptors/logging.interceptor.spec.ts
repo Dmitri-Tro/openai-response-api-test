@@ -3,11 +3,13 @@ import { ExecutionContext, CallHandler } from '@nestjs/common';
 import { of, throwError } from 'rxjs';
 import { LoggingInterceptor } from './logging.interceptor';
 import { LoggerService } from '../services/logger.service';
+import { PricingService } from '../services/pricing.service';
 import { createMockLoggerService } from '../testing/test.factories';
 
 describe('LoggingInterceptor', () => {
   let interceptor: LoggingInterceptor;
   let mockLoggerService: jest.Mocked<LoggerService>;
+  let pricingService: PricingService;
   let mockExecutionContext: ExecutionContext;
   let mockCallHandler: CallHandler;
 
@@ -22,10 +24,12 @@ describe('LoggingInterceptor', () => {
           provide: LoggerService,
           useValue: mockLoggerService,
         },
+        PricingService, // Use real PricingService for integration tests
       ],
     }).compile();
 
     interceptor = module.get<LoggingInterceptor>(LoggingInterceptor);
+    pricingService = module.get<PricingService>(PricingService);
   });
 
   afterEach(() => {
@@ -182,7 +186,7 @@ describe('LoggingInterceptor', () => {
     it('should calculate cost estimate correctly', (done) => {
       const mockRequest = {
         url: '/api/responses/text',
-        body: { input: 'test' },
+        body: { input: 'test', model: 'gpt-5' },
       };
 
       mockExecutionContext = {
@@ -192,6 +196,7 @@ describe('LoggingInterceptor', () => {
       } as unknown as ExecutionContext;
 
       const mockResponse = {
+        model: 'gpt-5',
         usage: {
           prompt_tokens: 1000,
           completion_tokens: 2000,
@@ -205,14 +210,11 @@ describe('LoggingInterceptor', () => {
 
       interceptor.intercept(mockExecutionContext, mockCallHandler).subscribe({
         next: () => {
-          expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
-            expect.objectContaining({
-              metadata: expect.objectContaining({
-                // GPT-5 Cost: (1000/1000)*0.00125 + (2000/1000)*0.01 = 0.00125 + 0.02 = 0.02125
-                cost_estimate: 0.02125,
-              }),
-            }),
-          );
+          const calls = mockLoggerService.logOpenAIInteraction.mock.calls;
+          expect(calls.length).toBeGreaterThan(0);
+          const lastCall = calls[calls.length - 1][0];
+          // GPT-5 Cost: (1000/1_000_000)*0.00125 + (2000/1_000_000)*0.01 = 0.00000125 + 0.00002 = 0.00002125
+          expect(lastCall.metadata.cost_estimate).toBeCloseTo(0.00002125, 10);
           done();
         },
         error: done,
@@ -466,7 +468,7 @@ describe('LoggingInterceptor', () => {
     it('should calculate cost for typical usage', (done) => {
       const mockRequest = {
         url: '/api/responses/text',
-        body: { input: 'test' },
+        body: { input: 'test', model: 'gpt-5' },
       };
 
       mockExecutionContext = {
@@ -476,6 +478,7 @@ describe('LoggingInterceptor', () => {
       } as unknown as ExecutionContext;
 
       const mockResponse = {
+        model: 'gpt-5',
         usage: {
           prompt_tokens: 500,
           completion_tokens: 1500,
@@ -489,14 +492,11 @@ describe('LoggingInterceptor', () => {
 
       interceptor.intercept(mockExecutionContext, mockCallHandler).subscribe({
         next: () => {
-          // GPT-5 Cost: (500/1000)*0.00125 + (1500/1000)*0.01 = 0.000625 + 0.015 = 0.015625
-          expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
-            expect.objectContaining({
-              metadata: expect.objectContaining({
-                cost_estimate: 0.015625,
-              }),
-            }),
-          );
+          const calls = mockLoggerService.logOpenAIInteraction.mock.calls;
+          expect(calls.length).toBeGreaterThan(0);
+          const lastCall = calls[calls.length - 1][0];
+          // GPT-5 Cost: (500/1_000_000)*0.00125 + (1500/1_000_000)*0.01 = 0.000000625 + 0.000015 = 0.000015625
+          expect(lastCall.metadata.cost_estimate).toBeCloseTo(0.000015625, 10);
           done();
         },
         error: done,

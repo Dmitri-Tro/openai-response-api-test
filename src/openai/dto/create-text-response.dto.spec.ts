@@ -83,6 +83,94 @@ describe('CreateTextResponseDto', () => {
     });
   });
 
+  describe('modalities field', () => {
+    it('should accept valid modalities with text only', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.modalities = ['text'];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept valid modalities with audio only', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.modalities = ['audio'];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept valid modalities with both text and audio', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.modalities = ['text', 'audio'];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should allow modalities to be undefined', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should fail with empty modalities array', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.modalities = [];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].property).toBe('modalities');
+      expect(errors[0].constraints).toHaveProperty('arrayNotEmpty');
+    });
+
+    it('should fail with invalid modality value', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      (dto as any).modalities = ['video'];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].property).toBe('modalities');
+    });
+
+    it('should fail with mixed valid and invalid modalities', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      (dto as any).modalities = ['text', 'video'];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].property).toBe('modalities');
+    });
+
+    it('should fail with non-array modalities', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      (dto as any).modalities = 'text';
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].property).toBe('modalities');
+    });
+
+    it('should fail with array of non-strings', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      (dto as any).modalities = [1, 2];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].property).toBe('modalities');
+    });
+  });
+
   describe('temperature field', () => {
     it('should accept temperature of 0', async () => {
       const dto = new CreateTextResponseDto();
@@ -403,6 +491,769 @@ describe('CreateTextResponseDto', () => {
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('file_search tool configuration', () => {
+    it('should accept valid file_search tool with all parameters', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'file_search',
+          vector_store_ids: ['vs_abc123', 'vs_def456'],
+          max_num_results: 10,
+          ranking_options: {
+            ranker: 'auto',
+            score_threshold: 0.7,
+          },
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept file_search tool with minimal configuration', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'file_search',
+          vector_store_ids: ['vs_abc123'],
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept file_search with only max_num_results', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'file_search',
+          vector_store_ids: ['vs_abc123'],
+          max_num_results: 25,
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept file_search with only ranking_options', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'file_search',
+          vector_store_ids: ['vs_abc123'],
+          ranking_options: {
+            score_threshold: 0.8,
+          },
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should reject file_search with invalid vector_store_ids', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'file_search',
+          vector_store_ids: ['invalid_id'],
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsFileSearchToolConstraint',
+      );
+    });
+
+    it('should reject file_search with empty vector_store_ids', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'file_search',
+          vector_store_ids: [],
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsFileSearchToolConstraint',
+      );
+    });
+
+    it('should reject file_search with max_num_results out of range', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'file_search',
+          vector_store_ids: ['vs_abc123'],
+          max_num_results: 100,
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsFileSearchToolConstraint',
+      );
+    });
+
+    it('should reject file_search with invalid score_threshold', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'file_search',
+          vector_store_ids: ['vs_abc123'],
+          ranking_options: {
+            score_threshold: 1.5,
+          },
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsFileSearchToolConstraint',
+      );
+    });
+
+    it('should reject file_search with invalid ranker', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'file_search',
+          vector_store_ids: ['vs_abc123'],
+          ranking_options: {
+            ranker: 'custom',
+          },
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsFileSearchToolConstraint',
+      );
+    });
+
+    it('should combine file_search with other tools', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'get_weather',
+            description: 'Get weather',
+            parameters: {},
+          },
+        },
+        {
+          type: 'file_search',
+          vector_store_ids: ['vs_abc123'],
+          max_num_results: 5,
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept multiple file_search tools', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'file_search',
+          vector_store_ids: ['vs_abc123'],
+          max_num_results: 10,
+        },
+        {
+          type: 'file_search',
+          vector_store_ids: ['vs_def456'],
+          max_num_results: 5,
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept file_search with include parameter', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'file_search',
+          vector_store_ids: ['vs_abc123'],
+        },
+      ];
+      dto.include = ['file_search_call.results'];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept file_search with multiple vector stores', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'file_search',
+          vector_store_ids: ['vs_store1', 'vs_store2', 'vs_store3'],
+          max_num_results: 15,
+          ranking_options: {
+            ranker: 'default-2024-11-15',
+            score_threshold: 0.85,
+          },
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+  });
+
+  describe('code_interpreter tool configuration', () => {
+    it('should accept basic code_interpreter tool without container', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Calculate factorial of 5';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept code_interpreter with auto container', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Analyze data';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+          },
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept code_interpreter with auto container and file_ids', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Process uploaded files';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+            file_ids: ['file-abc123xyz789012345678901'],
+          },
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept code_interpreter with multiple file_ids', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Analyze multiple datasets';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+            file_ids: [
+              'file-abc123xyz789012345678901',
+              'file-def456uvw345678901234567',
+              'file-ghi789rst012345678901234',
+            ],
+          },
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept code_interpreter with string container ID', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Reuse existing container';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: 'container_abc123xyz789',
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept code_interpreter with container ID with proper prefix', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: 'container_def456uvw012',
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should reject code_interpreter with empty string container', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: '',
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsCodeInterpreterToolConstraint',
+      );
+    });
+
+    it('should reject code_interpreter with null container', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: null,
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsCodeInterpreterToolConstraint',
+      );
+    });
+
+    it('should reject code_interpreter with array container', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: ['auto'],
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsCodeInterpreterToolConstraint',
+      );
+    });
+
+    it('should reject code_interpreter with invalid container.type', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'manual',
+          },
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsCodeInterpreterToolConstraint',
+      );
+    });
+
+    it('should reject code_interpreter with missing container.type', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            file_ids: ['file-abc123xyz789012345678901'],
+          },
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsCodeInterpreterToolConstraint',
+      );
+    });
+
+    it('should reject code_interpreter with empty file_ids array', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+            file_ids: [],
+          },
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsCodeInterpreterToolConstraint',
+      );
+    });
+
+    it('should reject code_interpreter with invalid file_id format', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+            file_ids: ['invalid-file-id'],
+          },
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsCodeInterpreterToolConstraint',
+      );
+    });
+
+    it('should reject code_interpreter with file_id not starting with "file-"', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+            file_ids: ['doc-abc123xyz789012345678901'],
+          },
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsCodeInterpreterToolConstraint',
+      );
+    });
+
+    it('should reject code_interpreter with non-string file_id', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+            file_ids: [123456],
+          },
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsCodeInterpreterToolConstraint',
+      );
+    });
+
+    it('should reject code_interpreter with non-array file_ids', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+            file_ids: 'file-abc123xyz789012345678901',
+          },
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsCodeInterpreterToolConstraint',
+      );
+    });
+
+    it('should reject code_interpreter with mixed valid/invalid file_ids', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+            file_ids: ['file-abc123xyz789012345678901', 'invalid-id'],
+          },
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsCodeInterpreterToolConstraint',
+      );
+    });
+
+    it('should combine code_interpreter with function tool', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Calculate and fetch weather';
+      dto.tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'get_weather',
+            description: 'Get weather',
+            parameters: {},
+          },
+        },
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+          },
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should combine code_interpreter with file_search tool', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Search docs and run calculations';
+      dto.tools = [
+        {
+          type: 'file_search',
+          vector_store_ids: ['vs_abc123'],
+        },
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+            file_ids: ['file-abc123xyz789012345678901'],
+          },
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept multiple code_interpreter tools', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Run multiple analyses';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+            file_ids: ['file-abc123xyz789012345678901'],
+          },
+        },
+        {
+          type: 'code_interpreter',
+          container: 'container_def456uvw012',
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept code_interpreter with include parameter', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Calculate with detailed outputs';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+          },
+        },
+      ];
+      dto.include = ['code_interpreter_call.outputs'];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept code_interpreter with all three tool types', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Complex multi-tool task';
+      dto.tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'api_call',
+            description: 'Call external API',
+            parameters: {},
+          },
+        },
+        {
+          type: 'file_search',
+          vector_store_ids: ['vs_abc123'],
+          max_num_results: 5,
+        },
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+            file_ids: ['file-abc123xyz789012345678901'],
+          },
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should validate code_interpreter with long file_id (27 chars)', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+            file_ids: ['file-abcdefghijklmnopqrstuvw'],
+          },
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should validate code_interpreter with short file_id (10 chars)', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+            file_ids: ['file-abc12'],
+          },
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept code_interpreter with minimal file_id (just "file-" + 1 char)', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+            file_ids: ['file-a'],
+          },
+        },
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should reject code_interpreter with only "file-" prefix', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+            file_ids: ['file-'],
+          },
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsCodeInterpreterToolConstraint',
+      );
+    });
+
+    it('should reject code_interpreter with number container type', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Test';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: 123,
+        },
+      ] as any;
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].constraints).toHaveProperty(
+        'IsCodeInterpreterToolConstraint',
+      );
+    });
+
+    it('should accept code_interpreter with include for multiple output types', async () => {
+      const dto = new CreateTextResponseDto();
+      dto.input = 'Generate plots and data';
+      dto.tools = [
+        {
+          type: 'code_interpreter',
+          container: {
+            type: 'auto',
+          },
+        },
+      ];
+      dto.include = [
+        'code_interpreter_call.outputs',
+        'message.output_text.logprobs',
+      ];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
     });
   });
 

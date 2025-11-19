@@ -15,6 +15,14 @@ export interface StreamState {
       input: string;
       code?: string;
       status: string;
+      /**
+       * Tool execution result - type varies by tool:
+       * - function: JSON object/array/primitive
+       * - code_interpreter: logs/images/files/errors
+       * - web_search: search results array
+       * - file_search: document references
+       * Using `unknown` ensures type guards are used when accessing
+       */
       result?: unknown;
     }
   >;

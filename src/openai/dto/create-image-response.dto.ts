@@ -10,8 +10,14 @@ import {
   IsArray,
   Min,
   Max,
+  ArrayNotEmpty,
+  IsIn,
 } from 'class-validator';
 import type { Responses } from 'openai/resources/responses';
+import { IsFileSearchToolValid } from '../validators/file-search-tool.validator';
+import { IsCodeInterpreterToolValid } from '../validators/code-interpreter-tool.validator';
+import { IsPromptValid } from '../validators/prompt.validator';
+import type { ResponsesToolConfig } from '../interfaces/file-search-tool.interface';
 
 /**
  * Data Transfer Object for creating image responses via OpenAI Responses API with gpt-image-1
@@ -24,9 +30,10 @@ import type { Responses } from 'openai/resources/responses';
  * - `model` - Base model (gpt-5, gpt-4o, etc.) that invokes image generation
  * - `input` - Text prompt describing the desired image
  * - `instructions` - System instructions for image generation style
+ * - `modalities` - Output modalities (text, audio)
  * - `tools` - Tools including the image_generation tool
  *
- * **Image-Specific Parameters (Phase 2.9):**
+ * **Image-Specific Parameters:**
  * These parameters configure the image_generation tool:
  *
  * - `image_model` - Image generation model (gpt-image-1/gpt-image-1-mini)
@@ -97,7 +104,7 @@ export class CreateImageResponseDto {
     example: 'A serene landscape with mountains and a lake at sunset',
   })
   @IsString()
-  input: string;
+  input!: string;
 
   @ApiPropertyOptional({
     description: 'System instructions for image generation',
@@ -108,13 +115,46 @@ export class CreateImageResponseDto {
   instructions?: string;
 
   @ApiPropertyOptional({
-    description: 'Tools available for the model to use',
+    description: `Output modalities the model should generate. Specify which types of content to generate:
+      - 'text': Text output (default)
+      - 'audio': Audio output (voice synthesis)
+
+      Examples: ['text'], ['audio'], ['text', 'audio']
+
+      Note: Audio generation requires audio-capable models and incurs additional costs.
+      Generated audio is returned as base64-encoded data in streaming events.`,
+    example: ['text'],
+    enum: ['text', 'audio'],
+    isArray: true,
+    type: [String],
+  })
+  @IsArray()
+  @IsOptional()
+  @ArrayNotEmpty({ message: 'modalities array cannot be empty' })
+  @IsIn(['text', 'audio'], {
+    each: true,
+    message: 'Each modality must be either "text" or "audio"',
+  })
+  modalities?: Array<'text' | 'audio'>;
+
+  @ApiPropertyOptional({
+    description: `Tools available for the model to use. Supports:
+      - function: User-defined functions for custom operations
+      - code_interpreter: Execute Python code for data analysis
+      - web_search: Search the internet for real-time information
+      - file_search: Semantic search through vector stores (requires Vector Stores API - Phase 5)
+      - custom_tool: User-defined tool extensions`,
     example: [],
   })
+  @IsArray()
   @IsOptional()
-  tools?: Responses.ResponseCreateParamsNonStreaming['tools'];
+  @IsCodeInterpreterToolValid({
+    message: 'Invalid code_interpreter tool configuration',
+  })
+  @IsFileSearchToolValid({ message: 'Invalid file_search tool configuration' })
+  tools?: ResponsesToolConfig[];
 
-  // Image-Specific Parameters (Phase 2.9)
+  // Image-Specific Parameters
   // These parameters configure the image_generation tool in the Responses API
   @ApiPropertyOptional({
     description:
@@ -302,7 +342,7 @@ export class CreateImageResponseDto {
   @IsOptional()
   parallel_tool_calls?: boolean;
 
-  // Caching & Performance Parameters (Phase 2.7)
+  // Caching & Performance Parameters
   @ApiPropertyOptional({
     description:
       'Used by OpenAI to cache responses for similar requests to optimize your cache hit rates. ' +
@@ -348,7 +388,7 @@ export class CreateImageResponseDto {
   @IsOptional()
   truncation?: 'auto' | 'disabled' | null;
 
-  // Safety & Metadata Parameters (Phase 2.7)
+  // Safety & Metadata Parameters
   @ApiPropertyOptional({
     description:
       'A stable identifier used to help detect users of your application that may be violating OpenAI usage policies. ' +
@@ -384,7 +424,7 @@ export class CreateImageResponseDto {
       variables: { style: 'photorealistic', subject: 'mountain landscape' },
     },
   })
-  @IsObject()
+  @IsPromptValid({ message: 'Invalid prompt configuration' })
   @IsOptional()
   prompt?: Responses.ResponsePrompt | null;
 

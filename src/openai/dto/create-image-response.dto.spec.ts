@@ -55,6 +55,74 @@ describe('CreateImageResponseDto', () => {
     });
   });
 
+  describe('modalities field', () => {
+    it('should accept valid modalities with text only', async () => {
+      const dto = new CreateImageResponseDto();
+      dto.input = 'A sunset';
+      dto.modalities = ['text'];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept valid modalities with audio only', async () => {
+      const dto = new CreateImageResponseDto();
+      dto.input = 'A sunset';
+      dto.modalities = ['audio'];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should accept valid modalities with both text and audio', async () => {
+      const dto = new CreateImageResponseDto();
+      dto.input = 'A sunset';
+      dto.modalities = ['text', 'audio'];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should allow modalities to be undefined', async () => {
+      const dto = new CreateImageResponseDto();
+      dto.input = 'A sunset';
+
+      const errors = await validate(dto);
+      expect(errors.length).toBe(0);
+    });
+
+    it('should fail with empty modalities array', async () => {
+      const dto = new CreateImageResponseDto();
+      dto.input = 'A sunset';
+      dto.modalities = [];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].property).toBe('modalities');
+      expect(errors[0].constraints).toHaveProperty('arrayNotEmpty');
+    });
+
+    it('should fail with invalid modality value', async () => {
+      const dto = new CreateImageResponseDto();
+      dto.input = 'A sunset';
+      (dto as any).modalities = ['video'];
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].property).toBe('modalities');
+    });
+
+    it('should fail with non-array modalities', async () => {
+      const dto = new CreateImageResponseDto();
+      dto.input = 'A sunset';
+      (dto as any).modalities = 'text';
+
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(errors[0].property).toBe('modalities');
+    });
+  });
+
   describe('image_model field', () => {
     it('should accept gpt-image-1', async () => {
       const dto = new CreateImageResponseDto();

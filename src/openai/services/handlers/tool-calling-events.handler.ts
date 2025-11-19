@@ -140,11 +140,11 @@ export class ToolCallingEventsHandler {
   /**
    * Handle code interpreter progress events
    *
-   * Emitted during code interpreter lifecycle (in_progress, generating phases).
+   * Emitted during code interpreter lifecycle (in_progress, generating, interpreting phases).
    * Indicates the code interpreter tool is active and generating or executing code.
    * Used for showing progress indicators to users.
    *
-   * @param event - Raw event data with type and call_id
+   * @param event - Code interpreter progress event matching {@link CodeInterpreterCallInProgressEvent}, {@link CodeInterpreterCallGeneratingEvent}, or {@link CodeInterpreterCallInterpretingEvent}
    * @param state - Shared streaming state
    * @param sequence - Event sequence number for ordering
    * @returns Generator yielding SSE event with progress status
@@ -155,7 +155,7 @@ export class ToolCallingEventsHandler {
     state: StreamState,
     sequence: number,
   ): Iterable<SSEEvent> {
-    const eventData = (event as { type: string; call_id?: string }) || {};
+    const eventData = (event as { type?: string; call_id?: string }) || {};
     const eventType = eventData.type || '';
     const callId = eventData.call_id || 'unknown';
 
@@ -181,7 +181,7 @@ export class ToolCallingEventsHandler {
    * incremental code chunks showing the code being written in real-time.
    * Accumulated in state.toolCalls[call_id].code for complete reconstruction.
    *
-   * @param event - Raw event data with delta (code chunk) and call_id
+   * @param event - Code interpreter code delta event matching {@link CodeInterpreterCodeDeltaEvent}
    * @param state - Shared streaming state tracking code generation
    * @param sequence - Event sequence number for ordering
    * @returns Generator yielding SSE event with code delta
@@ -192,7 +192,7 @@ export class ToolCallingEventsHandler {
     state: StreamState,
     sequence: number,
   ): Iterable<SSEEvent> {
-    const eventData = (event as { delta?: string; call_id?: string }) || {};
+    const eventData = event as { delta?: string; call_id?: string };
     const callId = eventData.call_id || 'unknown';
     const delta = eventData.delta || '';
 
@@ -229,7 +229,7 @@ export class ToolCallingEventsHandler {
    * Emitted when code generation is complete. Contains the full Python code that
    * will be executed by the code interpreter. The code is ready for execution.
    *
-   * @param event - Raw event data with call_id and complete code
+   * @param event - Code interpreter code done event matching {@link CodeInterpreterCodeDoneEvent}
    * @param state - Shared streaming state
    * @param sequence - Event sequence number for ordering
    * @returns Generator yielding SSE event with complete code
@@ -240,7 +240,7 @@ export class ToolCallingEventsHandler {
     state: StreamState,
     sequence: number,
   ): Iterable<SSEEvent> {
-    const eventData = (event as { call_id?: string; code?: string }) || {};
+    const eventData = event as { call_id?: string; code?: string };
 
     this.loggerService.logStreamingEvent({
       timestamp: new Date().toISOString(),
@@ -269,7 +269,7 @@ export class ToolCallingEventsHandler {
    * stdout, stderr, generated files, or plots. Marks tool call as completed with
    * results stored in state.toolCalls[call_id].result.
    *
-   * @param event - Raw event data with call_id and output (execution results)
+   * @param event - Code interpreter completed event matching {@link CodeInterpreterCallCompletedEvent}
    * @param state - Shared streaming state tracking tool results
    * @param sequence - Event sequence number for ordering
    * @returns Generator yielding SSE event with execution results
@@ -280,7 +280,7 @@ export class ToolCallingEventsHandler {
     state: StreamState,
     sequence: number,
   ): Iterable<SSEEvent> {
-    const eventData = (event as { call_id?: string; output?: unknown }) || {};
+    const eventData = event as { call_id?: string; output?: unknown };
     const callId = eventData.call_id || 'unknown';
 
     if (state.toolCalls.has(callId)) {

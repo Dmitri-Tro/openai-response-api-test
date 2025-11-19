@@ -4,6 +4,7 @@ import OpenAI from 'openai';
 import type { Responses } from 'openai/resources/responses';
 import { OpenAIResponsesService } from './openai-responses.service';
 import { LoggerService } from '../../common/services/logger.service';
+import { PricingService } from '../../common/services/pricing.service';
 import { CreateTextResponseDto } from '../dto/create-text-response.dto';
 import { CreateImageResponseDto } from '../dto/create-image-response.dto';
 import { LifecycleEventsHandler } from './handlers/lifecycle-events.handler';
@@ -28,6 +29,7 @@ describe('OpenAIResponsesService', () => {
   let service: OpenAIResponsesService;
   let mockConfigService: jest.Mocked<ConfigService>;
   let mockLoggerService: jest.Mocked<LoggerService>;
+  let pricingService: PricingService;
   let mockOpenAIClient: jest.Mocked<OpenAI>;
 
   // Mock event handlers
@@ -80,6 +82,7 @@ describe('OpenAIResponsesService', () => {
           provide: LoggerService,
           useValue: mockLoggerService,
         },
+        PricingService, // Use real PricingService for integration tests
         {
           provide: LifecycleEventsHandler,
           useValue: mockLifecycleHandler,
@@ -120,6 +123,7 @@ describe('OpenAIResponsesService', () => {
     }).compile();
 
     service = module.get<OpenAIResponsesService>(OpenAIResponsesService);
+    pricingService = module.get<PricingService>(PricingService);
 
     // Mock the OpenAI client using factory and helper
     mockOpenAIClient = createMockOpenAIClient();
@@ -1006,6 +1010,493 @@ describe('OpenAIResponsesService', () => {
 
       expect(mockImageHandler.handleImageGenProgress).toHaveBeenCalled();
     });
+
+    it('should build request with all optional parameters', async () => {
+      const dto: CreateImageResponseDto = {
+        input: 'Complete parameter test',
+        model: 'gpt-4o',
+        instructions: 'Test instructions',
+        image_model: 'gpt-image-1',
+        image_quality: 'high',
+        image_format: 'png',
+        image_size: '1024x1536',
+        image_moderation: 'low',
+        image_background: 'transparent',
+        input_fidelity: 'high',
+        output_compression: 90,
+        partial_images: 5,
+        conversation: 'conv_123',
+        previous_response_id: 'resp_prev',
+        store: true,
+        max_output_tokens: 1000,
+        tool_choice: 'auto' as const,
+        parallel_tool_calls: true,
+        prompt_cache_key: 'cache_key_123',
+        service_tier: 'default' as const,
+        background: false,
+        safety_identifier: 'safety_123',
+        metadata: { test: 'metadata' },
+        truncation: { type: 'auto' as const },
+        include: ['file_search_call.results'],
+      };
+
+      async function* mockStream() {
+        yield {
+          type: 'response.completed',
+          sequence_number: 1,
+          response: { id: 'resp_complete', status: 'completed' },
+        };
+      }
+
+      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      mockLifecycleHandler.handleResponseCompleted = jest
+        .fn()
+        .mockReturnValue([]);
+
+      const generator = service.createImageResponseStream(dto);
+      for await (const event of generator) {
+        // Consume events
+      }
+
+      const createCall = mockOpenAIClient.responses.create.mock.calls[0][0];
+
+      // Verify all parameters were included
+      expect(createCall).toMatchObject({
+        model: 'gpt-4o',
+        input: 'Complete parameter test',
+        instructions: 'Test instructions',
+        stream: true,
+        conversation: 'conv_123',
+        previous_response_id: 'resp_prev',
+        store: true,
+        max_output_tokens: 1000,
+        tool_choice: 'auto',
+        parallel_tool_calls: true,
+        prompt_cache_key: 'cache_key_123',
+        service_tier: 'default',
+        background: false,
+        safety_identifier: 'safety_123',
+        metadata: { test: 'metadata' },
+        truncation: { type: 'auto' },
+        include: ['file_search_call.results'],
+      });
+
+      // Verify image_generation tool was built correctly
+      const tools = createCall.tools as Array<Record<string, unknown>>;
+      const imageGenTool = tools?.find(
+        (t) => t.type === 'image_generation',
+      ) as Record<string, unknown>;
+
+      expect(imageGenTool).toMatchObject({
+        type: 'image_generation',
+        model: 'gpt-image-1',
+        quality: 'high',
+        output_format: 'png',
+        size: '1024x1536',
+        moderation: 'low',
+        background: 'transparent',
+        input_fidelity: 'high',
+        output_compression: 90,
+        partial_images: 5,
+      });
+    });
+
+    it('should handle streaming errors and log them properly', async () => {
+      const dto: CreateImageResponseDto = {
+        input: 'Error test',
+      };
+
+      const error = new Error('Streaming failed');
+
+      async function* mockStream() {
+        throw error;
+      }
+
+      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+
+      const generator = service.createImageResponseStream(dto);
+
+      const events: unknown[] = [];
+      try {
+        for await (const event of generator) {
+          events.push(event);
+        }
+        fail('Should have thrown an error');
+      } catch (e) {
+        expect(e).toBe(error);
+      }
+
+      // Verify error was logged
+      expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          api: 'responses',
+          endpoint: '/v1/responses (gpt-image-1 stream)',
+          error: expect.objectContaining({
+            message: 'Streaming failed',
+          }),
+          metadata: expect.objectContaining({
+            latency_ms: expect.any(Number),
+          }),
+        }),
+      );
+
+      // Verify error event was yielded
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        event: 'error',
+        data: expect.stringContaining('Streaming failed'),
+      });
+    });
+
+    it('should handle OpenAI API errors with detailed error properties', async () => {
+      const dto: CreateImageResponseDto = {
+        input: 'API error test',
+      };
+
+      const apiError = Object.assign(new Error('API error occurred'), {
+        type: 'invalid_request_error',
+        code: 'invalid_parameter',
+        status: 400,
+      });
+
+      async function* mockStream() {
+        throw apiError;
+      }
+
+      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+
+      const generator = service.createImageResponseStream(dto);
+
+      try {
+        for await (const event of generator) {
+          // Consume events
+        }
+        fail('Should have thrown an error');
+      } catch (e) {
+        expect(e).toBe(apiError);
+      }
+
+      // Verify error details were logged
+      expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.objectContaining({
+            message: 'API error occurred',
+            type: 'invalid_request_error',
+            code: 'invalid_parameter',
+            status: 400,
+          }),
+        }),
+      );
+    });
+
+    it('should route text events when model provides text alongside images', async () => {
+      const dto: CreateImageResponseDto = {
+        input: 'Image with text description',
+      };
+
+      async function* mockStream() {
+        yield {
+          type: 'response.output_text.delta',
+          sequence_number: 1,
+          delta: 'Generating image',
+        };
+        yield {
+          type: 'response.output_text.done',
+          sequence_number: 2,
+          text: 'Generating image...',
+        };
+        yield {
+          type: 'response.image_generation_call.completed',
+          sequence_number: 3,
+          call_id: 'img_123',
+          result: { image: 'base64_data' },
+        };
+      }
+
+      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      mockTextHandler.handleTextDelta = jest.fn().mockReturnValue(
+        (function* () {
+          yield { event: 'text_delta', data: '{}', sequence: 1 };
+        })(),
+      );
+      mockTextHandler.handleTextDone = jest.fn().mockReturnValue(
+        (function* () {
+          yield { event: 'text_done', data: '{}', sequence: 2 };
+        })(),
+      );
+      mockImageHandler.handleImageGenCompleted = jest.fn().mockReturnValue(
+        (function* () {
+          yield { event: 'image_completed', data: '{}', sequence: 3 };
+        })(),
+      );
+
+      const generator = service.createImageResponseStream(dto);
+      const events: unknown[] = [];
+      for await (const event of generator) {
+        events.push(event);
+      }
+
+      expect(mockTextHandler.handleTextDelta).toHaveBeenCalled();
+      expect(mockTextHandler.handleTextDone).toHaveBeenCalled();
+      expect(mockImageHandler.handleImageGenCompleted).toHaveBeenCalled();
+      expect(events).toHaveLength(3);
+    });
+
+    it('should log each streaming event to logger service', async () => {
+      const dto: CreateImageResponseDto = {
+        input: 'Logging test',
+      };
+
+      async function* mockStream() {
+        yield {
+          type: 'response.image_generation_call.in_progress',
+          sequence_number: 1,
+          call_id: 'img_log',
+        };
+        yield {
+          type: 'response.image_generation_call.completed',
+          sequence_number: 2,
+          call_id: 'img_log',
+          result: { image: 'data' },
+        };
+      }
+
+      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      mockImageHandler.handleImageGenProgress = jest.fn().mockReturnValue(
+        (function* () {
+          yield { event: 'progress', data: '{}', sequence: 1 };
+        })(),
+      );
+      mockImageHandler.handleImageGenCompleted = jest.fn().mockReturnValue(
+        (function* () {
+          yield { event: 'completed', data: '{}', sequence: 2 };
+        })(),
+      );
+
+      const generator = service.createImageResponseStream(dto);
+      for await (const event of generator) {
+        // Consume events
+      }
+
+      // Verify logging calls
+      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledTimes(2);
+      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          api: 'responses',
+          endpoint: '/v1/responses (gpt-image-1 stream)',
+          event_type: 'response.image_generation_call.in_progress',
+          sequence: 1,
+        }),
+      );
+      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event_type: 'response.image_generation_call.completed',
+          sequence: 2,
+        }),
+      );
+    });
+
+    it('should handle unknown event types using structural handler', async () => {
+      const dto: CreateImageResponseDto = {
+        input: 'Unknown event test',
+      };
+
+      async function* mockStream() {
+        yield {
+          type: 'response.unknown_event_type',
+          sequence_number: 1,
+        };
+      }
+
+      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      mockStructuralHandler.handleStructuralEvent = jest.fn().mockReturnValue(
+        (function* () {
+          yield { event: 'structural', data: '{}', sequence: 1 };
+        })(),
+      );
+
+      const generator = service.createImageResponseStream(dto);
+      for await (const event of generator) {
+        // Consume events
+      }
+
+      expect(mockStructuralHandler.handleStructuralEvent).toHaveBeenCalled();
+    });
+
+    it('should handle prompt parameter in image streaming', async () => {
+      const dto: CreateImageResponseDto = {
+        input: 'Prompt test',
+        prompt: {
+          type: 'text',
+          text: 'System prompt for image generation',
+        } as any,
+      };
+
+      async function* mockStream() {
+        yield {
+          type: 'response.completed',
+          sequence_number: 1,
+          response: { id: 'resp_prompt', status: 'completed' },
+        };
+      }
+
+      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      mockLifecycleHandler.handleResponseCompleted = jest
+        .fn()
+        .mockReturnValue([]);
+
+      const generator = service.createImageResponseStream(dto);
+      for await (const event of generator) {
+        // Consume events
+      }
+
+      const createCall = mockOpenAIClient.responses.create.mock.calls[0][0];
+      expect(createCall.prompt).toBeDefined();
+      expect(createCall.prompt).toMatchObject({
+        type: 'text',
+        text: 'System prompt for image generation',
+      });
+    });
+  });
+
+  describe('resumeResponseStream', () => {
+    it('should resume streaming a stored response by ID', async () => {
+      const responseId = 'resp_resume_123';
+
+      async function* mockStream() {
+        yield {
+          type: 'response.created',
+          sequence_number: 1,
+          response: { id: responseId },
+        };
+        yield {
+          type: 'response.output_text.delta',
+          sequence_number: 2,
+          delta: 'Resumed text',
+        };
+        yield {
+          type: 'response.completed',
+          sequence_number: 3,
+          response: {
+            id: responseId,
+            status: 'completed',
+            output_text: 'Resumed text',
+          },
+        };
+      }
+
+      mockOpenAIClient.responses.retrieve.mockReturnValue(mockStream() as any);
+      mockLifecycleHandler.handleResponseCreated = jest
+        .fn()
+        .mockReturnValue([]);
+      mockTextHandler.handleTextDelta = jest.fn().mockReturnValue(
+        (function* () {
+          yield { event: 'text_delta', data: '{}', sequence: 2 };
+        })(),
+      );
+      mockLifecycleHandler.handleResponseCompleted = jest
+        .fn()
+        .mockReturnValue([]);
+
+      const generator = service.resumeResponseStream(responseId);
+      const events: unknown[] = [];
+      for await (const event of generator) {
+        events.push(event);
+      }
+
+      expect(mockOpenAIClient.responses.retrieve).toHaveBeenCalledWith(
+        responseId,
+        { stream: true },
+      );
+      expect(mockLifecycleHandler.handleResponseCreated).toHaveBeenCalled();
+      expect(mockTextHandler.handleTextDelta).toHaveBeenCalled();
+      expect(mockLifecycleHandler.handleResponseCompleted).toHaveBeenCalled();
+    });
+
+    it('should handle resume stream errors and log them', async () => {
+      const responseId = 'resp_error';
+      const error = new Error('Resume failed');
+
+      async function* mockStream() {
+        throw error;
+      }
+
+      mockOpenAIClient.responses.retrieve.mockReturnValue(mockStream() as any);
+
+      const generator = service.resumeResponseStream(responseId);
+
+      const events: unknown[] = [];
+      try {
+        for await (const event of generator) {
+          events.push(event);
+        }
+        fail('Should have thrown an error');
+      } catch (e) {
+        expect(e).toBe(error);
+      }
+
+      // Verify error was logged
+      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          api: 'responses',
+          endpoint: `/v1/responses/${responseId}/stream (GET)`,
+          event_type: 'stream_error',
+          error: expect.objectContaining({
+            message: 'Resume failed',
+          }),
+        }),
+      );
+
+      // Verify error event was yielded
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        event: 'error',
+        data: expect.stringContaining('Resume failed'),
+      });
+    });
+
+    it('should log stream resume event', async () => {
+      const responseId = 'resp_logging';
+
+      async function* mockStream() {
+        yield {
+          type: 'response.completed',
+          sequence_number: 1,
+          response: {
+            id: responseId,
+            status: 'completed',
+            usage: {
+              input_tokens: 10,
+              output_tokens: 20,
+              total_tokens: 30,
+            },
+          },
+        };
+      }
+
+      mockOpenAIClient.responses.retrieve.mockReturnValue(mockStream() as any);
+      mockLifecycleHandler.handleResponseCompleted = jest
+        .fn()
+        .mockReturnValue([]);
+
+      const generator = service.resumeResponseStream(responseId);
+      for await (const event of generator) {
+        // Consume events
+      }
+
+      // Verify stream resume was logged at start
+      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          api: 'responses',
+          endpoint: `/v1/responses/${responseId}/stream (GET)`,
+          event_type: 'stream_resume',
+          request: {
+            responseId,
+            stream: true,
+          },
+        }),
+      );
+    });
   });
 
   describe('retrieve', () => {
@@ -1755,14 +2246,11 @@ describe('OpenAIResponsesService', () => {
 
       await service.createTextResponse(dto);
 
-      // Cost: (1000/1000) * 0.03 + (2000/1000) * 0.06 = 0.03 + 0.12 = 0.15
-      expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metadata: expect.objectContaining({
-            cost_estimate: 0.15,
-          }),
-        }),
-      );
+      // Cost: (1000/1_000_000) * 0.00125 + (2000/1_000_000) * 0.01 = 0.00000125 + 0.00002 = 0.00002125
+      const calls = mockLoggerService.logOpenAIInteraction.mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      const lastCall = calls[calls.length - 1][0];
+      expect(lastCall.metadata.cost_estimate).toBeCloseTo(0.00002125, 10);
     });
 
     it('should return 0 cost when no usage', async () => {
@@ -1851,14 +2339,11 @@ describe('OpenAIResponsesService', () => {
 
       await service.createTextResponse(dto);
 
-      // Cost: (500/1000) * 0.03 + (0/1000) * 0.06 = 0.015 + 0 = 0.015
-      expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metadata: expect.objectContaining({
-            cost_estimate: 0.015,
-          }),
-        }),
-      );
+      // Cost: (500/1_000_000) * 0.00125 + (0/1_000_000) * 0.01 = 0.000000625 + 0 = 0.000000625
+      const calls = mockLoggerService.logOpenAIInteraction.mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      const lastCall = calls[calls.length - 1][0];
+      expect(lastCall.metadata.cost_estimate).toBeCloseTo(0.000000625, 10);
     });
 
     it('should calculate cost with only output tokens', async () => {
@@ -1886,11 +2371,11 @@ describe('OpenAIResponsesService', () => {
 
       await service.createTextResponse(dto);
 
-      // Cost: (0/1000) * 0.03 + (1000/1000) * 0.06 = 0 + 0.06 = 0.06
+      // Cost: (0/1_000_000) * 0.00125 + (1000/1_000_000) * 0.01 = 0 + 0.00001 = 0.00001
       expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
         expect.objectContaining({
           metadata: expect.objectContaining({
-            cost_estimate: 0.06,
+            cost_estimate: 0.00001,
           }),
         }),
       );
@@ -1921,14 +2406,11 @@ describe('OpenAIResponsesService', () => {
 
       await service.createTextResponse(dto);
 
-      // Cost: (100000/1000) * 0.03 + (50000/1000) * 0.06 = 3.0 + 3.0 = 6.0
-      expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metadata: expect.objectContaining({
-            cost_estimate: 6.0,
-          }),
-        }),
-      );
+      // Cost: (100000/1_000_000) * 0.00125 + (50000/1_000_000) * 0.01 = 0.000125 + 0.0005 = 0.000625
+      const calls = mockLoggerService.logOpenAIInteraction.mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      const lastCall = calls[calls.length - 1][0];
+      expect(lastCall.metadata.cost_estimate).toBeCloseTo(0.000625, 10);
     });
 
     it('should handle fractional token counts correctly', async () => {
@@ -1956,12 +2438,229 @@ describe('OpenAIResponsesService', () => {
 
       await service.createTextResponse(dto);
 
-      // Cost: (250/1000) * 0.03 + (150/1000) * 0.06 = 0.0075 + 0.009 = 0.0165
+      // Cost: (250/1_000_000) * 0.00125 + (150/1_000_000) * 0.01 = 0.0000003125 + 0.0000015 = 0.0000018125
+      const calls = mockLoggerService.logOpenAIInteraction.mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      const lastCall = calls[calls.length - 1][0];
+      expect(lastCall.metadata.cost_estimate).toBeCloseTo(0.0000018125, 10);
+    });
+
+    it('should pass file_search tool with all parameters to OpenAI SDK', async () => {
+      const fileSearchTool = {
+        type: 'file_search' as const,
+        vector_store_ids: ['vs_abc123', 'vs_def456'],
+        max_num_results: 10,
+        ranking_options: {
+          ranker: 'auto' as const,
+          score_threshold: 0.7,
+        },
+      };
+
+      const dto: CreateTextResponseDto = {
+        input: 'Search my documents',
+        tools: [fileSearchTool],
+        include: ['file_search_call.results'],
+      };
+
+      const mockResponse: Responses.Response = {
+        id: 'resp_search',
+        object: 'response',
+        created: 1234567890,
+        model: 'gpt-5',
+        status: 'completed',
+        output_text: 'Results found in documents',
+        usage: {
+          input_tokens: 10,
+          output_tokens: 20,
+          total_tokens: 30,
+          input_tokens_details: {},
+          output_tokens_details: {},
+        },
+      };
+
+      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+
+      await service.createTextResponse(dto);
+
+      const createCall = mockOpenAIClient.responses.create.mock.calls[0][0];
+      expect(createCall.tools).toContainEqual(fileSearchTool);
+      expect(createCall.include).toContain('file_search_call.results');
+    });
+
+    it('should pass file_search tool with minimal configuration', async () => {
+      const fileSearchTool = {
+        type: 'file_search' as const,
+        vector_store_ids: ['vs_abc123'],
+      };
+
+      const dto: CreateTextResponseDto = {
+        input: 'Search documents',
+        tools: [fileSearchTool],
+      };
+
+      const mockResponse: Responses.Response = {
+        id: 'resp_search',
+        object: 'response',
+        created: 1234567890,
+        model: 'gpt-5',
+        status: 'completed',
+        output_text: 'Search results',
+        usage: {
+          input_tokens: 10,
+          output_tokens: 20,
+          total_tokens: 30,
+          input_tokens_details: {},
+          output_tokens_details: {},
+        },
+      };
+
+      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+
+      await service.createTextResponse(dto);
+
+      const createCall = mockOpenAIClient.responses.create.mock.calls[0][0];
+      expect(createCall.tools).toContainEqual(fileSearchTool);
+    });
+
+    it('should combine file_search with other tools', async () => {
+      const functionTool = {
+        type: 'function' as const,
+        function: {
+          name: 'get_weather',
+          description: 'Get weather information',
+          parameters: {
+            type: 'object' as const,
+            properties: {
+              location: { type: 'string' as const },
+            },
+            required: ['location'],
+          },
+        },
+      };
+
+      const fileSearchTool = {
+        type: 'file_search' as const,
+        vector_store_ids: ['vs_abc123'],
+        max_num_results: 5,
+      };
+
+      const dto: CreateTextResponseDto = {
+        input: 'Check weather and search docs',
+        tools: [functionTool, fileSearchTool],
+      };
+
+      const mockResponse: Responses.Response = {
+        id: 'resp_combined',
+        object: 'response',
+        created: 1234567890,
+        model: 'gpt-5',
+        status: 'completed',
+        output_text: 'Combined response',
+        usage: {
+          input_tokens: 15,
+          output_tokens: 25,
+          total_tokens: 40,
+          input_tokens_details: {},
+          output_tokens_details: {},
+        },
+      };
+
+      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+
+      await service.createTextResponse(dto);
+
+      const createCall = mockOpenAIClient.responses.create.mock.calls[0][0];
+      expect(createCall.tools).toHaveLength(2);
+      expect(createCall.tools).toContainEqual(functionTool);
+      expect(createCall.tools).toContainEqual(fileSearchTool);
+    });
+
+    it('should handle file_search with multiple vector stores', async () => {
+      const fileSearchTool = {
+        type: 'file_search' as const,
+        vector_store_ids: ['vs_store1', 'vs_store2', 'vs_store3'],
+        max_num_results: 15,
+        ranking_options: {
+          ranker: 'default-2024-11-15' as const,
+          score_threshold: 0.85,
+        },
+      };
+
+      const dto: CreateTextResponseDto = {
+        input: 'Search across multiple stores',
+        tools: [fileSearchTool],
+      };
+
+      const mockResponse: Responses.Response = {
+        id: 'resp_multi_store',
+        object: 'response',
+        created: 1234567890,
+        model: 'gpt-5',
+        status: 'completed',
+        output_text: 'Multi-store results',
+        usage: {
+          input_tokens: 20,
+          output_tokens: 30,
+          total_tokens: 50,
+          input_tokens_details: {},
+          output_tokens_details: {},
+        },
+      };
+
+      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+
+      await service.createTextResponse(dto);
+
+      const createCall = mockOpenAIClient.responses.create.mock.calls[0][0];
+      expect(createCall.tools[0].vector_store_ids).toEqual([
+        'vs_store1',
+        'vs_store2',
+        'vs_store3',
+      ]);
+      expect(createCall.tools[0].max_num_results).toBe(15);
+      expect(createCall.tools[0].ranking_options.score_threshold).toBe(0.85);
+    });
+
+    it('should log file_search tool usage correctly', async () => {
+      const fileSearchTool = {
+        type: 'file_search' as const,
+        vector_store_ids: ['vs_abc123'],
+        max_num_results: 10,
+      };
+
+      const dto: CreateTextResponseDto = {
+        input: 'Search documents',
+        tools: [fileSearchTool],
+      };
+
+      const mockResponse: Responses.Response = {
+        id: 'resp_logged',
+        object: 'response',
+        created: 1234567890,
+        model: 'gpt-5',
+        status: 'completed',
+        output_text: 'Search results',
+        usage: {
+          input_tokens: 10,
+          output_tokens: 20,
+          total_tokens: 30,
+          input_tokens_details: {},
+          output_tokens_details: {},
+        },
+      };
+
+      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+
+      await service.createTextResponse(dto);
+
       expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
         expect.objectContaining({
-          metadata: expect.objectContaining({
-            cost_estimate: 0.0165,
+          api: 'responses',
+          endpoint: '/v1/responses',
+          request: expect.objectContaining({
+            tools: expect.arrayContaining([fileSearchTool]),
           }),
+          response: mockResponse,
         }),
       );
     });

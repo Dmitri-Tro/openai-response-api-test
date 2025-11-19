@@ -81,13 +81,13 @@ export class StreamEventDto {
     enum: StreamEventType,
     example: StreamEventType.TEXT_DELTA,
   })
-  event: StreamEventType;
+  event!: StreamEventType;
 
   @ApiProperty({
     description: 'Event data payload',
     example: { delta: 'Hello', sequence: 0 },
   })
-  data: StreamEventData;
+  data!: StreamEventData;
 }
 
 /**

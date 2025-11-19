@@ -8,20 +8,27 @@ import {
   IsNumber,
   Min,
   Max,
+  ArrayNotEmpty,
+  IsIn,
 } from 'class-validator';
 import type { Responses } from 'openai/resources/responses';
 import type * as Shared from 'openai/resources/shared';
+import { IsFileSearchToolValid } from '../validators/file-search-tool.validator';
+import { IsCodeInterpreterToolValid } from '../validators/code-interpreter-tool.validator';
+import { IsPromptValid } from '../validators/prompt.validator';
+import type { ResponsesToolConfig } from '../interfaces/file-search-tool.interface';
 
 /**
  * Data Transfer Object for creating text responses via OpenAI Responses API
  *
  * This DTO encapsulates all parameters for text generation requests using the modern
- * Responses API (`client.responses.create()`). Supports 27 parameters across 6 categories:
+ * Responses API (`client.responses.create()`). Supports 28 parameters across 6 categories:
  *
  * **Core Parameters:**
  * - `model` - GPT model selection (gpt-5, gpt-4o, o1, o3, etc.)
  * - `input` - User message or prompt text
  * - `instructions` - System instructions for model behavior
+ * - `modalities` - Output modalities (text, audio)
  * - `stream` - Enable Server-Sent Events streaming
  * - `tools` - Available tools for function calling
  * - `text` - Response format configuration (text/json_schema/json_object)
@@ -82,7 +89,7 @@ export class CreateTextResponseDto {
     example: 'Explain quantum computing in simple terms',
   })
   @IsString()
-  input: string;
+  input!: string;
 
   @ApiPropertyOptional({
     description: 'System instructions for the model',
@@ -91,6 +98,29 @@ export class CreateTextResponseDto {
   @IsString()
   @IsOptional()
   instructions?: string;
+
+  @ApiPropertyOptional({
+    description: `Output modalities the model should generate. Specify which types of content to generate:
+      - 'text': Text output (default)
+      - 'audio': Audio output (voice synthesis)
+
+      Examples: ['text'], ['audio'], ['text', 'audio']
+
+      Note: Audio generation requires audio-capable models and incurs additional costs.
+      Generated audio is returned as base64-encoded data in streaming events.`,
+    example: ['text'],
+    enum: ['text', 'audio'],
+    isArray: true,
+    type: [String],
+  })
+  @IsArray()
+  @IsOptional()
+  @ArrayNotEmpty({ message: 'modalities array cannot be empty' })
+  @IsIn(['text', 'audio'], {
+    each: true,
+    message: 'Each modality must be either "text" or "audio"',
+  })
+  modalities?: Array<'text' | 'audio'>;
 
   @ApiPropertyOptional({
     description: 'Whether to stream the response',
@@ -102,12 +132,42 @@ export class CreateTextResponseDto {
   stream?: boolean = false;
 
   @ApiPropertyOptional({
-    description: 'Tools available for the model to use',
-    example: [],
+    description: `Tools available for the model to use. Supports:
+      - function: User-defined functions for custom operations
+      - code_interpreter: Execute Python code in sandboxed environment (data analysis, calculations, file processing)
+      - web_search: Search the internet for real-time information
+      - file_search: Semantic search through vector stores (requires Vector Stores API - Phase 5)
+      - custom_tool: User-defined tool extensions
+
+      Code Interpreter: $0.03 per container + token costs, 1 hour session, 20min idle timeout
+      File Search: Requires vector stores (Phase 5)`,
+    example: [
+      {
+        type: 'code_interpreter',
+        container: {
+          type: 'auto',
+          file_ids: ['file-abc123xyz789012345678901'],
+        },
+      },
+      {
+        type: 'file_search',
+        vector_store_ids: ['vs_abc123'],
+        max_num_results: 10,
+        ranking_options: {
+          ranker: 'auto',
+          score_threshold: 0.7,
+        },
+      },
+    ],
+    type: 'array',
   })
   @IsArray()
   @IsOptional()
-  tools?: Responses.ResponseCreateParamsNonStreaming['tools'];
+  @IsCodeInterpreterToolValid({
+    message: 'Invalid code_interpreter tool configuration',
+  })
+  @IsFileSearchToolValid({ message: 'Invalid file_search tool configuration' })
+  tools?: ResponsesToolConfig[];
 
   @ApiPropertyOptional({
     description:
@@ -207,7 +267,7 @@ export class CreateTextResponseDto {
   @IsOptional()
   parallel_tool_calls?: boolean;
 
-  // Caching & Performance Parameters (Phase 2.7)
+  // Caching & Performance Parameters
   @ApiPropertyOptional({
     description:
       'Used by OpenAI to cache responses for similar requests to optimize your cache hit rates. ' +
@@ -253,7 +313,7 @@ export class CreateTextResponseDto {
   @IsOptional()
   truncation?: 'auto' | 'disabled' | null;
 
-  // Safety & Metadata Parameters (Phase 2.7)
+  // Safety & Metadata Parameters
   @ApiPropertyOptional({
     description:
       'A stable identifier used to help detect users of your application that may be violating OpenAI usage policies. ' +
@@ -277,7 +337,7 @@ export class CreateTextResponseDto {
   @IsOptional()
   metadata?: Record<string, string> | null;
 
-  // Stream Options (Phase 2.7)
+  // Stream Options
   @ApiPropertyOptional({
     description:
       'Options for streaming responses. Only set this when you set stream: true. ' +
@@ -301,7 +361,7 @@ export class CreateTextResponseDto {
       variables: { customer_name: 'Jane Doe', product: '40oz juice box' },
     },
   })
-  @IsObject()
+  @IsPromptValid({ message: 'Invalid prompt configuration' })
   @IsOptional()
   prompt?: Responses.ResponsePrompt | null;
 

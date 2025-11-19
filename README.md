@@ -252,13 +252,14 @@ curl -X POST http://localhost:3000/api/responses/text \
 }
 ```
 
-**Supported Parameters (27 total):**
+**Supported Parameters (28 total):**
 
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
 | `model` | string | Model to use | `gpt-4o` |
 | `input` | string | Prompt text | *required* |
 | `instructions` | string | System instructions | - |
+| `modalities` | array | Output modalities (text, audio) | `['text']` |
 | `temperature` | number (0-2) | Randomness control | 1.0 |
 | `top_p` | number (0-1) | Nucleus sampling | 1.0 |
 | `max_output_tokens` | number | Max tokens to generate | - |
@@ -374,6 +375,75 @@ data: {"usage":{"input_tokens":15,"output_tokens":150},"sequence":4}
 
 </details>
 
+### Audio Output with Modalities
+
+**Purpose:** Generate audio responses using the `modalities` parameter to control output types (text, audio, or both).
+
+**Endpoint:** `POST /api/responses/text` (with `modalities` parameter)
+
+**Example Request:**
+
+```bash
+curl -X POST http://localhost:3000/api/responses/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "input": "Tell me a bedtime story",
+    "modalities": ["text", "audio"],
+    "instructions": "Speak in a calm, soothing voice"
+  }'
+```
+
+**Modalities Parameter:**
+
+| Value | Description | Output Format |
+|-------|-------------|---------------|
+| `["text"]` | Text-only output (default) | Standard `output_text` field |
+| `["audio"]` | Audio-only output | Base64-encoded audio in streaming events |
+| `["text", "audio"]` | Both text and audio | Both text and audio data |
+
+**Audio Streaming Events:**
+
+When audio modality is enabled, streaming responses include:
+- `response.audio.delta` - Incremental base64-encoded audio chunks
+- `response.audio.done` - Complete audio output
+- `response.audio.transcript.delta` - Incremental transcript text
+- `response.audio.transcript.done` - Complete transcript
+
+**Audio Output Formats:**
+
+Supported audio formats:
+- **pcm16** - Uncompressed PCM audio (16-bit, 24kHz)
+- **mp3** - MP3-encoded audio
+- **opus** - Opus-encoded audio
+
+**Voice Options:**
+
+Available voice options (when audio-capable models are used):
+- **alloy**, **ash**, **ballad**, **coral**, **echo**, **fable**, **onyx**, **nova**, **sage**, **shimmer**, **verse**
+
+**Example Response (Streaming):**
+
+```
+event: response.audio.delta
+data: {"delta":"UklGRiQAAABXQVZFZm10...", "call_id":"audio_001"}
+
+event: response.audio.transcript.delta
+data: {"delta":"Once upon a time...", "call_id":"audio_001"}
+
+event: response.audio.done
+data: {"audio":"UklGRiQAAABXQVZFZm10...","call_id":"audio_001"}
+```
+
+**Notes:**
+- Audio generation requires audio-capable models (check model capabilities)
+- Audio output incurs additional costs beyond text tokens
+- The `modalities` array cannot be empty
+- Base64-encoded audio can be decoded and played directly in browsers
+- Transcript provides text version of spoken audio for accessibility
+
+---
+
 ### Image Generation
 
 **Endpoint:** `POST /api/responses/images`
@@ -424,6 +494,712 @@ curl -X POST http://localhost:3000/api/responses/images \
 
 The `output_text` field contains the base64-encoded image data.
 
+### Code Interpreter Tool Configuration
+
+**Purpose:** Execute Python code in a secure sandboxed environment for data analysis, calculations, file processing, and visualizations within Responses API.
+
+**Key Features:**
+- Secure Python 3 code execution in isolated containers
+- Auto-managed container lifecycle (1-hour session, 20-min idle timeout)
+- File upload support for data processing
+- Output handling: logs, generated images (plots/charts), data files, and errors
+- 5 streaming events for real-time code generation and execution feedback
+
+**Current Status:**
+- ✅ Tool configuration and validation implemented
+- ✅ Code interpreter event handlers ready (5 events: `in_progress`, `generating`, `code.delta`, `code.done`, `completed`)
+- ✅ Full type safety with strict TypeScript interfaces
+- ✅ Comprehensive test coverage (61 validator tests + 30 DTO tests + 8 controller tests + 13 E2E tests)
+- ✅ Support for streaming code generation
+- ⚠️ Container costs: $0.03 per container creation
+
+#### Configuration Structure
+
+**Option 1: Basic (Auto-managed container)**
+```typescript
+{
+  type: 'code_interpreter'
+  // OpenAI automatically manages container lifecycle
+}
+```
+
+**Option 2: Auto-container with file access**
+```typescript
+{
+  type: 'code_interpreter',
+  container: {
+    type: 'auto',                                  // Auto-create or reuse container
+    file_ids: ['file-abc123...']                   // Optional - Files to load in container
+  }
+}
+```
+
+**Option 3: Reuse existing container**
+```typescript
+{
+  type: 'code_interpreter',
+  container: 'container_abc123xyz789'              // String - Reuse specific container ID
+}
+```
+
+#### Example: Basic Code Execution
+
+```bash
+curl -X POST http://localhost:3000/api/responses/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "input": "Calculate the factorial of 10 using Python",
+    "tools": [{
+      "type": "code_interpreter"
+    }]
+  }'
+```
+
+**Response:**
+```json
+{
+  "id": "resp_code123",
+  "output_text": "The factorial of 10 is 3,628,800. Here's how I calculated it:\n\n```python\nimport math\nresult = math.factorial(10)\nprint(result)\n```\n\nThe result is 3,628,800.",
+  "output_tool_call": {
+    "type": "code_interpreter",
+    "call_id": "call_abc123",
+    "container_id": "container_def456",
+    "code": "import math\nresult = math.factorial(10)\nprint(result)",
+    "output": [
+      {
+        "type": "logs",
+        "logs": "3628800\n"
+      }
+    ]
+  },
+  "usage": {
+    "input_tokens": 20,
+    "output_tokens": 95
+  }
+}
+```
+
+#### Example: Data Analysis with File Upload
+
+```bash
+curl -X POST http://localhost:3000/api/responses/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "input": "Calculate the mean, median, and standard deviation of the data in the uploaded CSV file",
+    "tools": [{
+      "type": "code_interpreter",
+      "container": {
+        "type": "auto",
+        "file_ids": ["file-abc123xyz789012345678901"]
+      }
+    }],
+    "include": ["code_interpreter_call.outputs"]
+  }'
+```
+
+**Response with Detailed Outputs:**
+```json
+{
+  "id": "resp_analysis456",
+  "output_text": "Based on the data analysis:\n- Mean: 42.5\n- Median: 40\n- Standard Deviation: 15.2",
+  "output_tool_call": {
+    "type": "code_interpreter",
+    "call_id": "call_stats789",
+    "container_id": "container_data123",
+    "code": "import pandas as pd\nimport numpy as np\n\ndf = pd.read_csv('data.csv')\nmean = df['values'].mean()\nmedian = df['values'].median()\nstd = df['values'].std()\n\nprint(f'Mean: {mean}')\nprint(f'Median: {median}')\nprint(f'Std Dev: {std}')",
+    "output": [
+      {
+        "type": "logs",
+        "logs": "Mean: 42.5\nMedian: 40.0\nStd Dev: 15.2\n"
+      }
+    ]
+  }
+}
+```
+
+#### Example: Generating Visualizations
+
+```bash
+curl -X POST http://localhost:3000/api/responses/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "input": "Create a bar chart showing sales data: Q1: 100, Q2: 150, Q3: 120, Q4: 180",
+    "tools": [{
+      "type": "code_interpreter",
+      "container": {
+        "type": "auto"
+      }
+    }],
+    "include": ["code_interpreter_call.outputs"]
+  }'
+```
+
+**Response with Image Output:**
+```json
+{
+  "id": "resp_chart789",
+  "output_text": "I've created a bar chart showing the quarterly sales data.",
+  "output_tool_call": {
+    "type": "code_interpreter",
+    "call_id": "call_chart012",
+    "container_id": "container_viz345",
+    "code": "import matplotlib.pyplot as plt\n\nquarters = ['Q1', 'Q2', 'Q3', 'Q4']\nsales = [100, 150, 120, 180]\n\nplt.bar(quarters, sales)\nplt.title('Quarterly Sales')\nplt.ylabel('Sales')\nplt.savefig('sales_chart.png')\nplt.show()",
+    "output": [
+      {
+        "type": "image",
+        "image": "data:image/png;base64,iVBORw0KGgo...",
+        "filename": "sales_chart.png",
+        "file_id": "file-chart123..."
+      }
+    ]
+  }
+}
+```
+
+#### Example: Streaming Code Generation
+
+```bash
+curl -X POST http://localhost:3000/api/responses/text/stream \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "input": "Write Python code to generate the first 20 Fibonacci numbers",
+    "tools": [{
+      "type": "code_interpreter"
+    }]
+  }'
+```
+
+**Streaming Events Sequence:**
+```
+event: code_interpreter_call.in_progress
+data: {"call_id":"call_abc123","sequence":1}
+
+event: code_interpreter_call.generating
+data: {"call_id":"call_abc123","container_id":"container_def456","sequence":2}
+
+event: code_interpreter_code.delta
+data: {"call_id":"call_abc123","delta":"def fib","sequence":3}
+
+event: code_interpreter_code.delta
+data: {"call_id":"call_abc123","delta":"onacci(n):\n","sequence":4}
+
+event: code_interpreter_code.done
+data: {"call_id":"call_abc123","code":"def fibonacci(n):\n    fib = [0, 1]\n    for i in range(2, n):\n        fib.append(fib[-1] + fib[-2])\n    return fib\n\nresult = fibonacci(20)\nprint(result)","sequence":5}
+
+event: code_interpreter_call.interpreting
+data: {"call_id":"call_abc123","container_id":"container_def456","sequence":6}
+
+event: code_interpreter_call.completed
+data: {"call_id":"call_abc123","output":[{"type":"logs","logs":"[0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181]\n"}],"sequence":7}
+
+event: response.completed
+data: {"response_id":"resp_fib789","sequence":8}
+```
+
+#### Combining with Other Tools
+
+Code interpreter works seamlessly with other tools:
+
+```bash
+curl -X POST http://localhost:3000/api/responses/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "input": "Search our product docs for pricing, then calculate the total cost for 100 units with a 15% discount",
+    "tools": [
+      {
+        "type": "file_search",
+        "vector_store_ids": ["vs_products"]
+      },
+      {
+        "type": "code_interpreter",
+        "container": {
+          "type": "auto"
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "apply_discount",
+          "description": "Apply discount code",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "total": {"type": "number"},
+              "discount_code": {"type": "string"}
+            }
+          }
+        }
+      }
+    ]
+  }'
+```
+
+#### Container Lifecycle
+
+**Session Duration:** 1 hour maximum
+**Idle Timeout:** 20 minutes of inactivity
+**Reuse:** Can reuse container ID across multiple requests within session
+**Cost Optimization:** Reusing containers avoids repeated $0.03 charges
+
+```bash
+# First request creates container
+curl -X POST http://localhost:3000/api/responses/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "input": "Calculate 2^10",
+    "tools": [{"type": "code_interpreter"}]
+  }'
+# Response includes: "container_id": "container_abc123"
+
+# Second request reuses same container (no additional charge)
+curl -X POST http://localhost:3000/api/responses/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "input": "Now calculate 3^10",
+    "tools": [{
+      "type": "code_interpreter",
+      "container": "container_abc123"  # Reuse from first request
+    }]
+  }'
+```
+
+#### Parameters Reference
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `type` | string | Yes | Must be `'code_interpreter'` |
+| `container` | string \| object | No | Container configuration (auto-managed if omitted) |
+| `container` (string) | string | No | Container ID to reuse (format: `container_*`) |
+| `container.type` | enum | Yes* | Must be `'auto'` (*required if container is object) |
+| `container.file_ids` | string[] | No | Array of file IDs to load (must start with `file-`, non-empty) |
+
+**Include Options:**
+- `code_interpreter_call.outputs` - Include detailed execution outputs (logs, images, files, errors)
+
+#### Output Types
+
+Code interpreter can produce four types of outputs:
+
+**1. Logs (stdout/stderr)**
+```json
+{
+  "type": "logs",
+  "logs": "Result: 1024\nCalculation complete\n"
+}
+```
+
+**2. Images (plots, charts, visualizations)**
+```json
+{
+  "type": "image",
+  "image": "data:image/png;base64,iVBORw0KGgo...",
+  "filename": "plot.png",
+  "file_id": "file-img123..."
+}
+```
+
+**3. Files (CSV, JSON, text, etc.)**
+```json
+{
+  "type": "file",
+  "file_id": "file-abc123...",
+  "filename": "results.csv",
+  "size": 2048,
+  "mime_type": "text/csv"
+}
+```
+
+**4. Errors (syntax, runtime, timeout)**
+```json
+{
+  "type": "error",
+  "error_type": "runtime",
+  "message": "ZeroDivisionError: division by zero",
+  "line": 3,
+  "traceback": "Traceback (most recent call last):\n  File \"<string>\", line 3..."
+}
+```
+
+#### Pricing
+
+- **Container Creation:** $0.03 per new container
+- **Container Reuse:** Free (within 1-hour session, 20-min idle timeout)
+- **Token Usage:** Standard input/output token rates apply
+- **File Storage:** Temporary (deleted after container session ends)
+
+**Cost Optimization Tips:**
+1. Reuse containers within the same session to avoid repeated $0.03 charges
+2. Keep idle time under 20 minutes to maintain active sessions
+3. Batch multiple calculations in a single request when possible
+
+For current pricing, see [OpenAI Pricing](https://openai.com/pricing).
+
+#### Error Handling
+
+**Invalid Container Type:**
+```json
+{
+  "statusCode": 400,
+  "message": "Invalid code_interpreter tool configuration. Requirements:\n  - container (object).type: must be \"auto\" (required if container is object)",
+  "parameter": "tools[0].container.type"
+}
+```
+
+**Empty file_ids Array:**
+```json
+{
+  "statusCode": 400,
+  "message": "Invalid code_interpreter tool configuration",
+  "parameter": "tools[0].container.file_ids",
+  "hint": "file_ids array cannot be empty - omit the field if no files needed"
+}
+```
+
+**Invalid File ID Format:**
+```json
+{
+  "statusCode": 400,
+  "message": "Invalid code_interpreter tool configuration",
+  "parameter": "tools[0].container.file_ids[0]",
+  "hint": "File IDs must start with \"file-\" prefix"
+}
+```
+
+**Empty String Container:**
+```json
+{
+  "statusCode": 400,
+  "message": "Invalid code_interpreter tool configuration",
+  "parameter": "tools[0].container",
+  "hint": "Container ID cannot be empty string"
+}
+```
+
+**Code Execution Timeout:**
+```json
+{
+  "statusCode": 500,
+  "message": "Code execution timeout",
+  "error_type": "timeout",
+  "request_id": "req_timeout123",
+  "hint": "Optimize code or split into smaller operations"
+}
+```
+
+**Python Syntax Error:**
+```json
+{
+  "statusCode": 200,
+  "output_tool_call": {
+    "type": "code_interpreter",
+    "output": [{
+      "type": "error",
+      "error_type": "syntax",
+      "message": "SyntaxError: invalid syntax (line 3)",
+      "line": 3
+    }]
+  }
+}
+```
+
+**Python Runtime Error:**
+```json
+{
+  "statusCode": 200,
+  "output_tool_call": {
+    "type": "code_interpreter",
+    "output": [{
+      "type": "error",
+      "error_type": "runtime",
+      "message": "NameError: name 'undefined_var' is not defined",
+      "traceback": "Traceback (most recent call last):\n  ..."
+    }]
+  }
+}
+```
+
+#### Streaming Events
+
+Code interpreter emits 5 distinct streaming events during execution:
+
+| Event | Description | Data Fields |
+|-------|-------------|-------------|
+| `code_interpreter_call.in_progress` | Tool activated | `call_id`, `container_id?` |
+| `code_interpreter_call.generating` | Code generation started | `call_id`, `container_id?` |
+| `code_interpreter_code.delta` | Incremental code chunk | `call_id`, `delta`, `snapshot?`, `index?` |
+| `code_interpreter_code.done` | Complete code ready | `call_id`, `code`, `container_id?` |
+| `code_interpreter_call.interpreting` | Execution started | `call_id`, `container_id`, `code?` |
+| `code_interpreter_call.completed` | Execution finished | `call_id`, `container_id`, `code`, `output`, `duration_ms?`, `success?` |
+
+**Event Sequence Example:**
+```
+in_progress → generating → code.delta (×N) → code.done → interpreting → completed
+```
+
+#### Best Practices
+
+1. **Container Reuse:** Save and reuse `container_id` from responses to avoid $0.03 charges per request
+2. **File Management:** Upload files once, reference by `file_id` in multiple requests
+3. **Error Handling:** Check `output.type === 'error'` to detect execution failures
+4. **Streaming:** Use streaming for long-running calculations to provide real-time feedback
+5. **Include Parameter:** Add `include: ['code_interpreter_call.outputs']` to get detailed execution results
+6. **Timeout Awareness:** Large datasets or complex calculations may timeout - consider breaking into smaller operations
+7. **Cost Monitoring:** Track container creation vs reuse to optimize costs
+
+#### See Also
+
+- [Files API Documentation](#) (Phase 4 - Planned for file upload support)
+- [Streaming Events Documentation](#streaming-events)
+- [Tool Calling Events](#tool-calling-15)
+- [Code Interpreter TypeScript Interfaces](src/openai/interfaces/code-interpreter-tool.interface.ts)
+- [Code Interpreter Validation](src/openai/validators/code-interpreter-tool.validator.ts)
+- [Code Interpreter E2E Tests](test/code-interpreter.e2e-spec.ts)
+
+---
+
+### File Search Tool Configuration
+
+**Purpose:** Search through uploaded files using semantic vector search within Responses API.
+
+**Prerequisites:**
+- Files must be uploaded via Files API (Phase 4 - Planned)
+- Vector stores must be created via Vector Stores API (Phase 5 - Planned)
+
+**Current Status:**
+- ✅ Tool configuration and validation implemented
+- ✅ File search event handlers ready (3 events: `in_progress`, `searching`, `completed`)
+- ✅ Full type safety with TypeScript interfaces
+- ⏳ Requires Phases 4 & 5 for end-to-end functionality
+
+#### Configuration Structure
+
+```typescript
+{
+  type: 'file_search',
+  vector_store_ids: ['vs_abc123', 'vs_def456'],  // Required - Array of vector store IDs
+  max_num_results: 10,                           // Optional (1-50, default: 20)
+  ranking_options: {                             // Optional
+    ranker: 'auto',                              // 'auto' | 'default-2024-11-15'
+    score_threshold: 0.7                         // 0-1 (relevance threshold)
+  }
+}
+```
+
+#### Example: Basic File Search
+
+```bash
+curl -X POST http://localhost:3000/api/responses/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "input": "What does our privacy policy say about data retention?",
+    "tools": [{
+      "type": "file_search",
+      "vector_store_ids": ["vs_abc123"]
+    }],
+    "include": ["file_search_call.results"]
+  }'
+```
+
+#### Example: Advanced Configuration
+
+```bash
+curl -X POST http://localhost:3000/api/responses/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "input": "Find relevant product specifications",
+    "tools": [{
+      "type": "file_search",
+      "vector_store_ids": ["vs_products", "vs_specs"],
+      "max_num_results": 5,
+      "ranking_options": {
+        "ranker": "auto",
+        "score_threshold": 0.8
+      }
+    }],
+    "include": ["file_search_call.results"]
+  }'
+```
+
+#### Example Response
+
+```json
+{
+  "id": "resp_search123",
+  "output_text": "According to your privacy policy...",
+  "output_tool_call": {
+    "type": "file_search",
+    "call_id": "call_search456",
+    "results": [
+      {
+        "file_id": "file_abc123",
+        "filename": "privacy-policy.pdf",
+        "score": 0.89,
+        "content": "Data retention period is 90 days..."
+      }
+    ]
+  },
+  "usage": {
+    "input_tokens": 25,
+    "output_tokens": 150
+  }
+}
+```
+
+#### Combining with Other Tools
+
+File search can be combined with other tools like function calling and web search:
+
+```bash
+curl -X POST http://localhost:3000/api/responses/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "input": "Compare our docs with latest industry standards",
+    "tools": [
+      {
+        "type": "file_search",
+        "vector_store_ids": ["vs_internal_docs"]
+      },
+      {
+        "type": "web_search"
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "get_compliance_data",
+          "description": "Get current compliance requirements"
+        }
+      }
+    ]
+  }'
+```
+
+#### Parameters Reference
+
+| Parameter | Type | Required | Range | Description |
+|-----------|------|----------|-------|-------------|
+| `type` | string | Yes | `'file_search'` | Tool type identifier |
+| `vector_store_ids` | string[] | Yes | - | Array of vector store IDs (must start with "vs_") |
+| `max_num_results` | number | No | 1-50 | Maximum search results to use (default: 20) |
+| `ranking_options.ranker` | enum | No | `'auto'` \| `'default-2024-11-15'` | Ranking algorithm |
+| `ranking_options.score_threshold` | number | No | 0-1 | Minimum relevance score |
+
+#### Pricing
+
+- **File Search Calls:** $2.50 per 1,000 calls
+- **Vector Storage:** $0.10 per GB per day (first 1GB free)
+
+For current pricing, see [OpenAI Pricing](https://openai.com/pricing).
+
+#### Error Handling
+
+**Invalid Vector Store ID:**
+```json
+{
+  "statusCode": 400,
+  "message": "Invalid vector store ID format",
+  "parameter": "tools[0].vector_store_ids[0]",
+  "hint": "Vector store IDs must start with 'vs_'"
+}
+```
+
+**Vector Store Not Found:**
+```json
+{
+  "statusCode": 404,
+  "message": "Vector store not found",
+  "request_id": "req_abc123",
+  "parameter": "tools[0].vector_store_ids[0]",
+  "hint": "Create vector store via Vector Stores API first (Phase 5)"
+}
+```
+
+**Max Results Out of Range:**
+```json
+{
+  "statusCode": 400,
+  "message": "Invalid max_num_results value",
+  "parameter": "tools[0].max_num_results",
+  "hint": "max_num_results must be between 1 and 50"
+}
+```
+
+#### See Also
+
+- [Files API Documentation](#) (Phase 4 - Planned)
+- [Vector Stores API Documentation](#) (Phase 5 - Planned)
+- [Tool Calling Events](#tool-calling-15)
+
+### Advanced Parameters
+
+**Purpose:** Fine-tune responses with advanced configuration options for optimization, context management, and specialized model behaviors.
+
+#### Prompt Templates
+
+Custom instruction formats for consistent prompt engineering:
+
+```json
+{
+  "prompt": {
+    "type": "text",
+    "text": "You are a helpful assistant specialized in technical documentation."
+  },
+  "input": "Explain Kubernetes pods"
+}
+```
+
+#### Inclusion Array
+
+Request additional metadata in API responses (8 options available):
+
+```json
+{
+  "include": [
+    "file_search_call.results",
+    "code_interpreter_call.outputs",
+    "function_call.arguments"
+  ]
+}
+```
+
+**Available Options:**
+- `file_search_call.results` - Vector search results
+- `code_interpreter_call.outputs` - Code execution outputs (code, images, files, errors)
+- `function_call.arguments` - Function call parameters
+- `web_search_call.results` - Web search snippets
+- `computer_tool_call.outputs` - Computer use outputs
+- `mcp_call.outputs` - MCP tool outputs
+- `reasoning_summary.parts` - Reasoning breakdown (o-series models)
+- `response.usage.cached_tokens` - Prompt cache statistics
+
+#### Reasoning Configuration
+
+For o1/o3/gpt-5 models with extended thinking capabilities:
+
+```json
+{
+  "model": "o1-preview",
+  "input": "Design a distributed caching system",
+  "reasoning": {
+    "effort": "high"
+  }
+}
+```
+
+**Effort Levels:**
+- `low` - Quick reasoning (faster, less detailed)
+- `medium` - Balanced reasoning (default)
+- `high` - Deep reasoning (slower, more thorough)
+
 ### Response Lifecycle Management
 
 **Retrieve:** `GET /api/responses/:id` - Get stored response (30-day retention)
@@ -431,12 +1207,39 @@ The `output_text` field contains the base64-encoded image data.
 **Cancel:** `POST /api/responses/:id/cancel` - Cancel background response
 **Resume:** `GET /api/responses/:id/stream` - Resume interrupted streaming
 
+#### Resumable Streaming
+
+**Purpose:** Resume interrupted SSE connections or replay streaming responses from stored state.
+
+**Requirements:**
+- Original response must be created with `store: true`
+- Response ID must be valid (30-day retention)
+
+**Example:**
+
+```bash
+# 1. Create response with storage enabled
+curl -X POST http://localhost:3000/api/responses/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": "Write a long story",
+    "store": true
+  }'
+
+# Response includes: "id": "resp_abc123"
+
+# 2. Resume streaming later (or after connection drop)
+curl -N http://localhost:3000/api/responses/resp_abc123/stream
+```
+
+**Supported Events:** All 51 streaming event types (text, reasoning, tools, images, audio, MCP, refusal)
+
 ## Core Components
 
 ### OpenAI Responses Service (Orchestrator)
 
 **File:** [src/openai/services/openai-responses.service.ts](src/openai/services/openai-responses.service.ts)
-**Size:** ~860 lines (reduced from 2,149 via Phase 2.6 refactoring)
+**Size:** ~860 lines
 
 **Purpose:** Orchestrates all OpenAI Responses API interactions and delegates streaming event handling to specialized handler services.
 

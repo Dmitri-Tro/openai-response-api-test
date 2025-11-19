@@ -117,6 +117,7 @@ export class LifecycleEventsHandler {
         completion_tokens?: number;
         total_tokens?: number;
       } | null,
+      model?: string,
     ) => number,
   ): Iterable<SSEEvent> {
     const eventData = (event as { response?: Responses.Response }) || {};
@@ -138,7 +139,7 @@ export class LifecycleEventsHandler {
         metadata: {
           latency_ms: latency,
           tokens_used: usage?.total_tokens,
-          cost_estimate: estimateCost(usage),
+          cost_estimate: estimateCost(usage, response.model),
         },
       });
 

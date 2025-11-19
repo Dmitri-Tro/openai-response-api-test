@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ResponsesController } from './responses.controller';
 import { OpenAIResponsesService } from '../services/openai-responses.service';
 import { LoggerService } from '../../common/services/logger.service';
+import { PricingService } from '../../common/services/pricing.service';
+import { LoggingInterceptor } from '../../common/interceptors/logging.interceptor';
+import { RetryInterceptor } from '../../common/interceptors/retry.interceptor';
 import { CreateTextResponseDto } from '../dto/create-text-response.dto';
 import { CreateImageResponseDto } from '../dto/create-image-response.dto';
 import type { Response } from 'express';
@@ -10,6 +13,7 @@ describe('ResponsesController', () => {
   let controller: ResponsesController;
   let mockResponsesService: jest.Mocked<OpenAIResponsesService>;
   let mockLoggerService: jest.Mocked<LoggerService>;
+  let mockPricingService: jest.Mocked<PricingService>;
 
   beforeEach(async () => {
     mockResponsesService = {
@@ -27,6 +31,14 @@ describe('ResponsesController', () => {
       logStreamingEvent: jest.fn(),
     } as unknown as jest.Mocked<LoggerService>;
 
+    mockPricingService = {
+      calculateCost: jest.fn().mockReturnValue(0.00001),
+      estimateCost: jest.fn().mockReturnValue(0.00001),
+      getModelPricing: jest.fn(),
+      getSupportedModels: jest.fn(),
+      isModelSupported: jest.fn(),
+    } as any;
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ResponsesController],
       providers: [
@@ -38,6 +50,12 @@ describe('ResponsesController', () => {
           provide: LoggerService,
           useValue: mockLoggerService,
         },
+        {
+          provide: PricingService,
+          useValue: mockPricingService,
+        },
+        LoggingInterceptor,
+        RetryInterceptor,
       ],
     }).compile();
 
@@ -226,6 +244,215 @@ describe('ResponsesController', () => {
         expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
           dto,
         );
+      });
+
+      describe('Code Interpreter Tool', () => {
+        it('should accept basic code_interpreter tool', async () => {
+          const dto: CreateTextResponseDto = {
+            model: 'gpt-5',
+            input: 'Calculate factorial of 10',
+            tools: [
+              {
+                type: 'code_interpreter',
+              },
+            ],
+          };
+
+          mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+
+          await controller.createTextResponse(dto);
+
+          expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
+            dto,
+          );
+          const calledTools = (
+            mockResponsesService.createTextResponse.mock.calls[0][0] as any
+          ).tools;
+          expect(calledTools).toHaveLength(1);
+          expect(calledTools[0].type).toBe('code_interpreter');
+        });
+
+        it('should accept code_interpreter with auto container', async () => {
+          const dto: CreateTextResponseDto = {
+            model: 'gpt-5',
+            input: 'Analyze data',
+            tools: [
+              {
+                type: 'code_interpreter',
+                container: {
+                  type: 'auto',
+                },
+              },
+            ],
+          };
+
+          mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+
+          await controller.createTextResponse(dto);
+
+          expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
+            dto,
+          );
+          const calledTools = (
+            mockResponsesService.createTextResponse.mock.calls[0][0] as any
+          ).tools;
+          expect(calledTools[0].container).toEqual({ type: 'auto' });
+        });
+
+        it('should accept code_interpreter with auto container and file_ids', async () => {
+          const dto: CreateTextResponseDto = {
+            model: 'gpt-5',
+            input: 'Process uploaded files',
+            tools: [
+              {
+                type: 'code_interpreter',
+                container: {
+                  type: 'auto',
+                  file_ids: ['file-abc123xyz789012345678901'],
+                },
+              },
+            ],
+          };
+
+          mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+
+          await controller.createTextResponse(dto);
+
+          expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
+            dto,
+          );
+          const calledTools = (
+            mockResponsesService.createTextResponse.mock.calls[0][0] as any
+          ).tools;
+          expect(calledTools[0].container.file_ids).toHaveLength(1);
+        });
+
+        it('should accept code_interpreter with string container ID', async () => {
+          const dto: CreateTextResponseDto = {
+            model: 'gpt-5',
+            input: 'Reuse existing container',
+            tools: [
+              {
+                type: 'code_interpreter',
+                container: 'container_abc123xyz789',
+              },
+            ],
+          };
+
+          mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+
+          await controller.createTextResponse(dto);
+
+          expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
+            dto,
+          );
+          const calledTools = (
+            mockResponsesService.createTextResponse.mock.calls[0][0] as any
+          ).tools;
+          expect(calledTools[0].container).toBe('container_abc123xyz789');
+        });
+
+        it('should accept multiple code_interpreter tools', async () => {
+          const dto: CreateTextResponseDto = {
+            model: 'gpt-5',
+            input: 'Run multiple analyses',
+            tools: [
+              {
+                type: 'code_interpreter',
+                container: {
+                  type: 'auto',
+                  file_ids: ['file-abc123xyz789012345678901'],
+                },
+              },
+              {
+                type: 'code_interpreter',
+                container: 'container_def456uvw012',
+              },
+            ],
+          };
+
+          mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+
+          await controller.createTextResponse(dto);
+
+          expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
+            dto,
+          );
+          const calledTools = (
+            mockResponsesService.createTextResponse.mock.calls[0][0] as any
+          ).tools;
+          expect(calledTools).toHaveLength(2);
+          expect(calledTools[0].type).toBe('code_interpreter');
+          expect(calledTools[1].type).toBe('code_interpreter');
+        });
+
+        it('should accept code_interpreter combined with function tool', async () => {
+          const dto: CreateTextResponseDto = {
+            model: 'gpt-5',
+            input: 'Calculate and fetch weather',
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'get_weather',
+                  description: 'Get weather',
+                  parameters: {
+                    type: 'object',
+                    properties: {},
+                  },
+                },
+              },
+              {
+                type: 'code_interpreter',
+                container: {
+                  type: 'auto',
+                },
+              },
+            ],
+          };
+
+          mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+
+          await controller.createTextResponse(dto);
+
+          expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
+            dto,
+          );
+          const calledTools = (
+            mockResponsesService.createTextResponse.mock.calls[0][0] as any
+          ).tools;
+          expect(calledTools).toHaveLength(2);
+          expect(calledTools[0].type).toBe('function');
+          expect(calledTools[1].type).toBe('code_interpreter');
+        });
+
+        it('should accept code_interpreter with include parameter', async () => {
+          const dto: CreateTextResponseDto = {
+            model: 'gpt-5',
+            input: 'Calculate with detailed outputs',
+            tools: [
+              {
+                type: 'code_interpreter',
+                container: {
+                  type: 'auto',
+                },
+              },
+            ],
+            include: ['code_interpreter_call.outputs'],
+          };
+
+          mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+
+          await controller.createTextResponse(dto);
+
+          expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
+            dto,
+          );
+          expect(
+            (mockResponsesService.createTextResponse.mock.calls[0][0] as any)
+              .include,
+          ).toContain('code_interpreter_call.outputs');
+        });
       });
     });
 

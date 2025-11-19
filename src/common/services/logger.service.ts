@@ -62,7 +62,7 @@ export interface OpenAIError {
  * - `max_output_tokens` - Token limit configured for response
  * - `previous_response_id` - Previous response ID for multi-turn
  *
- * **Phase 2.7 Optimization Parameters:**
+ * **Optimization Parameters:**
  * Advanced performance and caching parameters:
  * - `prompt_cache_key` - Cache key for prompt caching optimization
  * - `service_tier` - Latency tier (auto/default/flex/scale/priority)
@@ -132,7 +132,7 @@ export interface OpenAILogEntry {
     background?: boolean | null;
     max_output_tokens?: number | null;
     previous_response_id?: string | null;
-    // Phase 2.7 optimization parameters
+    // Optimization parameters
     prompt_cache_key?: string;
     service_tier?: string | null;
     truncation?: string | null;

@@ -8,6 +8,7 @@ import { of, throwError, lastValueFrom } from 'rxjs';
 import { RetryInterceptor } from './retry.interceptor';
 import { LoggingInterceptor } from './logging.interceptor';
 import { LoggerService } from '../services/logger.service';
+import { PricingService } from '../services/pricing.service';
 import { createMockLoggerService } from '../testing/test.factories';
 
 /**
@@ -16,11 +17,21 @@ import { createMockLoggerService } from '../testing/test.factories';
  */
 describe('Interceptors - Edge Cases', () => {
   let mockLoggerService: jest.Mocked<LoggerService>;
+  let mockPricingService: jest.Mocked<PricingService>;
   let mockExecutionContext: jest.Mocked<ExecutionContext>;
   let mockCallHandler: jest.Mocked<CallHandler>;
 
   beforeEach(() => {
     mockLoggerService = createMockLoggerService();
+
+    // Mock PricingService
+    mockPricingService = {
+      calculateCost: jest.fn().mockReturnValue(0.00001),
+      estimateCost: jest.fn().mockReturnValue(0.00001),
+      getModelPricing: jest.fn(),
+      getSupportedModels: jest.fn(),
+      isModelSupported: jest.fn(),
+    } as any;
 
     mockExecutionContext = {
       switchToHttp: jest.fn().mockReturnValue({
@@ -353,7 +364,10 @@ describe('Interceptors - Edge Cases', () => {
     let loggingInterceptor: LoggingInterceptor;
 
     beforeEach(() => {
-      loggingInterceptor = new LoggingInterceptor(mockLoggerService);
+      loggingInterceptor = new LoggingInterceptor(
+        mockLoggerService,
+        mockPricingService,
+      );
     });
 
     describe('Response Body Variations', () => {

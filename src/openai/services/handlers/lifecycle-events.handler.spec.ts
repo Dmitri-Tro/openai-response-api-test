@@ -231,9 +231,12 @@ describe('LifecycleEventsHandler', () => {
 
       expect(mockExtractUsage).toHaveBeenCalledWith(mockResponse);
       expect(mockExtractResponseMetadata).toHaveBeenCalledWith(mockResponse);
-      expect(mockEstimateCost).toHaveBeenCalledWith({
-        total_tokens: 150,
-      });
+      expect(mockEstimateCost).toHaveBeenCalledWith(
+        {
+          total_tokens: 150,
+        },
+        'gpt-5',
+      );
     });
 
     it('should log completed event with metadata', () => {

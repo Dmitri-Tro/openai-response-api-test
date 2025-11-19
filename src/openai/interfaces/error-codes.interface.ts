@@ -1,6 +1,6 @@
 /**
  * Error code type definitions for OpenAI Responses API
- * Phase 2.10: Enhanced Error Handling
+ * Enhanced Error Handling
  */
 
 /**
@@ -15,7 +15,7 @@ export type OpenAIErrorType =
   | 'service_unavailable';
 
 /**
- * Image-specific error codes (Phase 2.10)
+ * Image-specific error codes
  */
 export type ImageErrorCode =
   // Vector Store Errors
@@ -80,7 +80,7 @@ export interface RateLimitInfo {
 }
 
 /**
- * Enhanced error response structure with Phase 2.10 fields
+ * Enhanced error response structure
  */
 export interface EnhancedErrorResponse {
   statusCode: number;

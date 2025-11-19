@@ -7,13 +7,24 @@ import {
 import { Observable, throwError } from 'rxjs';
 import { tap, catchError } from 'rxjs/operators';
 import { LoggerService } from '../services/logger.service';
+import { PricingService } from '../services/pricing.service';
 import type { Request } from 'express';
 
 interface OpenAIResponse {
+  model?: string;
   usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+    input_tokens_details?: {
+      cached_tokens?: number;
+    };
+    output_tokens_details?: {
+      reasoning_tokens?: number;
+    };
+    // Legacy field names (for compatibility)
     prompt_tokens?: number;
     completion_tokens?: number;
-    total_tokens?: number;
   };
 }
 
@@ -56,9 +67,10 @@ interface ErrorWithStatus {
  * - `cost_estimate` - Estimated cost in USD based on GPT-5 pricing
  *
  * **Cost Estimation:**
- * Uses GPT-5 pricing model (as of August 2025):
- * - Input tokens: $1.25 per 1M tokens
- * - Output tokens: $10 per 1M tokens
+ * Uses PricingService for accurate multi-model cost estimation:
+ * - Supports 6 models: gpt-4o, gpt-4o-mini, o1, o3-mini, gpt-5, gpt-image-1
+ * - Handles all token types: input, output, reasoning, cached
+ * - Pricing updated as of January 2025
  *
  * **Usage:**
  * Applied globally or per-controller using `@UseInterceptors(LoggingInterceptor)`.
@@ -66,14 +78,19 @@ interface ErrorWithStatus {
  *
  * **Dependencies:**
  * - LoggerService - Handles file writing and log formatting
+ * - PricingService - Provides multi-model cost estimation
  * - RxJS operators - tap() for success logging, catchError() for error logging
  *
  * @see {@link LoggerService}
+ * @see {@link PricingService}
  * @see {@link https://docs.nestjs.com/interceptors}
  */
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
-  constructor(private readonly loggerService: LoggerService) {}
+  constructor(
+    private readonly loggerService: LoggerService,
+    private readonly pricingService: PricingService,
+  ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest<Request>();
@@ -113,7 +130,7 @@ export class LoggingInterceptor implements NestInterceptor {
           metadata: {
             latency_ms: latency,
             tokens_used: openAIResponse?.usage?.total_tokens,
-            cost_estimate: this.estimateCost(openAIResponse),
+            cost_estimate: this.estimateCost(openAIResponse, requestBody),
           },
         });
       }),
@@ -153,21 +170,36 @@ export class LoggingInterceptor implements NestInterceptor {
     );
   }
 
-  private estimateCost(response: OpenAIResponse | null | undefined): number {
-    // Rough cost estimation based on token usage
-    // These are rates for GPT-5 model (as of August 2025)
+  /**
+   * Estimate cost using PricingService
+   *
+   * Supports all token types and multiple models. Falls back to gpt-4o if model
+   * is not specified or not found.
+   *
+   * @param response - OpenAI API response with usage data
+   * @param requestBody - Request body to extract model from
+   * @returns Estimated cost in USD
+   */
+  private estimateCost(
+    response: OpenAIResponse | null | undefined,
+    requestBody: Record<string, unknown>,
+  ): number {
     if (!response || !response.usage) return 0;
 
-    const inputTokens = response.usage.prompt_tokens || 0;
-    const outputTokens = response.usage.completion_tokens || 0;
+    // Extract model from response (preferred) or request body
+    const model = response.model || (requestBody.model as string) || 'gpt-4o';
 
-    // GPT-5 pricing: $1.25/1M input tokens, $10/1M output tokens
-    const inputCostPer1K = 0.00125;
-    const outputCostPer1K = 0.01;
+    // Normalize usage fields (handle both new and legacy field names)
+    const usage = {
+      input_tokens:
+        response.usage.input_tokens || response.usage.prompt_tokens || 0,
+      output_tokens:
+        response.usage.output_tokens || response.usage.completion_tokens || 0,
+      total_tokens: response.usage.total_tokens,
+      input_tokens_details: response.usage.input_tokens_details,
+      output_tokens_details: response.usage.output_tokens_details,
+    };
 
-    return (
-      (inputTokens / 1000) * inputCostPer1K +
-      (outputTokens / 1000) * outputCostPer1K
-    );
+    return this.pricingService.calculateCost(usage, model);
   }
 }

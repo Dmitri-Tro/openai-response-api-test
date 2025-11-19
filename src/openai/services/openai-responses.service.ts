@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import type { Responses } from 'openai/resources/responses';
 import { LoggerService } from '../../common/services/logger.service';
+import { PricingService } from '../../common/services/pricing.service';
 import { CreateTextResponseDto } from '../dto/create-text-response.dto';
 import { CreateImageResponseDto } from '../dto/create-image-response.dto';
 import {
@@ -10,6 +11,10 @@ import {
   SSEEvent,
   STREAMING_EVENT_TYPES,
 } from '../interfaces/streaming-events.interface';
+import {
+  ExtendedResponseCreateParamsNonStreaming,
+  ExtendedResponseCreateParamsStreaming,
+} from '../interfaces/extended-response-params.interface';
 import { LifecycleEventsHandler } from './handlers/lifecycle-events.handler';
 import { TextEventsHandler } from './handlers/text-events.handler';
 import { ReasoningEventsHandler } from './handlers/reasoning-events.handler';
@@ -34,6 +39,7 @@ export class OpenAIResponsesService {
   constructor(
     private readonly configService: ConfigService,
     private readonly loggerService: LoggerService,
+    private readonly pricingService: PricingService,
     private readonly lifecycleHandler: LifecycleEventsHandler,
     private readonly textHandler: TextEventsHandler,
     private readonly reasoningHandler: ReasoningEventsHandler,
@@ -93,7 +99,7 @@ export class OpenAIResponsesService {
 
     try {
       // Build request parameters for Responses API
-      const params: Responses.ResponseCreateParamsNonStreaming = {
+      const params: ExtendedResponseCreateParamsNonStreaming = {
         model: dto.model || this.defaultModel,
         input: dto.input,
         stream: false,
@@ -104,9 +110,16 @@ export class OpenAIResponsesService {
         params.instructions = dto.instructions;
       }
 
+      // Add modalities if provided (text, audio)
+      if (dto.modalities) {
+        params.modalities = dto.modalities;
+      }
+
       // Add tools if provided
       if (dto.tools) {
-        params.tools = dto.tools;
+        // Type assertion: DTO validation ensures tools are valid
+        params.tools =
+          dto.tools as Responses.ResponseCreateParamsStreaming['tools'];
       }
 
       // Add text configuration if provided (includes format and verbosity)
@@ -149,7 +162,7 @@ export class OpenAIResponsesService {
         params.parallel_tool_calls = dto.parallel_tool_calls;
       }
 
-      // Add Phase 2.7 optimization parameters
+      // Add optimization parameters
       // Caching & Performance
       if (dto.prompt_cache_key !== undefined) {
         params.prompt_cache_key = dto.prompt_cache_key;
@@ -225,7 +238,7 @@ export class OpenAIResponsesService {
           tokens_used: usage?.total_tokens,
           cached_tokens: usage?.cached_tokens,
           reasoning_tokens: usage?.reasoning_tokens,
-          cost_estimate: this.estimateCost(usage),
+          cost_estimate: this.estimateCost(usage, response.model),
           rate_limit_headers: {},
           response_status: responseMetadata.status,
           response_error: responseMetadata.error,
@@ -340,7 +353,7 @@ export class OpenAIResponsesService {
 
     try {
       // Build request parameters for Responses API with streaming
-      const params: Responses.ResponseCreateParamsStreaming = {
+      const params: ExtendedResponseCreateParamsStreaming = {
         model: dto.model || this.defaultModel,
         input: dto.input,
         stream: true,
@@ -351,9 +364,16 @@ export class OpenAIResponsesService {
         params.instructions = dto.instructions;
       }
 
+      // Add modalities if provided (text, audio)
+      if (dto.modalities) {
+        params.modalities = dto.modalities;
+      }
+
       // Add tools if provided
       if (dto.tools) {
-        params.tools = dto.tools;
+        // Type assertion: DTO validation ensures tools are valid
+        params.tools =
+          dto.tools as Responses.ResponseCreateParamsStreaming['tools'];
       }
 
       // Add text configuration if provided (includes format and verbosity)
@@ -396,7 +416,7 @@ export class OpenAIResponsesService {
         params.parallel_tool_calls = dto.parallel_tool_calls;
       }
 
-      // Add Phase 2.7 optimization parameters
+      // Add optimization parameters
       // Caching & Performance
       if (dto.prompt_cache_key !== undefined) {
         params.prompt_cache_key = dto.prompt_cache_key;
@@ -454,7 +474,7 @@ export class OpenAIResponsesService {
         endpoint: '/v1/responses (stream)',
         event_type: 'stream_start',
         sequence: 0,
-        // Intentional assertion: params type is complex OpenAI SDK type that needs serialization for logging
+        // Type assertion for logging: serialize extended params as plain object
         request: params as unknown as Record<string, unknown>,
       });
 
@@ -839,7 +859,7 @@ export class OpenAIResponsesService {
         error: {
           message: errorMessage,
           // Intentional assertion: error can be any type, needs serialization for logging
-          original_error: error as unknown,
+          original_error: error,
         },
         metadata: {
           latency_ms: latency,
@@ -895,7 +915,7 @@ export class OpenAIResponsesService {
 
     try {
       // Build request parameters for Responses API with gpt-image-1
-      const params: Responses.ResponseCreateParamsNonStreaming = {
+      const params: ExtendedResponseCreateParamsNonStreaming = {
         model: dto.model || 'gpt-5', // Use gpt-4o for image generation capability
         input: dto.input,
         stream: false,
@@ -906,7 +926,12 @@ export class OpenAIResponsesService {
         params.instructions = dto.instructions;
       }
 
-      // Build image_generation tool from Phase 2.9 parameters
+      // Add modalities if provided (text, audio)
+      if (dto.modalities) {
+        params.modalities = dto.modalities;
+      }
+
+      // Build image_generation tool parameters
       // Build as a plain object to avoid type conflicts, then cast to Tool type
       const imageGenerationToolConfig: Record<string, unknown> = {
         type: 'image_generation',
@@ -965,7 +990,7 @@ export class OpenAIResponsesService {
 
       // Combine user-provided tools with image_generation tool
       params.tools = dto.tools
-        ? [...dto.tools, imageGenerationTool]
+        ? [...(dto.tools as Responses.Tool[]), imageGenerationTool]
         : [imageGenerationTool];
 
       // Add conversation management parameters
@@ -994,7 +1019,7 @@ export class OpenAIResponsesService {
         params.parallel_tool_calls = dto.parallel_tool_calls;
       }
 
-      // Add Phase 2.7 optimization parameters
+      // Add optimization parameters
       // Caching & Performance
       if (dto.prompt_cache_key !== undefined) {
         params.prompt_cache_key = dto.prompt_cache_key;
@@ -1061,7 +1086,7 @@ export class OpenAIResponsesService {
           tokens_used: usage?.total_tokens,
           cached_tokens: usage?.cached_tokens,
           reasoning_tokens: usage?.reasoning_tokens,
-          cost_estimate: this.estimateCost(usage),
+          cost_estimate: this.estimateCost(usage, response.model),
           rate_limit_headers: {},
           response_status: responseMetadata.status,
           response_error: responseMetadata.error,
@@ -1177,7 +1202,7 @@ export class OpenAIResponsesService {
 
     try {
       // Build request parameters for streaming
-      const params: Responses.ResponseCreateParamsStreaming = {
+      const params: ExtendedResponseCreateParamsStreaming = {
         model: dto.model || 'gpt-5', // Use gpt-4o for image generation capability
         input: dto.input,
         stream: true,
@@ -1188,7 +1213,12 @@ export class OpenAIResponsesService {
         params.instructions = dto.instructions;
       }
 
-      // Build image_generation tool from Phase 2.9 parameters
+      // Add modalities if provided (text, audio)
+      if (dto.modalities) {
+        params.modalities = dto.modalities;
+      }
+
+      // Build image_generation tool parameters
       const imageGenerationToolConfig: Record<string, unknown> = {
         type: 'image_generation',
       };
@@ -1227,7 +1257,7 @@ export class OpenAIResponsesService {
 
       // Combine user-provided tools with image_generation tool
       params.tools = dto.tools
-        ? [...dto.tools, imageGenerationTool]
+        ? [...(dto.tools as Responses.Tool[]), imageGenerationTool]
         : [imageGenerationTool];
 
       // Add conversation parameters
@@ -1252,7 +1282,7 @@ export class OpenAIResponsesService {
         params.parallel_tool_calls = dto.parallel_tool_calls;
       }
 
-      // Add Phase 2.7 optimization parameters
+      // Add optimization parameters
       if (dto.prompt_cache_key !== undefined) {
         params.prompt_cache_key = dto.prompt_cache_key;
       }
@@ -1296,7 +1326,7 @@ export class OpenAIResponsesService {
 
         // Delegate to existing handlers - they already support image events
         switch (event.type) {
-          // Image generation events (Phase 2.9)
+          // Image generation events
           case STREAMING_EVENT_TYPES.IMAGE_GEN_IN_PROGRESS:
           case STREAMING_EVENT_TYPES.IMAGE_GEN_GENERATING:
             yield* this.imageHandler.handleImageGenProgress(
@@ -1882,7 +1912,7 @@ export class OpenAIResponsesService {
         sequence: 0,
         error: {
           message: errorMessage,
-          original_error: error as unknown,
+          original_error: error,
         },
         metadata: {
           latency_ms: latency,
@@ -1954,7 +1984,7 @@ export class OpenAIResponsesService {
           tokens_used: usage?.total_tokens,
           cached_tokens: usage?.cached_tokens,
           reasoning_tokens: usage?.reasoning_tokens,
-          cost_estimate: this.estimateCost(usage),
+          cost_estimate: this.estimateCost(usage, response.model),
           ...responseMetadata,
         },
       });
@@ -2158,7 +2188,7 @@ export class OpenAIResponsesService {
           tokens_used: usage?.total_tokens,
           cached_tokens: usage?.cached_tokens,
           reasoning_tokens: usage?.reasoning_tokens,
-          cost_estimate: this.estimateCost(usage),
+          cost_estimate: this.estimateCost(usage, response.model),
           ...responseMetadata,
         },
       });
@@ -2339,7 +2369,7 @@ export class OpenAIResponsesService {
       metadata.previous_response_id = response.previous_response_id;
     }
 
-    // Extract Phase 2.7 optimization parameters
+    // Extract optimization parameters
     if (response.prompt_cache_key !== undefined) {
       metadata.prompt_cache_key = response.prompt_cache_key;
     }
@@ -2375,36 +2405,49 @@ export class OpenAIResponsesService {
   }
 
   /**
-   * Estimate cost based on token usage
+   * Estimate cost based on token usage using PricingService
    *
-   * Calculates approximate cost using GPT-4 pricing ($0.03/1K input, $0.06/1K output).
-   * Note: Actual costs vary by model. Update pricing constants for accurate estimates.
+   * Delegates to PricingService for accurate multi-model cost calculation.
+   * Supports all token types: input, output, reasoning, cached.
+   * Supports 6 models: gpt-4o, gpt-4o-mini, o1, o3-mini, gpt-5, gpt-image-1.
    *
-   * @param usage - Token usage object with prompt_tokens and completion_tokens
+   * @param usage - Token usage object with various token count fields
+   * @param model - Model name (defaults to 'gpt-4o' if not specified)
    * @returns Estimated cost in USD
    * @private
    */
   private estimateCost(
-    usage: {
-      prompt_tokens?: number;
-      completion_tokens?: number;
-      total_tokens?: number;
-    } | null,
+    usage:
+      | {
+          input_tokens?: number;
+          output_tokens?: number;
+          total_tokens?: number;
+          input_tokens_details?: {
+            cached_tokens?: number;
+          };
+          output_tokens_details?: {
+            reasoning_tokens?: number;
+          };
+          // Legacy field names for compatibility
+          prompt_tokens?: number;
+          completion_tokens?: number;
+        }
+      | null
+      | undefined,
+    model = 'gpt-4o',
   ): number {
     if (!usage) return 0;
 
-    const inputTokens = usage.prompt_tokens || 0;
-    const outputTokens = usage.completion_tokens || 0;
+    // Normalize legacy field names to new Responses API format
+    const normalizedUsage = {
+      input_tokens: usage.input_tokens || usage.prompt_tokens || 0,
+      output_tokens: usage.output_tokens || usage.completion_tokens || 0,
+      total_tokens: usage.total_tokens,
+      input_tokens_details: usage.input_tokens_details,
+      output_tokens_details: usage.output_tokens_details,
+    };
 
-    // GPT-4 approximate pricing per 1K tokens
-    // These values should be updated based on actual model pricing
-    const inputCostPer1K = 0.03;
-    const outputCostPer1K = 0.06;
-
-    return (
-      (inputTokens / 1000) * inputCostPer1K +
-      (outputTokens / 1000) * outputCostPer1K
-    );
+    return this.pricingService.calculateCost(normalizedUsage, model);
   }
 
   /**
