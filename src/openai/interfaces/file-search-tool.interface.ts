@@ -1,6 +1,3 @@
-import type { Responses } from 'openai/resources/responses';
-import type { CodeInterpreterToolConfig } from './code-interpreter-tool.interface';
-
 /**
  * File Search Tool Configuration
  *
@@ -70,16 +67,3 @@ export interface FileSearchRankingOptions {
    */
   score_threshold?: number;
 }
-
-/**
- * Combined tool type supporting all Responses API tools
- *
- * Includes:
- * - All OpenAI SDK tool types (function, web_search, custom_tool, etc.)
- * - FileSearchToolConfig with enhanced type safety and validation
- * - CodeInterpreterToolConfig with enhanced type safety and validation
- */
-export type ResponsesToolConfig =
-  | NonNullable<Responses.ResponseCreateParamsNonStreaming['tools']>[number]
-  | FileSearchToolConfig
-  | CodeInterpreterToolConfig;

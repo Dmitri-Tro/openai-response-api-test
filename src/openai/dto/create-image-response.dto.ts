@@ -17,7 +17,6 @@ import type { Responses } from 'openai/resources/responses';
 import { IsFileSearchToolValid } from '../validators/file-search-tool.validator';
 import { IsCodeInterpreterToolValid } from '../validators/code-interpreter-tool.validator';
 import { IsPromptValid } from '../validators/prompt.validator';
-import type { ResponsesToolConfig } from '../interfaces/file-search-tool.interface';
 
 /**
  * Data Transfer Object for creating image responses via OpenAI Responses API with gpt-image-1
@@ -152,7 +151,7 @@ export class CreateImageResponseDto {
     message: 'Invalid code_interpreter tool configuration',
   })
   @IsFileSearchToolValid({ message: 'Invalid file_search tool configuration' })
-  tools?: ResponsesToolConfig[];
+  tools?: Responses.ResponseCreateParamsNonStreaming['tools'];
 
   // Image-Specific Parameters
   // These parameters configure the image_generation tool in the Responses API

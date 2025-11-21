@@ -4,8 +4,8 @@
 
 This project serves as a **source of truth** for implementing OpenAI API capabilities in NestJS applications, showcasing:
 - **Responses API** (streaming & non-streaming text, image generation via gpt-image-1)
-- **Images API** (DALL-E 3) - *Planned*
-- **Videos API** (Sora-2) - *Planned*
+- **Videos API** (async job management with polling)
+- **Images API** - *Planned*
 
 ## Table of Contents
 
@@ -32,8 +32,16 @@ This project serves as a **source of truth** for implementing OpenAI API capabil
   - Response lifecycle management (retrieve, delete, cancel)
   - Conversation management & context persistence
 
-- ⏳ **Images API** (DALL-E 3) - Direct image generation *[Planned]*
-- ⏳ **Videos API** (Sora-2) - Video generation *[Planned]*
+- ✅ **Videos API**
+  - Async job management with polling (not streaming)
+  - Video generation with multiple model options
+  - Status tracking with progress percentage (0-100%)
+  - Video download (MP4) and assets (thumbnail, spritesheet)
+  - Video remixing for variations
+  - Video lifecycle management (list, delete)
+  - Exponential backoff polling (5s → 20s max)
+
+- ⏳ **Images API** - Direct image generation *[Planned]*
 
 ### Production Features
 
@@ -211,8 +219,14 @@ Access Swagger UI at: **http://localhost:3000/api-docs**
 | DELETE | `/api/responses/:id` | Delete stored response | ✅ |
 | POST | `/api/responses/:id/cancel` | Cancel background response | ✅ |
 | GET | `/api/responses/:id/stream` | Resume interrupted streaming | ✅ |
-| POST | `/api/images/generate` | DALL-E 3 image generation | ⏳ |
-| POST | `/api/videos/generate` | Sora-2 video generation | ⏳ |
+| POST | `/api/videos` | Create video generation job | ✅ |
+| GET | `/api/videos/:id` | Get current video status | ✅ |
+| GET | `/api/videos/:id/poll` | Poll until video completes | ✅ |
+| GET | `/api/videos/:id/download` | Download video or assets | ✅ |
+| GET | `/api/videos` | List all videos with pagination | ✅ |
+| DELETE | `/api/videos/:id` | Delete video from storage | ✅ |
+| POST | `/api/videos/:id/remix` | Create video remix with new prompt | ✅ |
+| POST | `/api/images/generate` | Image generation | ⏳ |
 
 ### Text Generation (Non-Streaming)
 
@@ -1234,6 +1248,344 @@ curl -N http://localhost:3000/api/responses/resp_abc123/stream
 
 **Supported Events:** All 51 streaming event types (text, reasoning, tools, images, audio, MCP, refusal)
 
+### Videos API
+
+The Videos API uses an **async job management pattern** (polling, not streaming) for video generation.
+
+#### Video Generation Workflow
+
+```
+1. Create Job → 2. Poll Status → 3. Download Video
+   (queued)        (in_progress)      (completed)
+```
+
+#### Create Video
+
+**Endpoint:** `POST /api/videos`
+
+**Example Request:**
+
+```bash
+curl -X POST http://localhost:3000/api/videos \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "A serene lakeside at sunset with calm waters",
+    "model": "sora-2",
+    "seconds": "4",
+    "size": "720x1280"
+  }'
+```
+
+**Example Response:**
+
+```json
+{
+  "id": "vid_abc123",
+  "object": "video",
+  "status": "queued",
+  "progress": 0,
+  "model": "sora-2",
+  "seconds": "4",
+  "size": "720x1280",
+  "prompt": "A serene lakeside at sunset with calm waters",
+  "created_at": 1234567890,
+  "completed_at": null,
+  "expires_at": null,
+  "remixed_from_video_id": null,
+  "error": null
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Description | Options | Default |
+|-----------|------|-------------|---------|---------|
+| `prompt` | string | Text description of video (1-500 chars) | - | *required* |
+| `model` | string | Model to use | `sora-2`, `sora-2-pro` | `sora-2` |
+| `seconds` | string | Video duration | `"4"`, `"8"`, `"12"` | `"4"` |
+| `size` | string | Video resolution | `720x1280`, `1280x720`, `1024x1792`, `1792x1024` | `720x1280` |
+
+#### Get Video Status
+
+**Endpoint:** `GET /api/videos/:id`
+
+**Example Request:**
+
+```bash
+curl http://localhost:3000/api/videos/vid_abc123
+```
+
+**Example Response:**
+
+```json
+{
+  "id": "vid_abc123",
+  "status": "in_progress",
+  "progress": 50,
+  "model": "sora-2",
+  "seconds": "4",
+  "size": "720x1280",
+  "created_at": 1234567890,
+  "completed_at": null,
+  "expires_at": null
+}
+```
+
+**Status Values:**
+- `queued` - Job submitted, waiting to start
+- `in_progress` - Video generation in progress (progress: 0-100%)
+- `completed` - Video ready for download (check `expires_at`)
+- `failed` - Generation failed (see `error` field)
+
+#### Poll Until Complete
+
+**Endpoint:** `GET /api/videos/:id/poll?maxWaitMs=600000`
+
+**Purpose:** Wait for video generation to complete (polling with exponential backoff: 5s → 10s → 15s → 20s max)
+
+**Example Request:**
+
+```bash
+# Wait up to 10 minutes (default)
+curl http://localhost:3000/api/videos/vid_abc123/poll
+
+# Wait up to 5 minutes
+curl http://localhost:3000/api/videos/vid_abc123/poll?maxWaitMs=300000
+```
+
+**Example Response (completed):**
+
+```json
+{
+  "id": "vid_abc123",
+  "status": "completed",
+  "progress": 100,
+  "model": "sora-2",
+  "seconds": "4",
+  "size": "720x1280",
+  "created_at": 1234567890,
+  "completed_at": 1234567990,
+  "expires_at": 1234657990
+}
+```
+
+**Example Response (failed):**
+
+```json
+{
+  "id": "vid_abc123",
+  "status": "failed",
+  "progress": 50,
+  "error": {
+    "code": "video_generation_failed",
+    "message": "Content policy violation detected"
+  }
+}
+```
+
+#### Download Video
+
+**Endpoint:** `GET /api/videos/:id/download?variant=video`
+
+**Purpose:** Download generated video file (MP4) or assets (JPEG)
+
+**Example Requests:**
+
+```bash
+# Download video (MP4)
+curl http://localhost:3000/api/videos/vid_abc123/download \
+  --output video.mp4
+
+# Download thumbnail (JPEG)
+curl http://localhost:3000/api/videos/vid_abc123/download?variant=thumbnail \
+  --output thumbnail.jpg
+
+# Download spritesheet (JPEG)
+curl http://localhost:3000/api/videos/vid_abc123/download?variant=spritesheet \
+  --output spritesheet.jpg
+```
+
+**Variants:**
+
+| Variant | Type | Size | Description |
+|---------|------|------|-------------|
+| `video` | MP4 | ~2-20MB | Full video file |
+| `thumbnail` | JPEG | ~100KB | Single frame preview |
+| `spritesheet` | JPEG | ~500KB | Grid of frames for preview |
+
+**Important:** Videos expire after a period (check `expires_at` timestamp). Download within expiration window.
+
+#### List Videos
+
+**Endpoint:** `GET /api/videos?limit=10&order=desc`
+
+**Example Request:**
+
+```bash
+# List 10 most recent videos
+curl http://localhost:3000/api/videos
+
+# List 20 oldest videos
+curl "http://localhost:3000/api/videos?limit=20&order=asc"
+```
+
+**Example Response:**
+
+```json
+[
+  {
+    "id": "vid_abc123",
+    "status": "completed",
+    "progress": 100,
+    "model": "sora-2",
+    "seconds": "4",
+    "created_at": 1234567890,
+    "completed_at": 1234567990
+  },
+  {
+    "id": "vid_xyz789",
+    "status": "in_progress",
+    "progress": 75,
+    "model": "sora-2-pro",
+    "seconds": "8",
+    "created_at": 1234567800
+  }
+]
+```
+
+#### Delete Video
+
+**Endpoint:** `DELETE /api/videos/:id`
+
+**Example Request:**
+
+```bash
+curl -X DELETE http://localhost:3000/api/videos/vid_abc123
+```
+
+**Example Response:**
+
+```json
+{
+  "id": "vid_abc123",
+  "object": "video",
+  "deleted": true
+}
+```
+
+#### Remix Video
+
+**Endpoint:** `POST /api/videos/:id/remix`
+
+**Purpose:** Create video variation with new prompt (preserves original video's style/composition)
+
+**Example Request:**
+
+```bash
+curl -X POST http://localhost:3000/api/videos/vid_abc123/remix \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "A serene lakeside at sunrise with misty waters"
+  }'
+```
+
+**Example Response:**
+
+```json
+{
+  "id": "vid_remix456",
+  "object": "video",
+  "status": "queued",
+  "progress": 0,
+  "model": "sora-2",
+  "seconds": "4",
+  "size": "720x1280",
+  "prompt": "A serene lakeside at sunrise with misty waters",
+  "remixed_from_video_id": "vid_abc123",
+  "created_at": 1234568000,
+  "completed_at": null
+}
+```
+
+**Notes:**
+- Remix creates a **new video** (different `id`) with `remixed_from_video_id` reference
+- Follow same workflow: create → poll → download
+- Source video must exist (not deleted or expired)
+
+#### Pricing
+
+Videos API is priced per second of generated video:
+
+| Model | Price per Second | 4-sec Video | 8-sec Video | 12-sec Video |
+|-------|------------------|-------------|-------------|--------------|
+| `sora-2` | $0.125/sec | $0.50 | $1.00 | $1.50 |
+| `sora-2-pro` | $0.40/sec | $1.60 | $3.20 | $4.80 |
+
+**Cost Optimization:**
+- Start with 4-second videos for testing
+- Use `sora-2` (standard quality) unless high-fidelity required
+- Delete videos after download to free storage
+- Remix existing videos instead of regenerating from scratch
+
+#### Error Handling
+
+Videos API errors are returned as-is from OpenAI. Common error scenarios:
+
+**Video Not Ready (409 Conflict):**
+```json
+{
+  "error": {
+    "message": "Video is not ready for download",
+    "type": "invalid_request_error",
+    "code": "video_not_ready"
+  }
+}
+```
+
+**Video Expired (410 Gone):**
+```json
+{
+  "error": {
+    "message": "Video assets have expired",
+    "type": "invalid_request_error",
+    "code": "video_expired"
+  }
+}
+```
+
+**Video Not Found (404):**
+```json
+{
+  "error": {
+    "message": "No video found with id vid_invalid123",
+    "type": "invalid_request_error",
+    "code": "video_not_found"
+  }
+}
+```
+
+**Generation Failed:**
+```json
+{
+  "id": "vid_abc123",
+  "status": "failed",
+  "error": {
+    "code": "video_generation_failed",
+    "message": "Content policy violation: prompt contains prohibited content"
+  }
+}
+```
+
+#### Best Practices
+
+1. **Always poll after creation** - Videos take 2-10 minutes to generate
+2. **Check expiration** - Download videos before `expires_at` timestamp
+3. **Handle timeouts** - Set appropriate `maxWaitMs` for polling (default: 10 min)
+4. **Clean up** - Delete videos after download to manage storage
+5. **Use remixes** - Remix existing videos for variations (faster, cheaper)
+6. **Monitor costs** - Track `seconds` × price per model
+7. **Test with 4-second videos** - Minimize cost during development
+
 ## Core Components
 
 ### OpenAI Responses Service (Orchestrator)
@@ -1723,8 +2075,8 @@ test/
 - [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses)
 - [OpenAI Streaming Guide](https://platform.openai.com/docs/guides/streaming-responses)
 - [OpenAI Node.js SDK](https://github.com/openai/openai-node)
-- [OpenAI Images API (DALL-E 3)](https://platform.openai.com/docs/guides/images)
-- [OpenAI Videos API (Sora 2)](https://platform.openai.com/docs/guides/video-generation)
+- [OpenAI Images API](https://platform.openai.com/docs/guides/images)
+- [OpenAI Videos API](https://platform.openai.com/docs/guides/video-generation)
 
 ### NestJS Documentation
 

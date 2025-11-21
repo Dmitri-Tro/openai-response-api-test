@@ -28,6 +28,23 @@ interface OpenAIResponse {
   };
 }
 
+interface VideoResponse {
+  id?: string;
+  status?: 'queued' | 'in_progress' | 'completed' | 'failed';
+  progress?: number;
+  model?: string;
+  seconds?: string;
+  size?: string;
+  created_at?: number;
+  completed_at?: number | null;
+  expires_at?: number | null;
+  remixed_from_video_id?: string | null;
+  error?: {
+    code?: string;
+    message?: string;
+  } | null;
+}
+
 interface ErrorWithStatus {
   message: string;
   status?: number;
@@ -120,6 +137,26 @@ export class LoggingInterceptor implements NestInterceptor {
         const latency = Date.now() - startTime;
         const openAIResponse = (response as OpenAIResponse) || {};
 
+        // Build metadata based on API type
+        const baseMetadata: Record<string, unknown> = {
+          latency_ms: latency,
+        };
+
+        // Add video-specific metadata if this is a Videos API call
+        if (api === 'videos') {
+          const videoMetadata = this.extractVideoMetadata(
+            response as VideoResponse,
+          );
+          Object.assign(baseMetadata, videoMetadata);
+        } else {
+          // Add token/cost metadata for Responses/Images APIs
+          baseMetadata.tokens_used = openAIResponse?.usage?.total_tokens;
+          baseMetadata.cost_estimate = this.estimateCost(
+            openAIResponse,
+            requestBody,
+          );
+        }
+
         // Log the successful interaction
         this.loggerService.logOpenAIInteraction({
           timestamp: new Date().toISOString(),
@@ -127,11 +164,7 @@ export class LoggingInterceptor implements NestInterceptor {
           endpoint: url,
           request: requestBody,
           response,
-          metadata: {
-            latency_ms: latency,
-            tokens_used: openAIResponse?.usage?.total_tokens,
-            cost_estimate: this.estimateCost(openAIResponse, requestBody),
-          },
+          metadata: baseMetadata,
         });
       }),
       catchError((error: unknown) => {
@@ -201,5 +234,63 @@ export class LoggingInterceptor implements NestInterceptor {
     };
 
     return this.pricingService.calculateCost(usage, model);
+  }
+
+  /**
+   * Extract video-specific metadata from Videos API response
+   *
+   * Extracts relevant fields from a Videos.Video object for logging purposes.
+   * Returns only the fields that provide value for logging and debugging.
+   *
+   * @param response - Videos API response object
+   * @returns Metadata object with video-specific fields
+   */
+  private extractVideoMetadata(
+    response: VideoResponse | null | undefined,
+  ): Record<string, unknown> {
+    if (!response) return {};
+
+    const metadata: Record<string, unknown> = {};
+
+    // Core video identification
+    if (response.id) metadata.video_id = response.id;
+    if (response.model) metadata.model = response.model;
+
+    // Video generation status
+    if (response.status) metadata.status = response.status;
+    if (typeof response.progress === 'number')
+      metadata.progress_percentage = response.progress;
+
+    // Video parameters
+    if (response.seconds) metadata.seconds = response.seconds;
+    if (response.size) metadata.size = response.size;
+
+    // Timestamps (convert Unix seconds to ISO if needed for consistency)
+    if (response.created_at) metadata.created_at = response.created_at;
+    if (response.completed_at) metadata.completed_at = response.completed_at;
+    if (response.expires_at) metadata.expires_at = response.expires_at;
+
+    // Calculate timing metrics if completed
+    if (
+      response.status === 'completed' &&
+      response.created_at &&
+      response.completed_at
+    ) {
+      const generationTimeSeconds = response.completed_at - response.created_at;
+      metadata.generation_time_ms = generationTimeSeconds * 1000;
+    }
+
+    // Remix information
+    if (response.remixed_from_video_id) {
+      metadata.remixed_from_video_id = response.remixed_from_video_id;
+    }
+
+    // Error information (if generation failed)
+    if (response.status === 'failed' && response.error) {
+      metadata.error_code = response.error.code;
+      metadata.error_message = response.error.message;
+    }
+
+    return metadata;
   }
 }

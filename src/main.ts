@@ -22,12 +22,12 @@ async function bootstrap() {
   const config = new DocumentBuilder()
     .setTitle('OpenAI API Testing Project')
     .setDescription(
-      'Comprehensive testing project for OpenAI APIs including Responses API (chat + gpt-image-1), Images API (DALL-E 3), and Videos API (Sora-2)',
+      'Comprehensive testing project for OpenAI APIs including Responses API (chat + gpt-image-1), Images API, and Videos API',
     )
     .setVersion('1.0')
     .addTag('Responses API', 'Text and image generation via Responses API')
-    .addTag('Images API', 'DALL-E 3 image generation')
-    .addTag('Videos API', 'Sora-2 video generation')
+    .addTag('Images API', 'Image generation')
+    .addTag('Videos API', 'Video generation')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

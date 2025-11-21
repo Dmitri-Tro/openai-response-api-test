@@ -117,9 +117,7 @@ export class OpenAIResponsesService {
 
       // Add tools if provided
       if (dto.tools) {
-        // Type assertion: DTO validation ensures tools are valid
-        params.tools =
-          dto.tools as Responses.ResponseCreateParamsStreaming['tools'];
+        params.tools = dto.tools;
       }
 
       // Add text configuration if provided (includes format and verbosity)
@@ -371,9 +369,7 @@ export class OpenAIResponsesService {
 
       // Add tools if provided
       if (dto.tools) {
-        // Type assertion: DTO validation ensures tools are valid
-        params.tools =
-          dto.tools as Responses.ResponseCreateParamsStreaming['tools'];
+        params.tools = dto.tools;
       }
 
       // Add text configuration if provided (includes format and verbosity)
@@ -990,7 +986,7 @@ export class OpenAIResponsesService {
 
       // Combine user-provided tools with image_generation tool
       params.tools = dto.tools
-        ? [...(dto.tools as Responses.Tool[]), imageGenerationTool]
+        ? [...dto.tools, imageGenerationTool]
         : [imageGenerationTool];
 
       // Add conversation management parameters
@@ -1257,7 +1253,7 @@ export class OpenAIResponsesService {
 
       // Combine user-provided tools with image_generation tool
       params.tools = dto.tools
-        ? [...(dto.tools as Responses.Tool[]), imageGenerationTool]
+        ? [...dto.tools, imageGenerationTool]
         : [imageGenerationTool];
 
       // Add conversation parameters

@@ -140,6 +140,10 @@ export interface OpenAILogEntry {
     request_metadata?: Record<string, string> | null;
     text_verbosity?: string | null;
     stream_options_obfuscation?: boolean;
+    // Videos API specific
+    video_id?: string;
+    model?: string;
+    status?: string;
   };
   streaming?: boolean;
   stream_events?: unknown[];

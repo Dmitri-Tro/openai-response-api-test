@@ -93,6 +93,13 @@ const envSchema = z.object({
 
   OPENAI_RETRY_DELAY: z.coerce.number().positive().default(1000),
 
+  // Videos API configuration
+  VIDEO_GENERATION_TIMEOUT: z.coerce
+    .number()
+    .positive()
+    .max(3600000) // Max 1 hour
+    .default(600000), // 10 minutes
+
   // Logging configuration
   LOG_LEVEL: z
     .enum(['error', 'warn', 'info', 'debug', 'verbose'])
