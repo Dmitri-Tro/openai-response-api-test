@@ -5,6 +5,7 @@
 This project serves as a **source of truth** for implementing OpenAI API capabilities in NestJS applications, showcasing:
 - **Responses API** (streaming & non-streaming text, image generation via gpt-image-1)
 - **Videos API** (async job management with polling)
+- **Files API** (file upload, listing, retrieval, download, deletion)
 - **Images API** - *Planned*
 
 ## Table of Contents
@@ -41,12 +42,22 @@ This project serves as a **source of truth** for implementing OpenAI API capabil
   - Video lifecycle management (list, delete)
   - Exponential backoff polling (5s → 20s max)
 
+- ✅ **Files API**
+  - File upload with multipart/form-data (up to 512 MB)
+  - Multiple purposes (assistants, batch, fine-tune, user_data, evals)
+  - File expiration support (1 hour - 30 days)
+  - Binary file download with proper content types
+  - Pagination and filtering (purpose, order, limit)
+  - Processing status tracking (uploaded, processed, error)
+  - Automatic content-type detection from file extensions
+
 - ⏳ **Images API** - Direct image generation *[Planned]*
 
 ### Production Features
 
 - ✅ **Comprehensive Error Handling**
   - 15 image-specific error codes with actionable hints
+  - 12 file-specific error codes (upload, processing, download, purpose)
   - OpenAI SDK `instanceof` checks for reliable error detection
   - Request ID tracking for support inquiries
   - Rate limit extraction and retry guidance
@@ -226,6 +237,11 @@ Access Swagger UI at: **http://localhost:3000/api-docs**
 | GET | `/api/videos` | List all videos with pagination | ✅ |
 | DELETE | `/api/videos/:id` | Delete video from storage | ✅ |
 | POST | `/api/videos/:id/remix` | Create video remix with new prompt | ✅ |
+| POST | `/api/files` | Upload file with purpose | ✅ |
+| GET | `/api/files` | List files with filtering | ✅ |
+| GET | `/api/files/:id` | Get file metadata | ✅ |
+| GET | `/api/files/:id/download` | Download file content | ✅ |
+| DELETE | `/api/files/:id` | Delete file | ✅ |
 | POST | `/api/images/generate` | Image generation | ⏳ |
 
 ### Text Generation (Non-Streaming)
@@ -1586,6 +1602,514 @@ Videos API errors are returned as-is from OpenAI. Common error scenarios:
 6. **Monitor costs** - Track `seconds` × price per model
 7. **Test with 4-second videos** - Minimize cost during development
 
+### Files API
+
+The Files API provides file management for OpenAI services with purpose-based access control and automatic expiration support.
+
+#### Upload File
+
+**Endpoint:** `POST /api/files`
+
+**Content-Type:** `multipart/form-data`
+
+**Example Request:**
+
+```bash
+curl -X POST http://localhost:3000/api/files \
+  -F "file=@document.pdf" \
+  -F "purpose=assistants"
+```
+
+**With Expiration:**
+
+```bash
+curl -X POST http://localhost:3000/api/files \
+  -F "file=@training-data.jsonl" \
+  -F "purpose=fine-tune" \
+  -F "expires_after[anchor]=created_at" \
+  -F "expires_after[seconds]=86400"
+```
+
+**Example Response:**
+
+```json
+{
+  "id": "file-abc123xyz789",
+  "object": "file",
+  "bytes": 1024567,
+  "created_at": 1234567890,
+  "filename": "document.pdf",
+  "purpose": "assistants",
+  "status": "processed",
+  "status_details": null,
+  "expires_at": null
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Description | Required | Options |
+|-----------|------|-------------|----------|---------|
+| `file` | File | File to upload (max 512 MB) | Yes | Binary data |
+| `purpose` | string | File purpose for access control | Yes | `assistants`, `batch`, `fine-tune`, `user_data`, `evals` |
+| `expires_after` | object | Expiration configuration | No | See below |
+| `expires_after.anchor` | string | Expiration start point | Yes (if expires_after) | `created_at` |
+| `expires_after.seconds` | number | Time until expiration (seconds) | Yes (if expires_after) | 3600-2592000 (1h-30d) |
+
+**File Purposes:**
+
+- `assistants` - Files for Assistant API (not downloadable via API)
+- `batch` - Batch API input files (downloadable)
+- `fine-tune` - Training data for fine-tuning (downloadable)
+- `user_data` - User-uploaded data (downloadable)
+- `evals` - Evaluation datasets (downloadable)
+
+**File Status:**
+
+- `uploaded` - File received, processing pending
+- `processed` - File ready for use
+- `error` - Processing failed (see `status_details`)
+
+#### Supported File Formats
+
+The Files API accepts a wide range of file formats for different purposes. Files can be used directly with Assistants API or analyzed with Code Interpreter.
+
+**Data Files** (Analysis, Processing)
+
+| Format | Extensions | Purpose | Max Size | Notes |
+|--------|-----------|---------|----------|-------|
+| CSV | `.csv` | batch, user_data, evals | 512 MB | Best for tabular data analysis |
+| JSON | `.json` | batch, user_data, evals | 512 MB | Structured data, API responses |
+| JSONL | `.jsonl` | batch, fine-tune, evals | 512 MB | Line-delimited JSON (required for batch/fine-tune) |
+| Excel | `.xlsx`, `.xls` | user_data, evals | 512 MB | Spreadsheet data (analyzed via Code Interpreter) |
+| Parquet | `.parquet` | user_data | 512 MB | Columnar data format |
+
+**Documents** (Text Extraction, RAG)
+
+| Format | Extensions | Purpose | Max Size | Notes |
+|--------|-----------|---------|----------|-------|
+| PDF | `.pdf` | assistants, user_data | 512 MB | Text extraction, document analysis |
+| Plain Text | `.txt` | assistants, user_data | 512 MB | Raw text content |
+| Markdown | `.md` | assistants, user_data | 512 MB | Formatted documentation |
+| Word | `.docx` | assistants, user_data | 512 MB | Microsoft Word documents |
+
+**Images** (Vision, OCR, Analysis)
+
+| Format | Extensions | Purpose | Max Size | Notes |
+|--------|-----------|---------|----------|-------|
+| PNG | `.png` | user_data | 512 MB | Lossless images, screenshots |
+| JPEG | `.jpg`, `.jpeg` | user_data | 512 MB | Compressed photos |
+| GIF | `.gif` | user_data | 512 MB | Animated or static images |
+| WebP | `.webp` | user_data | 512 MB | Modern image format |
+
+**Audio/Video** (Transcription, Analysis)
+
+| Format | Extensions | Purpose | Max Size | Notes |
+|--------|-----------|---------|----------|-------|
+| MP3 | `.mp3` | user_data | 512 MB | Audio transcription with Code Interpreter |
+| WAV | `.wav` | user_data | 512 MB | Uncompressed audio |
+| M4A | `.m4a` | user_data | 512 MB | AAC audio format |
+| MP4 | `.mp4` | user_data | 512 MB | Video files (audio extraction) |
+
+**Code Files** (Analysis, Documentation)
+
+| Format | Extensions | Purpose | Max Size | Notes |
+|--------|-----------|---------|----------|-------|
+| Python | `.py` | user_data | 512 MB | Source code analysis |
+| JavaScript | `.js`, `.ts` | user_data | 512 MB | JS/TS code analysis |
+| Java | `.java` | user_data | 512 MB | Java source code |
+| C/C++ | `.c`, `.cpp`, `.h` | user_data | 512 MB | C/C++ code |
+| Other | `.go`, `.rs`, `.rb`, etc. | user_data | 512 MB | Most programming languages |
+
+**Purpose-Specific Recommendations:**
+
+- `assistants` - PDF, TXT, DOCX, MD (for RAG/knowledge retrieval)
+- `batch` - JSONL only (structured batch requests)
+- `fine-tune` - JSONL only (training data format)
+- `user_data` - Any format (analyzed with Code Interpreter)
+- `evals` - CSV, JSON, JSONL (evaluation datasets)
+
+**Processing Notes:**
+
+1. **Automatic Format Detection** - OpenAI detects format from file extension
+2. **Binary Files** - Supported but may have limited text extraction
+3. **Compressed Files** - ZIP/RAR not directly supported (extract first)
+4. **Large Files** - Files > 512 MB require [Uploads API](https://platform.openai.com/docs/api-reference/uploads) (up to 8 GB)
+5. **Special Characters** - Filenames with Unicode/special chars are supported
+
+#### List Files
+
+**Endpoint:** `GET /api/files`
+
+**Example Requests:**
+
+```bash
+# List all files
+curl http://localhost:3000/api/files
+
+# Filter by purpose
+curl "http://localhost:3000/api/files?purpose=assistants"
+
+# With pagination and sorting
+curl "http://localhost:3000/api/files?purpose=batch&order=asc&limit=20"
+```
+
+**Example Response:**
+
+```json
+[
+  {
+    "id": "file-abc123",
+    "object": "file",
+    "bytes": 512000,
+    "created_at": 1234567890,
+    "filename": "data.jsonl",
+    "purpose": "batch",
+    "status": "processed"
+  },
+  {
+    "id": "file-def456",
+    "object": "file",
+    "bytes": 1024000,
+    "created_at": 1234567800,
+    "filename": "document.pdf",
+    "purpose": "assistants",
+    "status": "processed",
+    "expires_at": 1234654290
+  }
+]
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Description | Options | Default |
+|-----------|------|-------------|---------|---------|
+| `purpose` | string | Filter by file purpose | See purposes above | None (all) |
+| `order` | string | Sort order by `created_at` | `asc`, `desc` | `desc` |
+| `limit` | number | Maximum files to return | 1-10000 | 10000 |
+
+#### Get File Metadata
+
+**Endpoint:** `GET /api/files/:id`
+
+**Example Request:**
+
+```bash
+curl http://localhost:3000/api/files/file-abc123xyz789
+```
+
+**Example Response:**
+
+```json
+{
+  "id": "file-abc123xyz789",
+  "object": "file",
+  "bytes": 2048576,
+  "created_at": 1234567890,
+  "filename": "training-data.jsonl",
+  "purpose": "fine-tune",
+  "status": "processed",
+  "status_details": null,
+  "expires_at": 1234654290
+}
+```
+
+#### Download File
+
+**Endpoint:** `GET /api/files/:id/download`
+
+**Purpose Restrictions:** Files with `purpose=assistants` cannot be downloaded per OpenAI policy.
+
+**Example Request:**
+
+```bash
+# Download file
+curl http://localhost:3000/api/files/file-abc123/download \
+  -o downloaded-file.jsonl
+```
+
+**Response Headers:**
+
+```
+Content-Type: application/x-ndjson
+Content-Disposition: attachment; filename="file-abc123-content"
+```
+
+**Supported Content Types:**
+
+| Extension | Content-Type |
+|-----------|--------------|
+| `.json`, `.jsonl` | application/json, application/x-ndjson |
+| `.txt`, `.md` | text/plain, text/markdown |
+| `.pdf` | application/pdf |
+| `.png`, `.jpg`, `.jpeg` | image/png, image/jpeg |
+| `.mp3`, `.mp4` | audio/mpeg, video/mp4 |
+
+#### Delete File
+
+**Endpoint:** `DELETE /api/files/:id`
+
+**Example Request:**
+
+```bash
+curl -X DELETE http://localhost:3000/api/files/file-abc123
+```
+
+**Example Response:**
+
+```json
+{
+  "id": "file-abc123",
+  "object": "file",
+  "deleted": true
+}
+```
+
+#### Error Responses
+
+**File Not Found (404):**
+
+```json
+{
+  "statusCode": 404,
+  "message": "File not found",
+  "error": "Not Found",
+  "code": "file_not_found",
+  "hint": "The file ID does not exist or has been deleted. Verify the file ID is correct.",
+  "timestamp": "2025-01-22T12:00:00.000Z",
+  "path": "/api/files/file-invalid"
+}
+```
+
+**Download Forbidden (403):**
+
+```json
+{
+  "statusCode": 403,
+  "message": "File download not allowed",
+  "error": "Forbidden",
+  "code": "download_forbidden",
+  "hint": "Files with purpose 'assistants' cannot be downloaded via API due to OpenAI policy restrictions.",
+  "timestamp": "2025-01-22T12:00:00.000Z",
+  "path": "/api/files/file-abc123/download"
+}
+```
+
+**File Too Large (413):**
+
+```json
+{
+  "statusCode": 413,
+  "message": "File exceeds maximum size limit",
+  "error": "Payload Too Large",
+  "code": "file_too_large",
+  "hint": "File must be under 512 MB for standard API. Use Uploads API for files up to 8 GB, or reduce file size.",
+  "timestamp": "2025-01-22T12:00:00.000Z",
+  "path": "/api/files"
+}
+```
+
+#### Best Practices
+
+1. **Choose correct purpose** - Purpose determines download permissions and file lifecycle
+2. **Set appropriate expiration** - Use `expires_after` for temporary files (default: no expiration)
+3. **Check processing status** - Verify `status=processed` before using files
+4. **Handle download restrictions** - Assistants files cannot be downloaded via API
+5. **Monitor storage** - Delete files after use to manage organization quota
+6. **Use proper file formats** - JSONL for batch/fine-tune, PDF/TXT for assistants
+7. **Validate file sizes** - Keep files under 512 MB for standard API
+
+### Complete Workflow: File Upload + AI Analysis
+
+This example demonstrates the end-to-end workflow of uploading a data file and analyzing it with AI using Code Interpreter.
+
+#### Scenario: Analyze Sales Data CSV
+
+**Step 1: Upload File (Files API)**
+
+```bash
+# Upload your CSV file
+curl -X POST http://localhost:3000/api/files \
+  -F "file=@quarterly_sales.csv" \
+  -F "purpose=user_data"
+```
+
+**Response:**
+
+```json
+{
+  "id": "file-abc123xyz789",
+  "object": "file",
+  "bytes": 45678,
+  "created_at": 1234567890,
+  "filename": "quarterly_sales.csv",
+  "purpose": "user_data",
+  "status": "processed"
+}
+```
+
+**Step 2: Analyze with Code Interpreter (Responses API)**
+
+```bash
+# Analyze the uploaded file
+curl -X POST http://localhost:3000/api/responses/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "input": "Analyze quarterly_sales.csv and provide:\n1. Total revenue by region\n2. Top 5 products by sales\n3. Month-over-month growth trend\n4. Create a bar chart showing revenue by region",
+    "tools": [
+      {
+        "type": "code_interpreter",
+        "container": {
+          "type": "auto",
+          "file_ids": ["file-abc123xyz789"]
+        }
+      }
+    ],
+    "include": ["code_interpreter_call.outputs"]
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "id": "resp_xyz789",
+  "object": "response",
+  "model": "gpt-4o",
+  "output_text": "Based on the analysis of quarterly_sales.csv:\n\n**1. Total Revenue by Region:**\n- North America: $2,450,000 (45%)\n- Europe: $1,890,000 (35%)\n- Asia Pacific: $1,080,000 (20%)\n\n**2. Top 5 Products by Sales:**\n1. Widget Pro - $987,000\n2. Gadget Plus - $756,000\n3. Device Ultra - $543,000\n4. Tool Master - $432,000\n5. Kit Premium - $321,000\n\n**3. Month-over-Month Growth:**\n- Q1: Baseline\n- Q2: +15% growth\n- Q3: +23% growth\n- Q4: +18% growth\n\nI've created a bar chart showing revenue distribution by region (see attached image).",
+  "tool_calls": [
+    {
+      "id": "call_abc123",
+      "type": "code_interpreter",
+      "container_id": "container_def456",
+      "code": "import pandas as pd\nimport matplotlib.pyplot as plt\n\n# Load CSV\ndf = pd.read_csv('quarterly_sales.csv')\n\n# Calculate revenue by region\nrevenue_by_region = df.groupby('region')['revenue'].sum()\n\n# Create bar chart\nplt.figure(figsize=(10, 6))\nrevenue_by_region.plot(kind='bar')\nplt.title('Revenue by Region')\nplt.xlabel('Region')\nplt.ylabel('Revenue ($)')\nplt.tight_layout()\nplt.savefig('revenue_chart.png')\n\nprint(f\"Total Revenue: ${df['revenue'].sum():,.2f}\")\nprint(f\"\\nTop 5 Products:\\n{df.groupby('product')['revenue'].sum().sort_values(ascending=False).head()}\")",
+      "outputs": [
+        {
+          "type": "logs",
+          "logs": "Total Revenue: $5,420,000.00\n\nTop 5 Products:\nproduct\nWidget Pro      987000.0\nGadget Plus     756000.0\nDevice Ultra    543000.0\nTool Master     432000.0\nKit Premium     321000.0\nName: revenue, dtype: float64"
+        },
+        {
+          "type": "image",
+          "image": "iVBORw0KGgoAAAANSUhEUgAAA..."
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 1250,
+    "output_tokens": 420,
+    "total_tokens": 1670
+  }
+}
+```
+
+**Step 3: Ask Follow-up Questions (Reuse Container)**
+
+```bash
+# Continue analysis in the same container (saves $0.03)
+curl -X POST http://localhost:3000/api/responses/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "input": "Now predict next quarter revenue using linear regression on the growth trend",
+    "tools": [
+      {
+        "type": "code_interpreter",
+        "container": "container_def456"
+      }
+    ],
+    "include": ["code_interpreter_call.outputs"]
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "id": "resp_follow123",
+  "output_text": "Based on linear regression analysis of the growth trend:\n\n**Q1 Next Year Predicted Revenue:** $6,397,600\n\nThis represents a projected 18% growth from Q4, consistent with the observed trend. The regression model has an R² of 0.94, indicating strong predictive confidence.\n\nKey factors:\n- Average quarterly growth: 18.7%\n- Seasonality adjusted\n- 95% confidence interval: $6,140,000 - $6,655,000",
+  "tool_calls": [
+    {
+      "type": "code_interpreter",
+      "container_id": "container_def456",
+      "code": "from sklearn.linear_model import LinearRegression\nimport numpy as np\n\n# Prepare data\nquarters = np.array([1, 2, 3, 4]).reshape(-1, 1)\nrevenue = np.array([5420000, 6233000, 7666590, 9046776])\n\n# Train model\nmodel = LinearRegression()\nmodel.fit(quarters, revenue)\n\n# Predict next quarter\nnext_quarter = np.array([[5]])\npredicted = model.predict(next_quarter)[0]\n\nprint(f\"Predicted Q1 Revenue: ${predicted:,.2f}\")\nprint(f\"Growth from Q4: {((predicted / revenue[-1]) - 1) * 100:.1f}%\")\nprint(f\"R² Score: {model.score(quarters, revenue):.2f}\")",
+      "outputs": [
+        {
+          "type": "logs",
+          "logs": "Predicted Q1 Revenue: $6,397,600.00\nGrowth from Q4: 18.2%\nR² Score: 0.94"
+        }
+      ]
+    }
+  ]
+}
+```
+
+#### Workflow Summary
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. Upload File (Files API)                                 │
+│    POST /api/files                                          │
+│    → Returns: file_id                                       │
+└─────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 2. Analyze with Code Interpreter (Responses API)           │
+│    POST /api/responses/text                                 │
+│    • Include file_id in tools[].container.file_ids          │
+│    • Model loads file in Python sandbox                     │
+│    • Returns: analysis + charts + container_id              │
+└─────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 3. Follow-up Questions (Reuse Container)                   │
+│    POST /api/responses/text                                 │
+│    • Use same container_id (data still loaded)              │
+│    • Save $0.03 per request                                 │
+│    • Ask multiple questions about same file                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Cost Breakdown
+
+| Action | Cost | Notes |
+|--------|------|-------|
+| File Upload | Free | Storage costs may apply |
+| Container Creation | $0.03 | First Code Interpreter request |
+| Container Reuse | Free | Same container within 1-hour session |
+| Model Tokens | Variable | Based on gpt-4o pricing (~$2.50/1M input) |
+
+**Example Total Cost:**
+- Upload: $0.00
+- Analysis (1,250 input + 420 output tokens): ~$0.01
+- Container: $0.03
+- Follow-up (500 input + 200 output tokens): ~$0.003
+- **Total: ~$0.043**
+
+#### Supported Analysis Types
+
+With uploaded files and Code Interpreter, you can:
+
+- **Data Analysis** - Statistics, aggregations, correlations
+- **Visualizations** - Charts, graphs, heatmaps (matplotlib, seaborn)
+- **Machine Learning** - Predictions, clustering, classification (scikit-learn)
+- **Text Processing** - NLP, sentiment analysis, extraction
+- **Image Analysis** - OCR, computer vision, transformations
+- **Audio Processing** - Transcription, analysis, waveform visualization
+- **Code Review** - Static analysis, complexity metrics, documentation
+
+#### Python Libraries Available
+
+Code Interpreter sandboxes include:
+- **Data:** pandas, numpy, scipy
+- **Visualization:** matplotlib, seaborn, plotly
+- **ML:** scikit-learn, xgboost
+- **NLP:** nltk, spacy
+- **Image:** PIL, opencv
+- **Audio:** librosa, pydub
+- **Web:** requests, beautifulsoup4
+
 ## Core Components
 
 ### OpenAI Responses Service (Orchestrator)
@@ -1945,8 +2469,11 @@ constructor(private readonly configService: ConfigService) {
 
 ### Test Coverage
 
-**Unit Tests:** 450+ tests across all components
+**Unit Tests:** 660+ tests across all components
 - All 9 streaming handlers
+- Responses API service and controller
+- Videos API service and controller (140+ tests)
+- Files API service, controller, and DTOs (191 tests)
 - Logger service
 - Interceptors (logging, retry, edge cases)
 - Exception filter (39 tests)
@@ -1956,6 +2483,8 @@ constructor(private readonly configService: ConfigService) {
 - [test/openai-responses.e2e-spec.ts](test/openai-responses.e2e-spec.ts) - Text generation
 - [test/openai-images.e2e-spec.ts](test/openai-images.e2e-spec.ts) - Image generation
 - [test/openai-streaming.e2e-spec.ts](test/openai-streaming.e2e-spec.ts) - Streaming
+- [test/videos.e2e-spec.ts](test/videos.e2e-spec.ts) - Videos API (15 tests)
+- [test/files.e2e-spec.ts](test/files.e2e-spec.ts) - Files API (19 tests)
 
 ### Running Tests
 

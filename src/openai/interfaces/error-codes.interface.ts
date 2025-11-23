@@ -40,6 +40,28 @@ export type ImageErrorCode =
   | 'image_file_not_found';
 
 /**
+ * File-specific error codes
+ */
+export type FileErrorCode =
+  // File Upload Errors
+  | 'file_too_large'
+  | 'file_upload_failed'
+  | 'invalid_file_format'
+  | 'unsupported_file'
+  | 'content_size_limit'
+  // File Processing Errors
+  | 'processing_failed'
+  | 'file_parsing_error'
+  | 'invalid_file_content'
+  // File Access Errors
+  | 'file_not_found'
+  | 'download_forbidden'
+  | 'file_deleted'
+  // File Purpose Errors
+  | 'invalid_purpose'
+  | 'purpose_mismatch';
+
+/**
  * Network error codes (Node.js)
  */
 export type NetworkErrorCode =
@@ -65,7 +87,11 @@ export type OpenAIAPIErrorCode =
 /**
  * All supported error codes
  */
-export type ErrorCode = ImageErrorCode | NetworkErrorCode | OpenAIAPIErrorCode;
+export type ErrorCode =
+  | ImageErrorCode
+  | FileErrorCode
+  | NetworkErrorCode
+  | OpenAIAPIErrorCode;
 
 /**
  * Rate limit information from OpenAI response headers
@@ -241,5 +267,90 @@ export const NETWORK_ERROR_CODE_MAPPINGS: Record<
     status: 503,
     message: 'OpenAI API host unreachable',
     hint: 'Cannot reach the OpenAI API. Check your network connection and firewall settings.',
+  },
+};
+
+/**
+ * Mapping of file error codes to HTTP status codes and user-friendly messages
+ */
+export const FILE_ERROR_CODE_MAPPINGS: Record<
+  FileErrorCode,
+  {
+    status: number;
+    message: string;
+    hint: string;
+  }
+> = {
+  // File Upload Errors
+  file_too_large: {
+    status: 413,
+    message: 'File exceeds maximum size limit',
+    hint: 'File must be under 512 MB for standard API. Use Uploads API for files up to 8 GB, or reduce file size.',
+  },
+  file_upload_failed: {
+    status: 500,
+    message: 'File upload failed',
+    hint: 'The file upload encountered an error. Retry the upload or check file integrity and format.',
+  },
+  invalid_file_format: {
+    status: 400,
+    message: 'Unsupported file format',
+    hint: 'The file format is not supported for this purpose. Check supported formats in the documentation.',
+  },
+  unsupported_file: {
+    status: 400,
+    message: 'File type not supported',
+    hint: 'The file extension or MIME type is not supported. Convert to a supported format.',
+  },
+  content_size_limit: {
+    status: 400,
+    message: 'Content exceeds size limit',
+    hint: 'The file content is too large. Split into smaller files or reduce content size.',
+  },
+
+  // File Processing Errors
+  processing_failed: {
+    status: 400,
+    message: 'File processing failed',
+    hint: 'OpenAI could not process the file. Check status_details for specific errors or verify file format.',
+  },
+  file_parsing_error: {
+    status: 400,
+    message: 'Unable to parse file',
+    hint: 'The file structure is invalid or corrupted. Verify file format and content integrity.',
+  },
+  invalid_file_content: {
+    status: 400,
+    message: 'File contains invalid content',
+    hint: 'The file content does not match format requirements. Review format specifications for your purpose.',
+  },
+
+  // File Access Errors
+  file_not_found: {
+    status: 404,
+    message: 'File not found',
+    hint: 'The file ID does not exist or has been deleted. Verify the file ID is correct.',
+  },
+  download_forbidden: {
+    status: 403,
+    message: 'File download not allowed',
+    hint: 'Files with purpose "assistants" cannot be downloaded via API due to OpenAI policy restrictions.',
+  },
+  file_deleted: {
+    status: 410,
+    message: 'File has been deleted',
+    hint: 'The file was previously deleted and is no longer available.',
+  },
+
+  // File Purpose Errors
+  invalid_purpose: {
+    status: 400,
+    message: 'Invalid file purpose',
+    hint: 'Purpose must be one of: assistants, vision, batch, fine-tune, user_data, evals.',
+  },
+  purpose_mismatch: {
+    status: 400,
+    message: 'File purpose does not match operation',
+    hint: 'The file purpose is not compatible with the requested operation. Use files with appropriate purpose.',
   },
 };

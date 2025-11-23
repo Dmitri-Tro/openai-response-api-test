@@ -113,7 +113,7 @@ export interface OpenAIError {
  */
 export interface OpenAILogEntry {
   timestamp: string;
-  api: 'responses' | 'images' | 'videos';
+  api: 'responses' | 'images' | 'videos' | 'files';
   endpoint: string;
   request: Record<string, unknown>;
   response?: unknown;
@@ -144,6 +144,12 @@ export interface OpenAILogEntry {
     video_id?: string;
     model?: string;
     status?: string;
+    // Files API specific
+    file_id?: string;
+    filename?: string;
+    bytes?: number;
+    purpose?: string;
+    created_at?: number;
   };
   streaming?: boolean;
   stream_events?: unknown[];

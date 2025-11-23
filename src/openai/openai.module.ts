@@ -3,8 +3,10 @@ import { HttpModule } from '@nestjs/axios';
 import { CommonModule } from '../common/common.module';
 import { OpenAIResponsesService } from './services/openai-responses.service';
 import { OpenAIVideosService } from './services/openai-videos.service';
+import { OpenAIFilesService } from './services/openai-files.service';
 import { ResponsesController } from './controllers/responses.controller';
 import { VideosController } from './controllers/videos.controller';
+import { FilesController } from './controllers/files.controller';
 import { LifecycleEventsHandler } from './services/handlers/lifecycle-events.handler';
 import { TextEventsHandler } from './services/handlers/text-events.handler';
 import { ReasoningEventsHandler } from './services/handlers/reasoning-events.handler';
@@ -23,10 +25,11 @@ import { StructuralEventsHandler } from './services/handlers/structural-events.h
     }),
     CommonModule,
   ],
-  controllers: [ResponsesController, VideosController],
+  controllers: [ResponsesController, VideosController, FilesController],
   providers: [
     OpenAIResponsesService,
     OpenAIVideosService,
+    OpenAIFilesService,
     LifecycleEventsHandler,
     TextEventsHandler,
     ReasoningEventsHandler,
@@ -37,6 +40,6 @@ import { StructuralEventsHandler } from './services/handlers/structural-events.h
     RefusalEventsHandler,
     StructuralEventsHandler,
   ],
-  exports: [OpenAIResponsesService, OpenAIVideosService],
+  exports: [OpenAIResponsesService, OpenAIVideosService, OpenAIFilesService],
 })
 export class OpenAIModule {}
