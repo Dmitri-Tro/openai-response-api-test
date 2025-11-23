@@ -242,7 +242,17 @@ Access Swagger UI at: **http://localhost:3000/api-docs**
 | GET | `/api/files/:id` | Get file metadata | ✅ |
 | GET | `/api/files/:id/download` | Download file content | ✅ |
 | DELETE | `/api/files/:id` | Delete file | ✅ |
-| POST | `/api/images/generate` | Image generation | ⏳ |
+| POST | `/api/images/generate` | Generate images with DALL-E 2/3/gpt-image-1 | ✅ |
+| POST | `/api/images/edit` | Edit images with mask (DALL-E 2 only) | ✅ |
+| POST | `/api/images/variations` | Create image variations (DALL-E 2 only) | ✅ |
+| POST | `/api/vector-stores` | Create vector store for file search | ✅ |
+| GET | `/api/vector-stores/:id` | Retrieve vector store details | ✅ |
+| PATCH | `/api/vector-stores/:id` | Update vector store metadata | ✅ |
+| DELETE | `/api/vector-stores/:id` | Delete vector store | ✅ |
+| GET | `/api/vector-stores` | List all vector stores | ✅ |
+| POST | `/api/vector-stores/:id/search` | Search vector store content | ✅ |
+| POST | `/api/vector-stores/:id/files` | Attach file to vector store | ✅ |
+| GET | `/api/vector-stores/:id/files` | List files in vector store | ✅ |
 
 ### Text Generation (Non-Streaming)
 
@@ -1264,6 +1274,343 @@ curl -N http://localhost:3000/api/responses/resp_abc123/stream
 
 **Supported Events:** All 51 streaming event types (text, reasoning, tools, images, audio, MCP, refusal)
 
+---
+
+### Images API
+
+The Images API provides three image generation models (gpt-image-1, DALL-E 3, DALL-E 2) with different capabilities and pricing. This is a **standalone API** separate from the Responses API image generation feature.
+
+#### Model Comparison
+
+| Model | Resolution | Images/Request | Response Format | Quality Options | Unique Features |
+|-------|-----------|----------------|-----------------|-----------------|-----------------|
+| **gpt-image-1** | Up to 4096×4096 | 1 only | b64_json only | N/A | Auto size, portrait/landscape |
+| **DALL-E 3** | 1024×1024 to 1792×1024 | 1 only | url, b64_json | standard, hd | Revised prompts, style control |
+| **DALL-E 2** | 256×256 to 1024×1024 | 1-10 | url, b64_json | standard only | Edits, variations, multiple images |
+
+**Key Differences:**
+- **gpt-image-1**: Latest GPT-4o-powered model, highest resolution (up to 4096×4096), only b64_json format, unique "auto" size option
+- **DALL-E 3**: Higher quality with automatic prompt rewriting, HD quality option, style control (vivid/natural)
+- **DALL-E 2**: Budget-friendly, supports multiple images per request, image editing with masks, and variations
+
+#### Generate Images
+
+**Endpoint:** `POST /api/images/generate`
+
+##### Example 1: gpt-image-1 with Auto Size
+
+```bash
+curl -X POST http://localhost:3000/api/images/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-image-1",
+    "prompt": "A serene mountain landscape at sunset",
+    "size": "auto",
+    "response_format": "b64_json"
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "created": 1234567890,
+  "data": [
+    {
+      "b64_json": "iVBORw0KGgoAAAANSUhEUgAAAAUA..."
+    }
+  ]
+}
+```
+
+**Note:** gpt-image-1 always returns `b64_json` (no URL format) and generates exactly 1 image per request.
+
+##### Example 2: gpt-image-1 Portrait (1024×1536)
+
+```bash
+curl -X POST http://localhost:3000/api/images/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-image-1",
+    "prompt": "A tall lighthouse tower on a cliff",
+    "size": "1024x1536",
+    "response_format": "b64_json"
+  }'
+```
+
+##### Example 3: gpt-image-1 Landscape (1536×1024)
+
+```bash
+curl -X POST http://localhost:3000/api/images/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-image-1",
+    "prompt": "A wide panoramic view of a valley",
+    "size": "1536x1024",
+    "response_format": "b64_json"
+  }'
+```
+
+##### Example 4: DALL-E 3 with HD Quality
+
+```bash
+curl -X POST http://localhost:3000/api/images/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dall-e-3",
+    "prompt": "A futuristic cityscape at night",
+    "size": "1792x1024",
+    "quality": "hd",
+    "style": "vivid",
+    "response_format": "url"
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "created": 1234567890,
+  "data": [
+    {
+      "url": "https://oaidalleapiprodscus.blob.core.windows.net/...",
+      "revised_prompt": "A detailed futuristic cityscape illuminated by neon lights at night..."
+    }
+  ]
+}
+```
+
+**Note:** DALL-E 3 automatically rewrites prompts for safety and quality. The `revised_prompt` field shows the actual prompt used.
+
+##### Example 5: DALL-E 2 with Multiple Images
+
+```bash
+curl -X POST http://localhost:3000/api/images/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dall-e-2",
+    "prompt": "A cute baby sea otter",
+    "n": 3,
+    "size": "512x512",
+    "response_format": "url"
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "created": 1234567890,
+  "data": [
+    {
+      "url": "https://oaidalleapiprodscus.blob.core.windows.net/image1.png"
+    },
+    {
+      "url": "https://oaidalleapiprodscus.blob.core.windows.net/image2.png"
+    },
+    {
+      "url": "https://oaidalleapiprodscus.blob.core.windows.net/image3.png"
+    }
+  ]
+}
+```
+
+**Note:** Only DALL-E 2 supports generating multiple images (n=1-10) in a single request.
+
+##### Supported Parameters
+
+| Parameter | Type | Models | Options | Default | Description |
+|-----------|------|--------|---------|---------|-------------|
+| `prompt` | string | All | 1-4000 chars | *required* | Image description |
+| `model` | enum | All | `dall-e-2`, `dall-e-3`, `gpt-image-1` | `dall-e-2` | Model selection |
+| `n` | number | DALL-E 2 only | 1-10 | 1 | Number of images (gpt-image-1/DALL-E 3: always 1) |
+| `size` | enum | Model-specific | See table below | `1024x1024` | Image dimensions |
+| `quality` | enum | DALL-E 3 only | `standard`, `hd` | `standard` | Quality level |
+| `style` | enum | DALL-E 3 only | `vivid`, `natural` | `vivid` | Visual style |
+| `response_format` | enum | All | `url`, `b64_json` | `url` | Output format (gpt-image-1: b64_json only) |
+| `user` | string | All | Any string | - | User tracking ID |
+
+**Size Options by Model:**
+
+| Model | Supported Sizes |
+|-------|----------------|
+| **gpt-image-1** | `1024x1024`, `1024x1536` (portrait), `1536x1024` (landscape), `auto` |
+| **DALL-E 3** | `1024x1024`, `1792x1024` (landscape), `1024x1792` (portrait) |
+| **DALL-E 2** | `256x256`, `512x512`, `1024x1024` |
+
+#### Edit Images (DALL-E 2 Only)
+
+**Endpoint:** `POST /api/images/edit`
+
+**Note:** Image editing is only supported for DALL-E 2. Images must be square and less than 4MB.
+
+##### Example: Edit Image with Mask
+
+```bash
+curl -X POST http://localhost:3000/api/images/edit \
+  -H "Content-Type: multipart/form-data" \
+  -F "image=@original.png" \
+  -F "mask=@mask.png" \
+  -F "prompt=Add a red door to the house" \
+  -F "model=dall-e-2" \
+  -F "n=2" \
+  -F "size=512x512" \
+  -F "response_format=url"
+```
+
+**Response:**
+
+```json
+{
+  "created": 1234567890,
+  "data": [
+    {
+      "url": "https://oaidalleapiprodscus.blob.core.windows.net/edited1.png"
+    },
+    {
+      "url": "https://oaidalleapiprodscus.blob.core.windows.net/edited2.png"
+    }
+  ]
+}
+```
+
+**Requirements:**
+- Image and mask must be square PNG files (< 4MB)
+- Mask: transparent areas (alpha=0) indicate where to edit
+- Prompt describes what to add/change in transparent areas
+- Model must be `dall-e-2` (only model supporting edits)
+
+##### Supported Parameters
+
+| Parameter | Type | Required | Options | Description |
+|-----------|------|----------|---------|-------------|
+| `image` | file | ✅ | PNG < 4MB | Original image to edit |
+| `mask` | file | No | PNG < 4MB | Mask indicating edit areas (transparent = edit) |
+| `prompt` | string | ✅ | 1-1000 chars | Description of edits |
+| `model` | enum | No | `dall-e-2` | Model (only DALL-E 2 supported) |
+| `n` | number | No | 1-10 | Number of variations |
+| `size` | enum | No | `256x256`, `512x512`, `1024x1024` | Output size |
+| `response_format` | enum | No | `url`, `b64_json` | Output format |
+| `user` | string | No | Any string | User tracking ID |
+
+#### Create Image Variations (DALL-E 2 Only)
+
+**Endpoint:** `POST /api/images/variations`
+
+**Note:** Variations are only supported for DALL-E 2. The input image must be square and less than 4MB.
+
+##### Example: Create Variations
+
+```bash
+curl -X POST http://localhost:3000/api/images/variations \
+  -H "Content-Type: multipart/form-data" \
+  -F "image=@original.png" \
+  -F "model=dall-e-2" \
+  -F "n=3" \
+  -F "size=1024x1024" \
+  -F "response_format=url"
+```
+
+**Response:**
+
+```json
+{
+  "created": 1234567890,
+  "data": [
+    {
+      "url": "https://oaidalleapiprodscus.blob.core.windows.net/var1.png"
+    },
+    {
+      "url": "https://oaidalleapiprodscus.blob.core.windows.net/var2.png"
+    },
+    {
+      "url": "https://oaidalleapiprodscus.blob.core.windows.net/var3.png"
+    }
+  ]
+}
+```
+
+**Requirements:**
+- Image must be square PNG file (< 4MB)
+- Model must be `dall-e-2` (only model supporting variations)
+- Generates variations inspired by the input image (no prompt needed)
+
+##### Supported Parameters
+
+| Parameter | Type | Required | Options | Description |
+|-----------|------|----------|---------|-------------|
+| `image` | file | ✅ | PNG < 4MB | Source image for variations |
+| `model` | enum | No | `dall-e-2` | Model (only DALL-E 2 supported) |
+| `n` | number | No | 1-10 | Number of variations |
+| `size` | enum | No | `256x256`, `512x512`, `1024x1024` | Output size |
+| `response_format` | enum | No | `url`, `b64_json` | Output format |
+| `user` | string | No | Any string | User tracking ID |
+
+#### Pricing Comparison
+
+**Generation Costs:**
+
+| Model | Size | Quality | Price per Image |
+|-------|------|---------|----------------|
+| **gpt-image-1** | 1024×1024 | standard | $0.020 |
+| **gpt-image-1** | 1024×1536 | standard | $0.020 |
+| **gpt-image-1** | 1536×1024 | standard | $0.020 |
+| **gpt-image-1** | auto | standard | $0.020 |
+| **DALL-E 3** | 1024×1024 | standard | $0.040 |
+| **DALL-E 3** | 1024×1024 | hd | $0.080 |
+| **DALL-E 3** | 1792×1024 or 1024×1792 | standard | $0.080 |
+| **DALL-E 3** | 1792×1024 or 1024×1792 | hd | $0.120 |
+| **DALL-E 2** | 256×256 | standard | $0.016 |
+| **DALL-E 2** | 512×512 | standard | $0.018 |
+| **DALL-E 2** | 1024×1024 | standard | $0.020 |
+
+**Edit & Variation Costs (DALL-E 2 only):**
+
+Same as generation costs based on output size:
+- 256×256: $0.016 per image
+- 512×512: $0.018 per image
+- 1024×1024: $0.020 per image
+
+**Cost Optimization Tips:**
+- Use gpt-image-1 for high-resolution needs (up to 4096×4096 at same $0.020 cost)
+- Use DALL-E 2 for budget-friendly generation, edits, or multiple images
+- Use DALL-E 3 standard quality before HD to save 50-66%
+- Request multiple DALL-E 2 images in one call (n=3-10) to batch workflows
+
+#### Model-Specific Limitations
+
+**gpt-image-1:**
+- ❌ No `quality` parameter (always standard quality)
+- ❌ No `style` parameter (auto-determined)
+- ❌ No `url` response format (always returns `b64_json`)
+- ❌ No image editing or variations endpoints
+- ❌ Only 1 image per request (n=1 always)
+- ✅ Supports "auto" size (automatically determines optimal dimensions)
+- ✅ Highest resolution (up to 4096×4096)
+- ✅ Portrait and landscape sizes (1024×1536, 1536×1024)
+
+**DALL-E 3:**
+- ❌ No image editing or variations endpoints
+- ❌ Only 1 image per request (n=1 always)
+- ❌ No small sizes (256×256, 512×512)
+- ✅ Automatic prompt revision with `revised_prompt` in response
+- ✅ HD quality option
+- ✅ Style control (vivid/natural)
+- ✅ Both url and b64_json response formats
+
+**DALL-E 2:**
+- ❌ Lower maximum resolution (1024×1024)
+- ❌ No HD quality option
+- ❌ No style control
+- ❌ No automatic prompt revision
+- ✅ Multiple images per request (n=1-10)
+- ✅ Image editing with masks
+- ✅ Image variations
+- ✅ Small sizes available (256×256, 512×512)
+- ✅ Both url and b64_json response formats
+
+---
+
 ### Videos API
 
 The Videos API uses an **async job management pattern** (polling, not streaming) for video generation.
@@ -1844,6 +2191,276 @@ Content-Disposition: attachment; filename="file-abc123-content"
 | `.pdf` | application/pdf |
 | `.png`, `.jpg`, `.jpeg` | image/png, image/jpeg |
 | `.mp3`, `.mp4` | audio/mpeg, video/mp4 |
+
+#### Binary Streaming Examples
+
+The Files API implements binary streaming for efficient downloads of large files without loading entire content into memory.
+
+##### Pattern 1: Node.js with Fetch API (Recommended)
+
+**Stream to File:**
+
+```javascript
+import fetch from 'node-fetch';
+import { createWriteStream } from 'fs';
+import { pipeline } from 'stream/promises';
+
+async function downloadFile(fileId, outputPath) {
+  const response = await fetch(
+    `http://localhost:3000/api/files/${fileId}/download`
+  );
+
+  if (!response.ok) {
+    throw new Error(`Download failed: ${response.statusText}`);
+  }
+
+  // Stream directly to disk (no memory buffering)
+  await pipeline(
+    response.body,
+    createWriteStream(outputPath)
+  );
+
+  console.log(`Downloaded to ${outputPath}`);
+}
+
+// Example: Download large video file
+await downloadFile('file-abc123', './output/video.mp4');
+```
+
+**Stream with Progress Tracking:**
+
+```javascript
+async function downloadWithProgress(fileId, outputPath) {
+  const response = await fetch(
+    `http://localhost:3000/api/files/${fileId}/download`
+  );
+
+  if (!response.ok) {
+    throw new Error(`Download failed: ${response.statusText}`);
+  }
+
+  const totalBytes = parseInt(response.headers.get('content-length'), 10);
+  let downloadedBytes = 0;
+
+  // Create transform stream for progress
+  const progressStream = new Transform({
+    transform(chunk, encoding, callback) {
+      downloadedBytes += chunk.length;
+      const progress = ((downloadedBytes / totalBytes) * 100).toFixed(2);
+      process.stdout.write(`\rProgress: ${progress}%`);
+      callback(null, chunk);
+    },
+  });
+
+  await pipeline(
+    response.body,
+    progressStream,
+    createWriteStream(outputPath)
+  );
+
+  console.log(`\nDownload complete: ${outputPath}`);
+}
+```
+
+**Stream to Memory (Small Files Only):**
+
+```javascript
+async function downloadToBuffer(fileId) {
+  const response = await fetch(
+    `http://localhost:3000/api/files/${fileId}/download`
+  );
+
+  if (!response.ok) {
+    throw new Error(`Download failed: ${response.statusText}`);
+  }
+
+  // For small files (< 100 MB), buffering is acceptable
+  const buffer = await response.arrayBuffer();
+  return Buffer.from(buffer);
+}
+
+// Example: Download image for processing
+const imageBuffer = await downloadToBuffer('file-img789');
+```
+
+##### Pattern 2: Python with requests Library
+
+**Stream to File:**
+
+```python
+import requests
+
+def download_file(file_id, output_path):
+    """Download file with streaming to avoid memory issues"""
+    url = f'http://localhost:3000/api/files/{file_id}/download'
+
+    with requests.get(url, stream=True) as response:
+        response.raise_for_status()
+
+        # Stream to disk in chunks (8KB at a time)
+        with open(output_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+    print(f'Downloaded to {output_path}')
+
+# Example: Download large dataset
+download_file('file-abc123', 'dataset.parquet')
+```
+
+**Stream with Progress Bar:**
+
+```python
+import requests
+from tqdm import tqdm
+
+def download_with_progress(file_id, output_path):
+    """Download with visual progress bar"""
+    url = f'http://localhost:3000/api/files/{file_id}/download'
+
+    with requests.get(url, stream=True) as response:
+        response.raise_for_status()
+
+        total_size = int(response.headers.get('content-length', 0))
+
+        with open(output_path, 'wb') as f:
+            with tqdm(total=total_size, unit='B', unit_scale=True) as pbar:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    pbar.update(len(chunk))
+
+    print(f'Download complete: {output_path}')
+```
+
+##### Pattern 3: curl for Large Files
+
+**Basic Streaming Download:**
+
+```bash
+# Stream 500MB file without loading into memory
+curl -N http://localhost:3000/api/files/file-large123/download \
+  -o large-dataset.csv
+
+# Resume interrupted download (if server supports Range headers)
+curl -N -C - http://localhost:3000/api/files/file-large123/download \
+  -o large-dataset.csv
+```
+
+**Download with Progress Display:**
+
+```bash
+# Show progress bar with total size
+curl -N --progress-bar \
+  http://localhost:3000/api/files/file-abc123/download \
+  -o output.mp4
+
+# Detailed progress (speed, ETA, percentage)
+curl -N http://localhost:3000/api/files/file-abc123/download \
+  -o output.mp4 \
+  --progress-bar
+```
+
+##### Streaming Best Practices
+
+**Memory Optimization:**
+
+| File Size | Recommendation | Pattern |
+|-----------|---------------|---------|
+| < 10 MB | Buffer in memory | `await response.arrayBuffer()` |
+| 10-100 MB | Stream to disk | `pipeline(response.body, fileStream)` |
+| > 100 MB | **Always stream** | Use chunked streaming with progress |
+| > 500 MB | Stream + validate | Check hash/integrity after download |
+
+**Error Handling:**
+
+```javascript
+async function safeDownload(fileId, outputPath) {
+  const tempPath = `${outputPath}.tmp`;
+
+  try {
+    const response = await fetch(
+      `http://localhost:3000/api/files/${fileId}/download`
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(`${error.code}: ${error.hint || error.message}`);
+    }
+
+    // Stream to temporary file first
+    await pipeline(
+      response.body,
+      createWriteStream(tempPath)
+    );
+
+    // Atomically rename on success
+    await rename(tempPath, outputPath);
+
+  } catch (error) {
+    // Cleanup failed download
+    await unlink(tempPath).catch(() => {});
+    throw error;
+  }
+}
+```
+
+**Concurrent Downloads (Parallel Streaming):**
+
+```javascript
+async function downloadMultiple(fileIds, outputDir) {
+  const downloads = fileIds.map((fileId, index) =>
+    downloadFile(fileId, `${outputDir}/file-${index}.dat`)
+  );
+
+  // Download up to 5 files concurrently
+  const results = await Promise.allSettled(downloads);
+
+  const succeeded = results.filter(r => r.status === 'fulfilled').length;
+  console.log(`Downloaded ${succeeded}/${fileIds.length} files`);
+}
+```
+
+**Streaming Validation:**
+
+```javascript
+import { createHash } from 'crypto';
+
+async function downloadAndValidate(fileId, outputPath, expectedHash) {
+  const response = await fetch(
+    `http://localhost:3000/api/files/${fileId}/download`
+  );
+
+  if (!response.ok) {
+    throw new Error(`Download failed: ${response.statusText}`);
+  }
+
+  // Stream with SHA-256 hashing
+  const hash = createHash('sha256');
+  const fileStream = createWriteStream(outputPath);
+
+  const hashStream = new Transform({
+    transform(chunk, encoding, callback) {
+      hash.update(chunk);
+      callback(null, chunk);
+    },
+  });
+
+  await pipeline(
+    response.body,
+    hashStream,
+    fileStream
+  );
+
+  const calculatedHash = hash.digest('hex');
+
+  if (calculatedHash !== expectedHash) {
+    await unlink(outputPath);
+    throw new Error('Hash mismatch - file corrupted');
+  }
+
+  console.log('✓ Download validated successfully');
+}
+```
 
 #### Delete File
 
@@ -3429,6 +4046,516 @@ constructor(private readonly configService: ConfigService) {
   "hint": "Maximum image size is 20MB. Resize or compress your image before uploading."
 }
 ```
+
+### Client-Side Error Handling Patterns
+
+#### Pattern 1: Basic Error Handling with Retry
+
+```typescript
+import axios from 'axios';
+
+interface ErrorResponse {
+  statusCode: number;
+  message: string;
+  error_code?: string;
+  hint?: string;
+  retry_after_seconds?: number;
+}
+
+async function generateText(prompt: string, maxRetries = 3): Promise<any> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await axios.post('http://localhost:3000/api/responses/text', {
+        model: 'gpt-4o',
+        input: prompt,
+      });
+
+      return response.data;
+
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        const errorData: ErrorResponse = error.response.data;
+
+        // Handle rate limit with exponential backoff
+        if (errorData.statusCode === 429) {
+          const retryAfter = errorData.retry_after_seconds || Math.pow(2, attempt);
+
+          if (attempt < maxRetries) {
+            console.log(`Rate limited. Retrying in ${retryAfter}s (attempt ${attempt}/${maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+            continue;
+          }
+        }
+
+        // Handle authentication errors (non-retryable)
+        if (errorData.statusCode === 401) {
+          console.error('❌ Authentication failed:', errorData.message);
+          console.error('💡 Hint:', errorData.hint);
+          throw new Error('AUTHENTICATION_FAILED');
+        }
+
+        // Handle validation errors (non-retryable)
+        if (errorData.statusCode === 400) {
+          console.error('❌ Validation error:', errorData.message);
+          console.error('💡 Hint:', errorData.hint);
+          if (errorData.error_code) {
+            console.error('📋 Error code:', errorData.error_code);
+          }
+          throw new Error('VALIDATION_FAILED');
+        }
+
+        // Handle server errors (retryable)
+        if (errorData.statusCode >= 500 && attempt < maxRetries) {
+          const backoff = Math.pow(2, attempt);
+          console.log(`Server error. Retrying in ${backoff}s (attempt ${attempt}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, backoff * 1000));
+          continue;
+        }
+      }
+
+      // Unknown error - rethrow
+      throw error;
+    }
+  }
+
+  throw new Error('MAX_RETRIES_EXCEEDED');
+}
+```
+
+#### Pattern 2: Production-Ready Error Handler with Logging
+
+```typescript
+import axios, { AxiosError } from 'axios';
+import winston from 'winston';
+
+// Configure logger
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.json(),
+  transports: [
+    new winston.transports.File({ filename: 'error.log', level: 'error' }),
+    new winston.transports.File({ filename: 'combined.log' }),
+  ],
+});
+
+class OpenAIClientError extends Error {
+  constructor(
+    message: string,
+    public statusCode: number,
+    public errorCode?: string,
+    public hint?: string,
+    public requestId?: string,
+  ) {
+    super(message);
+    this.name = 'OpenAIClientError';
+  }
+}
+
+async function safeAPICall<T>(
+  apiCall: () => Promise<T>,
+  options: {
+    maxRetries?: number;
+    retryableStatusCodes?: number[];
+    logErrors?: boolean;
+  } = {},
+): Promise<T> {
+  const {
+    maxRetries = 3,
+    retryableStatusCodes = [429, 500, 502, 503, 504],
+    logErrors = true,
+  } = options;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await apiCall();
+
+    } catch (error) {
+      const axiosError = error as AxiosError<ErrorResponse>;
+
+      if (axiosError.response) {
+        const errorData = axiosError.response.data;
+
+        // Log error with context
+        if (logErrors) {
+          logger.error('OpenAI API Error', {
+            statusCode: errorData.statusCode,
+            message: errorData.message,
+            errorCode: errorData.error_code,
+            hint: errorData.hint,
+            attempt: attempt,
+            maxRetries: maxRetries,
+            timestamp: new Date().toISOString(),
+          });
+        }
+
+        // Check if error is retryable
+        const isRetryable = retryableStatusCodes.includes(errorData.statusCode);
+
+        if (isRetryable && attempt < maxRetries) {
+          const backoff = Math.min(Math.pow(2, attempt) * 1000, 30000); // Max 30s
+
+          logger.info('Retrying API call', {
+            attempt: attempt,
+            backoffMs: backoff,
+            errorCode: errorData.error_code,
+          });
+
+          await new Promise(resolve => setTimeout(resolve, backoff));
+          continue;
+        }
+
+        // Non-retryable or max retries exceeded
+        throw new OpenAIClientError(
+          errorData.message,
+          errorData.statusCode,
+          errorData.error_code,
+          errorData.hint,
+          axiosError.response.headers['x-request-id'],
+        );
+      }
+
+      // Network error or unknown error
+      if (logErrors) {
+        logger.error('Network or unknown error', {
+          message: error instanceof Error ? error.message : String(error),
+          attempt: attempt,
+        });
+      }
+
+      if (attempt < maxRetries) {
+        const backoff = Math.pow(2, attempt) * 1000;
+        await new Promise(resolve => setTimeout(resolve, backoff));
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new Error('Unreachable');
+}
+
+// Usage example
+async function generateWithRetry(prompt: string) {
+  try {
+    const result = await safeAPICall(
+      () => axios.post('http://localhost:3000/api/responses/text', {
+        model: 'gpt-4o',
+        input: prompt,
+      }),
+      { maxRetries: 5, logErrors: true },
+    );
+
+    return result.data;
+
+  } catch (error) {
+    if (error instanceof OpenAIClientError) {
+      console.error(`OpenAI Error [${error.errorCode}]: ${error.message}`);
+      console.error(`Hint: ${error.hint}`);
+      console.error(`Request ID: ${error.requestId}`);
+    } else {
+      console.error('Unexpected error:', error);
+    }
+
+    throw error;
+  }
+}
+```
+
+#### Pattern 3: Multi-API Error Handling
+
+```typescript
+import axios from 'axios';
+
+// Unified error handler for all OpenAI endpoints
+class APIClient {
+  constructor(private baseURL: string = 'http://localhost:3000') {}
+
+  private async handleRequest<T>(
+    method: 'get' | 'post' | 'delete' | 'patch',
+    endpoint: string,
+    data?: any,
+  ): Promise<T> {
+    try {
+      const response = await axios({
+        method,
+        url: `${this.baseURL}${endpoint}`,
+        data,
+      });
+
+      return response.data;
+
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        const errorData: ErrorResponse = error.response.data;
+
+        // API-specific error handling
+        if (endpoint.startsWith('/api/images')) {
+          return this.handleImageError(errorData);
+        } else if (endpoint.startsWith('/api/videos')) {
+          return this.handleVideoError(errorData);
+        } else if (endpoint.startsWith('/api/files')) {
+          return this.handleFileError(errorData);
+        } else if (endpoint.startsWith('/api/responses')) {
+          return this.handleResponseError(errorData);
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  private handleImageError(error: ErrorResponse): never {
+    const errorHandlers: Record<string, string> = {
+      'image_too_large': 'Image exceeds 20MB limit. Resize or compress before uploading.',
+      'invalid_image_format': 'Only PNG files are supported for image editing.',
+      'invalid_size_for_model': 'DALL-E 2 supports 256x256, 512x512, 1024x1024. DALL-E 3 supports 1024x1024, 1792x1024, 1024x1792.',
+    };
+
+    const customHint = errorHandlers[error.error_code || ''] || error.hint;
+
+    console.error('🖼️  Image API Error:', error.message);
+    console.error('💡 Solution:', customHint);
+
+    throw new Error(`IMAGE_API_ERROR: ${error.message}`);
+  }
+
+  private handleVideoError(error: ErrorResponse): never {
+    const errorHandlers: Record<string, string> = {
+      'video_generation_failed': 'Video generation failed. Check prompt clarity and try again.',
+      'video_timeout': 'Video generation timed out. Try reducing duration or complexity.',
+      'video_not_found': 'Video ID not found or expired (videos expire after 30 days).',
+    };
+
+    const customHint = errorHandlers[error.error_code || ''] || error.hint;
+
+    console.error('🎬 Video API Error:', error.message);
+    console.error('💡 Solution:', customHint);
+
+    throw new Error(`VIDEO_API_ERROR: ${error.message}`);
+  }
+
+  private handleFileError(error: ErrorResponse): never {
+    const errorHandlers: Record<string, string> = {
+      'file_too_large': 'File exceeds 512MB limit. Use Uploads API for files > 512MB.',
+      'unsupported_format': 'File format not supported. See supported formats in documentation.',
+      'download_forbidden': 'Files with purpose="assistants" cannot be downloaded via API.',
+    };
+
+    const customHint = errorHandlers[error.error_code || ''] || error.hint;
+
+    console.error('📁 File API Error:', error.message);
+    console.error('💡 Solution:', customHint);
+
+    throw new Error(`FILE_API_ERROR: ${error.message}`);
+  }
+
+  private handleResponseError(error: ErrorResponse): never {
+    const errorHandlers: Record<string, string> = {
+      'invalid_model': 'Model not supported. Use gpt-4o, gpt-4o-mini, or o-series models.',
+      'context_length_exceeded': 'Input too long. Reduce input length or use larger context model.',
+      'content_filter_triggered': 'Content violates OpenAI usage policies. Modify your input.',
+    };
+
+    const customHint = errorHandlers[error.error_code || ''] || error.hint;
+
+    console.error('💬 Responses API Error:', error.message);
+    console.error('💡 Solution:', customHint);
+
+    throw new Error(`RESPONSES_API_ERROR: ${error.message}`);
+  }
+
+  // Public API methods
+  async generateText(prompt: string) {
+    return this.handleRequest('post', '/api/responses/text', {
+      model: 'gpt-4o',
+      input: prompt,
+    });
+  }
+
+  async generateImage(prompt: string, model: string = 'dall-e-2') {
+    return this.handleRequest('post', '/api/images/generate', {
+      prompt,
+      model,
+    });
+  }
+
+  async generateVideo(prompt: string) {
+    return this.handleRequest('post', '/api/videos', {
+      prompt,
+      model: 'sora-2',
+    });
+  }
+
+  async uploadFile(file: File, purpose: string) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('purpose', purpose);
+
+    return this.handleRequest('post', '/api/files', formData);
+  }
+}
+
+// Usage
+const client = new APIClient();
+
+async function run() {
+  try {
+    const text = await client.generateText('Hello');
+    const image = await client.generateImage('A cat');
+    const video = await client.generateVideo('Ocean waves');
+  } catch (error) {
+    // Errors are already logged with hints
+    process.exit(1);
+  }
+}
+```
+
+#### Pattern 4: Error Recovery Workflows
+
+```typescript
+// Graceful degradation pattern
+async function generateImageWithFallback(prompt: string) {
+  const models = ['gpt-image-1', 'dall-e-3', 'dall-e-2'];
+
+  for (const model of models) {
+    try {
+      console.log(`Trying ${model}...`);
+
+      const response = await axios.post('http://localhost:3000/api/images/generate', {
+        prompt,
+        model,
+        response_format: model === 'gpt-image-1' ? 'b64_json' : 'url',
+      });
+
+      console.log(`✓ Success with ${model}`);
+      return response.data;
+
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        const errorData: ErrorResponse = error.response.data;
+
+        console.warn(`✗ ${model} failed:`, errorData.message);
+
+        // If it's a model-specific error, try next model
+        if (errorData.error_code?.includes('model') || errorData.statusCode === 400) {
+          continue;
+        }
+
+        // For other errors (rate limit, auth, server), don't retry with different model
+        throw error;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new Error('All models failed');
+}
+
+// Circuit breaker pattern
+class CircuitBreaker {
+  private failures = 0;
+  private lastFailTime: number = 0;
+  private state: 'closed' | 'open' | 'half-open' = 'closed';
+
+  constructor(
+    private threshold: number = 5,
+    private timeout: number = 60000, // 60s
+  ) {}
+
+  async execute<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.state === 'open') {
+      if (Date.now() - this.lastFailTime > this.timeout) {
+        this.state = 'half-open';
+        console.log('Circuit breaker entering half-open state');
+      } else {
+        throw new Error('Circuit breaker is open - service unavailable');
+      }
+    }
+
+    try {
+      const result = await fn();
+
+      // Success - reset circuit
+      if (this.state === 'half-open') {
+        this.state = 'closed';
+        this.failures = 0;
+        console.log('Circuit breaker closed');
+      }
+
+      return result;
+
+    } catch (error) {
+      this.failures++;
+      this.lastFailTime = Date.now();
+
+      if (this.failures >= this.threshold) {
+        this.state = 'open';
+        console.error(`Circuit breaker opened after ${this.failures} failures`);
+      }
+
+      throw error;
+    }
+  }
+}
+
+// Usage
+const breaker = new CircuitBreaker(5, 60000);
+
+async function generateTextWithCircuitBreaker(prompt: string) {
+  try {
+    return await breaker.execute(() =>
+      axios.post('http://localhost:3000/api/responses/text', {
+        model: 'gpt-4o',
+        input: prompt,
+      })
+    );
+  } catch (error) {
+    console.error('Request failed or circuit breaker open');
+    throw error;
+  }
+}
+```
+
+### Common Error Codes Reference
+
+#### Responses API Error Codes
+
+| Code | Status | Description | Solution |
+|------|--------|-------------|----------|
+| `invalid_model` | 400 | Model not supported | Use gpt-4o, gpt-4o-mini, or o-series |
+| `context_length_exceeded` | 400 | Input too long | Reduce input or use larger context model |
+| `content_filter_triggered` | 400 | Content policy violation | Modify input to comply with policies |
+| `invalid_tools` | 400 | Tool configuration invalid | Check tools array format and parameters |
+| `rate_limit_exceeded` | 429 | Too many requests | Wait and retry after specified seconds |
+
+#### Images API Error Codes
+
+| Code | Status | Description | Solution |
+|------|--------|-------------|----------|
+| `image_too_large` | 400 | Image exceeds size limit | Resize to < 20MB for DALL-E 2 |
+| `invalid_image_format` | 400 | Unsupported format | Use PNG files only for edits/variations |
+| `invalid_size_for_model` | 400 | Size incompatible with model | Check size options per model |
+| `invalid_prompt` | 400 | Prompt violates policies | Modify prompt content |
+
+#### Videos API Error Codes
+
+| Code | Status | Description | Solution |
+|------|--------|-------------|----------|
+| `video_generation_failed` | 500 | Generation failed | Simplify prompt or reduce duration |
+| `video_timeout` | 408 | Generation timed out | Reduce complexity or duration |
+| `video_not_found` | 404 | Video expired or deleted | Videos expire after 30 days |
+| `invalid_video_params` | 400 | Invalid parameters | Check size, duration, aspect ratio |
+
+#### Files API Error Codes
+
+| Code | Status | Description | Solution |
+|------|--------|-------------|----------|
+| `file_too_large` | 400 | File exceeds 512MB | Use Uploads API for files > 512MB |
+| `unsupported_format` | 400 | File format not supported | Check supported formats list |
+| `download_forbidden` | 403 | Download not allowed | Files with purpose=assistants cannot be downloaded |
+| `file_not_found` | 404 | File deleted or expired | Verify file ID and check expiration |
 
 ## Testing
 

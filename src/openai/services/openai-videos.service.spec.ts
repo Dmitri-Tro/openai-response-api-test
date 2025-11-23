@@ -647,4 +647,77 @@ describe('OpenAIVideosService', () => {
       expect(metadata.prompt).toBeNull();
     });
   });
+
+  describe('estimateVideoCost', () => {
+    describe('sora-2 (standard model)', () => {
+      it('should calculate cost for 4 seconds', () => {
+        const cost = service.estimateVideoCost('sora-2', '4');
+        expect(cost).toBe(0.5); // 4 * 0.125
+      });
+
+      it('should calculate cost for 8 seconds', () => {
+        const cost = service.estimateVideoCost('sora-2', '8');
+        expect(cost).toBe(1.0); // 8 * 0.125
+      });
+
+      it('should calculate cost for 12 seconds', () => {
+        const cost = service.estimateVideoCost('sora-2', '12');
+        expect(cost).toBe(1.5); // 12 * 0.125
+      });
+    });
+
+    describe('sora-2-pro (professional model)', () => {
+      it('should calculate cost for 4 seconds', () => {
+        const cost = service.estimateVideoCost('sora-2-pro', '4');
+        expect(cost).toBe(1.6); // 4 * 0.4
+      });
+
+      it('should calculate cost for 8 seconds', () => {
+        const cost = service.estimateVideoCost('sora-2-pro', '8');
+        expect(cost).toBe(3.2); // 8 * 0.4
+      });
+
+      it('should calculate cost for 12 seconds', () => {
+        const cost = service.estimateVideoCost('sora-2-pro', '12');
+        expect(cost).toBeCloseTo(4.8, 2); // 12 * 0.4
+      });
+    });
+
+    describe('default model behavior', () => {
+      it('should use sora-2 pricing for unrecognized model', () => {
+        const cost = service.estimateVideoCost('unknown-model', '8');
+        expect(cost).toBe(1.0); // 8 * 0.125 (sora-2 default)
+      });
+
+      it('should use sora-2 pricing for empty string model', () => {
+        const cost = service.estimateVideoCost('', '4');
+        expect(cost).toBe(0.5); // 4 * 0.125 (sora-2 default)
+      });
+    });
+
+    describe('duration parsing', () => {
+      it('should parse duration string to number', () => {
+        const cost = service.estimateVideoCost('sora-2', '8');
+        expect(cost).toBe(1.0);
+        expect(typeof cost).toBe('number');
+      });
+
+      it('should handle duration with leading zeros', () => {
+        const cost = service.estimateVideoCost('sora-2', '04');
+        expect(cost).toBe(0.5); // Parses as 4
+      });
+    });
+
+    describe('cost accuracy', () => {
+      it('should match documented sora-2 pricing (~$0.50 for 4sec)', () => {
+        const cost = service.estimateVideoCost('sora-2', '4');
+        expect(cost).toBeCloseTo(0.5, 2);
+      });
+
+      it('should match documented sora-2-pro pricing (~$1.60 for 4sec)', () => {
+        const cost = service.estimateVideoCost('sora-2-pro', '4');
+        expect(cost).toBeCloseTo(1.6, 2);
+      });
+    });
+  });
 });

@@ -536,4 +536,171 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
       });
     });
   });
+
+  describe('OpenAI SDK Errors - Bad Request with Video Error Codes (Phase 2)', () => {
+    const videoErrorCases = [
+      {
+        code: 'video_generation_failed',
+        message: 'Video generation failed',
+        hint: 'Internal error during video generation',
+      },
+      {
+        code: 'invalid_video_prompt',
+        message: 'Video prompt violates content policy',
+        hint: 'violates OpenAI usage policies',
+      },
+      {
+        code: 'video_file_not_found',
+        message: 'Video file not found',
+        hint: 'does not exist or has been deleted',
+      },
+      {
+        code: 'remix_not_supported',
+        message: 'Remix not available for this video',
+        hint: 'remix_enabled=true',
+      },
+      {
+        code: 'invalid_video_duration',
+        message: 'Invalid video duration',
+        hint: '"4", "8", or "12"',
+      },
+    ];
+
+    videoErrorCases.forEach(({ code, message, hint }) => {
+      it(`should handle BadRequestError with ${code} error code`, () => {
+        mockRequest.url = '/api/videos/generate';
+
+        const exception = new OpenAI.BadRequestError(
+          400,
+          {
+            error: {
+              message: 'Invalid request',
+              code,
+              param: 'prompt',
+            },
+          },
+          'Invalid request',
+          new Headers(),
+        );
+        Object.defineProperty(exception, 'requestID', {
+          value: 'req_vid',
+          writable: true,
+        });
+
+        filter.catch(exception, mockArgumentsHost);
+
+        expect(mockResponse.json).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: expect.stringContaining(message),
+            request_id: 'req_vid',
+            error_code: code,
+            parameter: 'prompt',
+            hint: expect.stringContaining(hint),
+          }),
+        );
+      });
+    });
+
+    it('should extract parameter from video error', () => {
+      mockRequest.url = '/api/videos/generate';
+
+      const exception = new OpenAI.BadRequestError(
+        400,
+        {
+          error: {
+            message: 'Invalid request',
+            code: 'invalid_video_size',
+            param: 'size',
+          },
+        },
+        'Invalid request',
+        new Headers(),
+      );
+
+      filter.catch(exception, mockArgumentsHost);
+
+      expect(mockResponse.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parameter: 'size',
+          error_code: 'invalid_video_size',
+        }),
+      );
+    });
+
+    it('should handle BadRequestError without video-specific error code', () => {
+      mockRequest.url = '/api/videos/generate';
+
+      const exception = new OpenAI.BadRequestError(
+        400,
+        {
+          error: {
+            message: 'Invalid request',
+            param: 'model',
+          },
+        },
+        'Invalid request',
+        new Headers(),
+      );
+
+      filter.catch(exception, mockArgumentsHost);
+
+      expect(mockResponse.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statusCode: HttpStatus.BAD_REQUEST,
+          message: 'Invalid request to OpenAI API',
+          parameter: 'model',
+        }),
+      );
+    });
+  });
+
+  describe('All 18 Video Error Codes (Phase 2 Coverage)', () => {
+    const allVideoErrors = [
+      'video_generation_failed',
+      'invalid_video_prompt',
+      'video_generation_timeout',
+      'video_model_not_available',
+      'video_quota_exceeded',
+      'video_file_not_found',
+      'video_download_failed',
+      'video_processing_failed',
+      'invalid_video_parameters',
+      'remix_not_supported',
+      'invalid_remix_parameters',
+      'remix_failed',
+      'video_limit_exceeded',
+      'remix_limit_exceeded',
+      'invalid_video_duration',
+      'invalid_video_size',
+      'video_content_policy_violation',
+      'video_expired',
+    ];
+
+    allVideoErrors.forEach((code) => {
+      it(`should handle ${code} error code`, () => {
+        mockRequest.url = '/api/videos/generate';
+
+        const exception = new OpenAI.BadRequestError(
+          400,
+          {
+            error: {
+              message: 'Video error',
+              code,
+            },
+          },
+          'Video error',
+          new Headers(),
+        );
+
+        filter.catch(exception, mockArgumentsHost);
+
+        expect(mockResponse.json).toHaveBeenCalledWith(
+          expect.objectContaining({
+            error_code: code,
+            hint: expect.any(String),
+          }),
+        );
+      });
+    });
+  });
 });

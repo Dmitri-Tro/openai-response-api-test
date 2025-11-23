@@ -190,7 +190,8 @@ export class OpenAIFilesService {
       endpoint: `/v1/files/${fileId}/content`,
       request: {},
       response: {
-        content_type: response.headers?.get('content-type') || 'application/octet-stream',
+        content_type:
+          response.headers?.get('content-type') || 'application/octet-stream',
       },
       metadata: {
         latency_ms: Date.now() - startTime,
@@ -246,9 +247,7 @@ export class OpenAIFilesService {
     }
 
     // Timeout exceeded
-    throw new Error(
-      `File ${fileId} did not complete within ${maxWaitMs}ms`,
-    );
+    throw new Error(`File ${fileId} did not complete within ${maxWaitMs}ms`);
   }
 
   /**

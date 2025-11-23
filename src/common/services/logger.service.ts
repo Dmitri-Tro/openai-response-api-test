@@ -216,6 +216,12 @@ export interface OpenAILogEntry {
     deleted?: boolean;
     purpose?: string;
     created_at?: number;
+    // Images API specific
+    images_generated?: number;
+    has_revised_prompt?: boolean;
+    image_size_bytes?: number;
+    has_mask?: boolean;
+    mask_size_bytes?: number;
   };
   streaming?: boolean;
   stream_events?: unknown[];

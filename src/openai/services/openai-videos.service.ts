@@ -49,6 +49,12 @@ export class OpenAIVideosService {
 
     const video: Videos.Video = await this.client.videos.create(params);
 
+    // Calculate cost estimate
+    const costEstimate = this.estimateVideoCost(
+      dto.model || 'sora-2',
+      dto.seconds || '4',
+    );
+
     // Log interaction (no data modification)
     this.loggerService.logOpenAIInteraction({
       timestamp: new Date().toISOString(),
@@ -61,6 +67,7 @@ export class OpenAIVideosService {
         video_id: video.id,
         model: video.model,
         status: video.status,
+        cost_estimate: costEstimate,
       },
     });
 
@@ -165,7 +172,8 @@ export class OpenAIVideosService {
       endpoint: `/v1/videos/${videoId}/content`,
       request: { variant },
       response: {
-        content_type: response.headers?.get('content-type') || 'application/octet-stream',
+        content_type:
+          response.headers?.get('content-type') || 'application/octet-stream',
       },
       metadata: {
         latency_ms: Date.now() - startTime,
@@ -284,6 +292,55 @@ export class OpenAIVideosService {
       remixed_from_video_id: video.remixed_from_video_id,
       error: video.error,
     };
+  }
+
+  /**
+   * Estimate cost of video generation based on model and duration
+   *
+   * **Pricing** (as of 2025):
+   *
+   * **sora-2** (Standard):
+   * - ~$0.10-$0.15 per second
+   * - 4 seconds: ~$0.50
+   * - 8 seconds: ~$1.00
+   * - 12 seconds: ~$1.50
+   *
+   * **sora-2-pro** (Professional):
+   * - ~$0.30-$0.50 per second
+   * - 4 seconds: ~$1.60
+   * - 8 seconds: ~$3.20
+   * - 12 seconds: ~$4.80
+   *
+   * @param model - Video model (sora-2 or sora-2-pro)
+   * @param seconds - Video duration as string ("4", "8", or "12")
+   * @returns Estimated cost in USD
+   *
+   * @example
+   * ```typescript
+   * const cost = service.estimateVideoCost('sora-2', '12');
+   * // 1.50 (12 seconds at ~$0.125/sec)
+   *
+   * const cost = service.estimateVideoCost('sora-2-pro', '8');
+   * // 3.20 (8 seconds at ~$0.40/sec)
+   * ```
+   */
+  estimateVideoCost(model: string, seconds: string): number {
+    // Parse duration (string literal to number)
+    const duration = parseInt(seconds, 10);
+
+    // Determine cost per second based on model
+    // Using midpoint of price ranges for accuracy
+    let costPerSecond = 0;
+
+    if (model === 'sora-2-pro') {
+      // Professional model: $0.30-$0.50/sec → $0.40/sec (midpoint)
+      costPerSecond = 0.4;
+    } else {
+      // Standard model (sora-2 or default): $0.10-$0.15/sec → $0.125/sec (midpoint)
+      costPerSecond = 0.125;
+    }
+
+    return duration * costPerSecond;
   }
 
   /**

@@ -574,7 +574,10 @@ describe('OpenAIFilesService', () => {
         .mockResolvedValueOnce(uploadedFile)
         .mockResolvedValueOnce(mockProcessedFile);
 
-      const result = await service.pollUntilComplete('file-abc123xyz789', 30000);
+      const result = await service.pollUntilComplete(
+        'file-abc123xyz789',
+        30000,
+      );
 
       expect(result.status).toBe('processed');
       expect(mockOpenAIClient.files.retrieve).toHaveBeenCalledTimes(3);
@@ -599,7 +602,10 @@ describe('OpenAIFilesService', () => {
         .mockResolvedValueOnce(uploadedFile)
         .mockResolvedValueOnce(mockProcessedFile);
 
-      const result = await service.pollUntilComplete('file-abc123xyz789', 30000);
+      const result = await service.pollUntilComplete(
+        'file-abc123xyz789',
+        30000,
+      );
 
       expect(result.status).toBe('processed');
       expect(mockOpenAIClient.files.retrieve).toHaveBeenCalledTimes(3);

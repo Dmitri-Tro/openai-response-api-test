@@ -95,6 +95,56 @@ export type VectorStoreErrorCode =
   | 'metadata_value_too_long';
 
 /**
+ * Images API-specific error codes (DALL-E 2/3)
+ * Phase 5: Standalone Images API
+ */
+export type ImagesAPIErrorCode =
+  // Generation Errors
+  | 'invalid_image_prompt'
+  | 'image_generation_failed'
+  | 'model_not_available'
+  | 'quota_exceeded'
+  // Edit/Variation Errors
+  | 'invalid_image_dimensions'
+  | 'mask_dimensions_mismatch'
+  | 'mask_not_provided'
+  | 'operation_not_supported'
+  | 'invalid_image_file'
+  // Quality/Size Errors
+  | 'invalid_image_size'
+  | 'invalid_quality_setting'
+  | 'size_quality_incompatible';
+
+/**
+ * Videos API-specific error codes
+ * Phase 3: Videos API
+ */
+export type VideoErrorCode =
+  // Video Generation Errors
+  | 'video_generation_failed'
+  | 'invalid_video_prompt'
+  | 'video_generation_timeout'
+  | 'video_model_not_available'
+  | 'video_quota_exceeded'
+  // Video File Errors
+  | 'video_file_not_found'
+  | 'video_download_failed'
+  | 'video_processing_failed'
+  | 'invalid_video_parameters'
+  // Remix Errors
+  | 'remix_not_supported'
+  | 'invalid_remix_parameters'
+  | 'remix_failed'
+  // Resource Errors
+  | 'video_limit_exceeded'
+  | 'remix_limit_exceeded'
+  | 'invalid_video_duration'
+  // Additional Errors
+  | 'invalid_video_size'
+  | 'video_content_policy_violation'
+  | 'video_expired';
+
+/**
  * Network error codes (Node.js)
  */
 export type NetworkErrorCode =
@@ -123,6 +173,9 @@ export type OpenAIAPIErrorCode =
 export type ErrorCode =
   | ImageErrorCode
   | FileErrorCode
+  | VectorStoreErrorCode
+  | ImagesAPIErrorCode
+  | VideoErrorCode
   | NetworkErrorCode
   | OpenAIAPIErrorCode;
 
@@ -522,5 +575,197 @@ export const VECTOR_STORE_ERROR_CODE_MAPPINGS: Record<
     status: 400,
     message: 'Metadata value exceeds maximum length',
     hint: 'Metadata values must be 512 characters or less. Shorten the value or store large data elsewhere.',
+  },
+};
+
+/**
+ * Mapping of Images API error codes to HTTP status codes and user-friendly messages
+ * Phase 5: Standalone Images API (DALL-E 2/3)
+ */
+export const IMAGES_API_ERROR_CODE_MAPPINGS: Record<
+  ImagesAPIErrorCode,
+  {
+    status: number;
+    message: string;
+    hint: string;
+  }
+> = {
+  // Generation Errors
+  invalid_image_prompt: {
+    status: 400,
+    message: 'Image prompt violates content policy',
+    hint: 'The prompt contains content that violates OpenAI usage policies. Modify the prompt to comply with guidelines.',
+  },
+  image_generation_failed: {
+    status: 500,
+    message: 'Image generation failed',
+    hint: 'Internal error during image generation. Retry the request or contact support if the issue persists.',
+  },
+  model_not_available: {
+    status: 404,
+    message: 'Image model not found or unavailable',
+    hint: 'The specified model does not exist or is not available. Use "dall-e-2" or "dall-e-3".',
+  },
+  quota_exceeded: {
+    status: 429,
+    message: 'Image generation quota exceeded',
+    hint: 'You have exceeded your image generation quota for this billing period. Upgrade your plan or wait for quota reset.',
+  },
+
+  // Edit/Variation Errors
+  invalid_image_dimensions: {
+    status: 400,
+    message: 'Image dimensions are invalid',
+    hint: 'Images for edits and variations must be square (same width and height). Resize your image to square dimensions.',
+  },
+  mask_dimensions_mismatch: {
+    status: 400,
+    message: 'Mask dimensions do not match image',
+    hint: 'The mask must have exactly the same dimensions as the source image. Resize the mask to match.',
+  },
+  mask_not_provided: {
+    status: 400,
+    message: 'Mask required for this operation',
+    hint: 'This edit operation requires a mask image. Provide a PNG mask with transparent areas indicating edit regions.',
+  },
+  operation_not_supported: {
+    status: 400,
+    message: 'Operation not supported for this model',
+    hint: 'DALL-E 3 does not support edits or variations. Use DALL-E 2 for these operations, or use gpt-image-1 via Responses API.',
+  },
+  invalid_image_file: {
+    status: 400,
+    message: 'Invalid or corrupted image file',
+    hint: 'The image file is corrupted or in an unsupported format. Ensure it is a valid PNG, JPEG, or WEBP file less than 4MB.',
+  },
+
+  // Quality/Size Errors
+  invalid_image_size: {
+    status: 400,
+    message: 'Invalid image size for model',
+    hint: 'DALL-E 3 supports 1024x1024, 1792x1024, 1024x1792. DALL-E 2 supports 256x256, 512x512, 1024x1024.',
+  },
+  invalid_quality_setting: {
+    status: 400,
+    message: 'Invalid quality setting for model',
+    hint: 'DALL-E 3 supports "standard" and "hd" quality. DALL-E 2 only supports "standard" quality.',
+  },
+  size_quality_incompatible: {
+    status: 400,
+    message: 'Size and quality combination not supported',
+    hint: 'HD quality for 1792x1024 and 1024x1792 sizes is only available with DALL-E 3.',
+  },
+};
+
+/**
+ * Mapping of Videos API error codes to HTTP status codes and user-friendly messages
+ * Phase 3: Videos API
+ */
+export const VIDEO_ERROR_CODE_MAPPINGS: Record<
+  VideoErrorCode,
+  {
+    status: number;
+    message: string;
+    hint: string;
+  }
+> = {
+  // Video Generation Errors
+  video_generation_failed: {
+    status: 500,
+    message: 'Video generation failed',
+    hint: 'Internal error during video generation. Retry the request or contact support if the issue persists.',
+  },
+  invalid_video_prompt: {
+    status: 400,
+    message: 'Video prompt violates content policy',
+    hint: 'The prompt contains content that violates OpenAI usage policies. Modify the prompt to comply with guidelines.',
+  },
+  video_generation_timeout: {
+    status: 504,
+    message: 'Video generation timed out',
+    hint: 'Video generation exceeded the maximum time limit (typically 10 minutes). Simplify prompt or retry with default parameters.',
+  },
+  video_model_not_available: {
+    status: 404,
+    message: 'Video model not found or unavailable',
+    hint: 'The specified video model does not exist or is not currently available. Use "gpt-video-1" model.',
+  },
+  video_quota_exceeded: {
+    status: 429,
+    message: 'Video generation quota exceeded',
+    hint: 'You have exceeded your video generation quota for this billing period. Upgrade your plan or wait for quota reset.',
+  },
+
+  // Video File Errors
+  video_file_not_found: {
+    status: 404,
+    message: 'Video file not found',
+    hint: 'The video ID does not exist or has been deleted. Verify the video ID is correct.',
+  },
+  video_download_failed: {
+    status: 502,
+    message: 'Failed to download video file',
+    hint: 'Unable to download the video from OpenAI servers. Retry the download or check network connectivity.',
+  },
+  video_processing_failed: {
+    status: 400,
+    message: 'Video processing failed',
+    hint: 'The video could not be processed. Check video.status_details for specific errors or verify generation parameters.',
+  },
+  invalid_video_parameters: {
+    status: 400,
+    message: 'Invalid video generation parameters',
+    hint: 'One or more parameters are invalid. Check prompt (required), model (sora-2/sora-2-pro), seconds ("4"/"8"/"12"), and size (720x1280/1280x720/1024x1792/1792x1024).',
+  },
+
+  // Remix Errors
+  remix_not_supported: {
+    status: 400,
+    message: 'Remix not available for this video',
+    hint: 'The video cannot be remixed. Only completed videos with remix_enabled=true can be remixed.',
+  },
+  invalid_remix_parameters: {
+    status: 400,
+    message: 'Invalid remix configuration',
+    hint: 'Remix parameters are invalid. Provide a valid video_id and optional new prompt. Ensure parent video supports remixing.',
+  },
+  remix_failed: {
+    status: 500,
+    message: 'Remix operation failed',
+    hint: 'Internal error during video remix. Retry the operation or contact support if the issue persists.',
+  },
+
+  // Resource Errors
+  video_limit_exceeded: {
+    status: 429,
+    message: 'Concurrent video generation limit exceeded',
+    hint: 'You have reached the maximum number of concurrent video generation requests. Wait for in-progress videos to complete.',
+  },
+  remix_limit_exceeded: {
+    status: 429,
+    message: 'Remix operation limit exceeded',
+    hint: 'You have exceeded the maximum number of remix operations. Wait before creating more remixes or upgrade your plan.',
+  },
+  invalid_video_duration: {
+    status: 400,
+    message: 'Invalid video duration',
+    hint: 'The "seconds" parameter must be one of: "4", "8", or "12" (as string literals, not numbers). Choose a supported duration.',
+  },
+
+  // Additional Errors
+  invalid_video_size: {
+    status: 400,
+    message: 'Invalid video size',
+    hint: 'Supported video sizes are: "720x1280" (portrait), "1280x720" (landscape), "1024x1792" (hi-res portrait), "1792x1024" (hi-res landscape). Choose a supported size.',
+  },
+  video_content_policy_violation: {
+    status: 400,
+    message: 'Video violates content policy',
+    hint: 'The generated video contains content that violates OpenAI usage policies. Modify the prompt and retry.',
+  },
+  video_expired: {
+    status: 410,
+    message: 'Video file has expired',
+    hint: 'The video file is no longer available (expired after retention period). Generate a new video.',
   },
 };

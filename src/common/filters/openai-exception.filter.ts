@@ -13,8 +13,10 @@ import {
   EnhancedErrorResponse,
   ErrorCode,
   ImageErrorCode,
+  VideoErrorCode,
   NetworkErrorCode,
   IMAGE_ERROR_CODE_MAPPINGS,
+  VIDEO_ERROR_CODE_MAPPINGS,
   NETWORK_ERROR_CODE_MAPPINGS,
   RateLimitInfo,
 } from '../../openai/interfaces/error-codes.interface';
@@ -341,7 +343,7 @@ export class OpenAIExceptionFilter implements ExceptionFilter {
   }
 
   /**
-   * Handle 400 Bad Request errors with image-specific error code detection
+   * Handle 400 Bad Request errors with image-specific and video-specific error code detection
    */
   private handleBadRequestError(
     exception: APIError,
@@ -364,6 +366,28 @@ export class OpenAIExceptionFilter implements ExceptionFilter {
         error_code: errorCode,
         parameter,
         hint: imageErrorMapping.hint,
+        openai_error: {
+          type: 'invalid_request_error',
+          code: errorCode,
+          param: parameter,
+          message: exception.message,
+          full_error: exception,
+        },
+      };
+    }
+
+    // Check if it's a video-specific error code
+    if (errorCode && this.isVideoErrorCode(errorCode)) {
+      const videoErrorMapping = VIDEO_ERROR_CODE_MAPPINGS[errorCode];
+      return {
+        statusCode: videoErrorMapping.status,
+        timestamp: new Date().toISOString(),
+        path: request.url,
+        message: videoErrorMapping.message,
+        request_id: requestId,
+        error_code: errorCode,
+        parameter,
+        hint: videoErrorMapping.hint,
         openai_error: {
           type: 'invalid_request_error',
           code: errorCode,
@@ -674,9 +698,21 @@ export class OpenAIExceptionFilter implements ExceptionFilter {
     return code in IMAGE_ERROR_CODE_MAPPINGS;
   }
 
-  private extractApiType(url: string): 'responses' | 'images' | 'videos' {
+  /**
+   * Check if error code is a video-specific error
+   */
+  private isVideoErrorCode(code: string): code is VideoErrorCode {
+    return code in VIDEO_ERROR_CODE_MAPPINGS;
+  }
+
+  private extractApiType(
+    url: string,
+  ): 'responses' | 'images' | 'videos' | 'files' | 'vector_stores' {
     if (url.includes('/images')) return 'images';
     if (url.includes('/videos')) return 'videos';
+    if (url.includes('/files')) return 'files';
+    if (url.includes('/vector-stores') || url.includes('/vector_stores'))
+      return 'vector_stores';
     return 'responses';
   }
 

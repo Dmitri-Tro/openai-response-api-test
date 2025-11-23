@@ -5,10 +5,12 @@ import { OpenAIResponsesService } from './services/openai-responses.service';
 import { OpenAIVideosService } from './services/openai-videos.service';
 import { OpenAIFilesService } from './services/openai-files.service';
 import { OpenAIVectorStoresService } from './services/openai-vector-stores.service';
+import { OpenAIImagesService } from './services/openai-images.service';
 import { ResponsesController } from './controllers/responses.controller';
 import { VideosController } from './controllers/videos.controller';
 import { FilesController } from './controllers/files.controller';
 import { VectorStoresController } from './controllers/vector-stores.controller';
+import { ImagesController } from './controllers/images.controller';
 import { LifecycleEventsHandler } from './services/handlers/lifecycle-events.handler';
 import { TextEventsHandler } from './services/handlers/text-events.handler';
 import { ReasoningEventsHandler } from './services/handlers/reasoning-events.handler';
@@ -32,12 +34,14 @@ import { StructuralEventsHandler } from './services/handlers/structural-events.h
     VideosController,
     FilesController,
     VectorStoresController,
+    ImagesController,
   ],
   providers: [
     OpenAIResponsesService,
     OpenAIVideosService,
     OpenAIFilesService,
     OpenAIVectorStoresService,
+    OpenAIImagesService,
     LifecycleEventsHandler,
     TextEventsHandler,
     ReasoningEventsHandler,
@@ -53,6 +57,7 @@ import { StructuralEventsHandler } from './services/handlers/structural-events.h
     OpenAIVideosService,
     OpenAIFilesService,
     OpenAIVectorStoresService,
+    OpenAIImagesService,
   ],
 })
 export class OpenAIModule {}
