@@ -57,7 +57,7 @@ describe('FilesController', () => {
     listFiles: jest.fn(),
     deleteFile: jest.fn(),
     downloadFileContent: jest.fn(),
-    waitForProcessing: jest.fn(),
+    pollUntilComplete: jest.fn(),
   };
 
   beforeEach(async () => {

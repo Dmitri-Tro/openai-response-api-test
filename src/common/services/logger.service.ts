@@ -32,6 +32,63 @@ export interface OpenAIError {
 }
 
 /**
+ * Type helper for SDK request parameters
+ *
+ * Allows SDK-typed parameter objects to be passed to the logger
+ * without requiring type assertions. Accepts both indexed and non-indexed
+ * object types.
+ *
+ * The union with `Record<string, any>` is necessary because OpenAI SDK types
+ * don't have index signatures. Using `any` here is safe because the logger
+ * serializes all values to JSON anyway, and we're not performing any operations
+ * on the values.
+ *
+ * @example
+ * ```typescript
+ * // Before (with type assertion):
+ * const params: VectorStores.VectorStoreCreateParams = { name: 'test' };
+ * request: params as unknown as Record<string, unknown>
+ *
+ * // After (direct assignment):
+ * request: params
+ * ```
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type LoggableRequest = Record<string, unknown> | Record<string, any>;
+
+/**
+ * File counts metadata for vector stores
+ *
+ * Represents the status counts of files in a vector store.
+ * Compatible with OpenAI SDK's VectorStore.FileCounts type
+ * without requiring type assertions.
+ *
+ * **Fields:**
+ * - `cancelled` - Number of cancelled files
+ * - `completed` - Number of successfully processed files
+ * - `failed` - Number of failed files
+ * - `in_progress` - Number of files currently being processed
+ * - `total` - Total number of files
+ *
+ * @example
+ * ```typescript
+ * // Before (with type assertion):
+ * const vectorStore: VectorStores.VectorStore = await client.vectorStores.create(params);
+ * file_counts: vectorStore.file_counts as unknown as Record<string, unknown>
+ *
+ * // After (direct assignment):
+ * file_counts: vectorStore.file_counts
+ * ```
+ */
+export interface FileCountsMetadata {
+  cancelled?: number;
+  completed?: number;
+  failed?: number;
+  in_progress?: number;
+  total?: number;
+}
+
+/**
  * Structured log entry for OpenAI API interactions
  *
  * Comprehensive data structure capturing all relevant information about OpenAI API
@@ -110,12 +167,14 @@ export interface OpenAIError {
  *
  * @see {@link LoggerService}
  * @see {@link OpenAIError}
+ * @see {@link FileCountsMetadata}
+ * @see {@link LoggableRequest}
  */
 export interface OpenAILogEntry {
   timestamp: string;
-  api: 'responses' | 'images' | 'videos' | 'files';
+  api: 'responses' | 'images' | 'videos' | 'files' | 'vector_stores';
   endpoint: string;
-  request: Record<string, unknown>;
+  request: LoggableRequest;
   response?: unknown;
   error?: OpenAIError;
   metadata: {
@@ -148,6 +207,13 @@ export interface OpenAILogEntry {
     file_id?: string;
     filename?: string;
     bytes?: number;
+    // Vector Stores API specific
+    vector_store_id?: string;
+    file_counts?: FileCountsMetadata;
+    batch_id?: string;
+    result_count?: number;
+    query?: string;
+    deleted?: boolean;
     purpose?: string;
     created_at?: number;
   };
@@ -312,7 +378,7 @@ export class LoggerService {
     endpoint: string;
     event_type: string;
     sequence: number;
-    request?: Record<string, unknown>;
+    request?: LoggableRequest;
     delta?: string;
     response?: unknown;
     error?: unknown;

@@ -62,6 +62,39 @@ export type FileErrorCode =
   | 'purpose_mismatch';
 
 /**
+ * Vector Store-specific error codes
+ */
+export type VectorStoreErrorCode =
+  // Vector Store Lifecycle Errors
+  | 'vector_store_not_found'
+  | 'vector_store_expired'
+  | 'vector_store_limit_exceeded'
+  | 'vector_store_creation_failed'
+  | 'vector_store_deletion_failed'
+  // Vector Store File Errors
+  | 'file_already_attached'
+  | 'file_not_in_vector_store'
+  | 'file_indexing_failed'
+  | 'file_indexing_timeout'
+  | 'invalid_chunking_strategy'
+  | 'chunk_size_invalid'
+  | 'chunk_overlap_invalid'
+  // Vector Store Batch Errors
+  | 'batch_not_found'
+  | 'batch_too_large'
+  | 'batch_processing_failed'
+  | 'batch_cancelled'
+  // Vector Store Search Errors
+  | 'search_failed'
+  | 'invalid_search_query'
+  | 'invalid_search_filter'
+  | 'ranking_failed'
+  // Vector Store Metadata Errors
+  | 'metadata_too_large'
+  | 'metadata_key_too_long'
+  | 'metadata_value_too_long';
+
+/**
  * Network error codes (Node.js)
  */
 export type NetworkErrorCode =
@@ -352,5 +385,142 @@ export const FILE_ERROR_CODE_MAPPINGS: Record<
     status: 400,
     message: 'File purpose does not match operation',
     hint: 'The file purpose is not compatible with the requested operation. Use files with appropriate purpose.',
+  },
+};
+
+/**
+ * Mapping of vector store error codes to HTTP status codes and user-friendly messages
+ */
+export const VECTOR_STORE_ERROR_CODE_MAPPINGS: Record<
+  VectorStoreErrorCode,
+  {
+    status: number;
+    message: string;
+    hint: string;
+  }
+> = {
+  // Vector Store Lifecycle Errors
+  vector_store_not_found: {
+    status: 404,
+    message: 'Vector store not found',
+    hint: 'The vector store ID does not exist or has been deleted. Verify the ID is correct.',
+  },
+  vector_store_expired: {
+    status: 410,
+    message: 'Vector store has expired',
+    hint: 'The vector store expired based on its expiration policy. Create a new vector store.',
+  },
+  vector_store_limit_exceeded: {
+    status: 429,
+    message: 'Vector store limit exceeded',
+    hint: 'You have reached the maximum number of vector stores for your account. Delete unused stores or upgrade.',
+  },
+  vector_store_creation_failed: {
+    status: 500,
+    message: 'Failed to create vector store',
+    hint: 'Vector store creation failed. Retry the operation or contact support if the issue persists.',
+  },
+  vector_store_deletion_failed: {
+    status: 500,
+    message: 'Failed to delete vector store',
+    hint: 'Vector store deletion failed. Retry the operation or contact support if the issue persists.',
+  },
+
+  // Vector Store File Errors
+  file_already_attached: {
+    status: 409,
+    message: 'File already attached to vector store',
+    hint: 'This file is already part of the vector store. Each file can only be attached once.',
+  },
+  file_not_in_vector_store: {
+    status: 404,
+    message: 'File not found in vector store',
+    hint: 'The file ID does not exist in this vector store. Verify the file ID and vector store ID.',
+  },
+  file_indexing_failed: {
+    status: 400,
+    message: 'File indexing failed',
+    hint: 'The file could not be indexed. Check file.last_error for details or verify file format compatibility.',
+  },
+  file_indexing_timeout: {
+    status: 504,
+    message: 'File indexing timed out',
+    hint: 'File indexing exceeded the time limit. Large files may require more time; use polling to check status.',
+  },
+  invalid_chunking_strategy: {
+    status: 400,
+    message: 'Invalid chunking strategy',
+    hint: 'Chunking strategy must be "auto" or "static" with valid parameters.',
+  },
+  chunk_size_invalid: {
+    status: 400,
+    message: 'Chunk size out of valid range',
+    hint: 'max_chunk_size_tokens must be between 100 and 4096.',
+  },
+  chunk_overlap_invalid: {
+    status: 400,
+    message: 'Chunk overlap exceeds limit',
+    hint: 'chunk_overlap_tokens cannot exceed half of max_chunk_size_tokens.',
+  },
+
+  // Vector Store Batch Errors
+  batch_not_found: {
+    status: 404,
+    message: 'File batch not found',
+    hint: 'The batch ID does not exist in this vector store. Verify the batch ID and vector store ID.',
+  },
+  batch_too_large: {
+    status: 400,
+    message: 'Batch exceeds maximum file limit',
+    hint: 'Batch operations are limited to 500 files. Split into multiple batches.',
+  },
+  batch_processing_failed: {
+    status: 400,
+    message: 'Batch processing failed',
+    hint: 'The batch operation encountered errors. Check batch.file_counts for details on failed files.',
+  },
+  batch_cancelled: {
+    status: 409,
+    message: 'Batch has been cancelled',
+    hint: 'The batch operation was cancelled and cannot be resumed. Create a new batch if needed.',
+  },
+
+  // Vector Store Search Errors
+  search_failed: {
+    status: 500,
+    message: 'Vector store search failed',
+    hint: 'The search operation encountered an error. Retry or simplify the search query.',
+  },
+  invalid_search_query: {
+    status: 400,
+    message: 'Invalid search query',
+    hint: 'The search query format is invalid. Provide a valid string or array of strings.',
+  },
+  invalid_search_filter: {
+    status: 400,
+    message: 'Invalid search filter',
+    hint: 'The search filter format is invalid. Use comparison filters (eq, ne, gt, etc.) or compound filters (and, or).',
+  },
+  ranking_failed: {
+    status: 500,
+    message: 'Search ranking failed',
+    hint: 'The ranking operation failed. Retry without ranking_options or adjust score_threshold.',
+  },
+
+  // Vector Store Metadata Errors
+  metadata_too_large: {
+    status: 400,
+    message: 'Metadata exceeds maximum limit',
+    hint: 'Metadata is limited to 16 key-value pairs. Remove unnecessary metadata entries.',
+  },
+  metadata_key_too_long: {
+    status: 400,
+    message: 'Metadata key exceeds maximum length',
+    hint: 'Metadata keys must be 64 characters or less. Shorten the key name.',
+  },
+  metadata_value_too_long: {
+    status: 400,
+    message: 'Metadata value exceeds maximum length',
+    hint: 'Metadata values must be 512 characters or less. Shorten the value or store large data elsewhere.',
   },
 };

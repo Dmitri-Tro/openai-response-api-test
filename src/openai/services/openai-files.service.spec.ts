@@ -547,11 +547,11 @@ describe('OpenAIFilesService', () => {
     });
   });
 
-  describe('waitForProcessing', () => {
+  describe('pollUntilComplete', () => {
     it('should return processed file immediately', async () => {
       mockOpenAIClient.files.retrieve.mockResolvedValue(mockProcessedFile);
 
-      const result = await service.waitForProcessing('file-abc123xyz789');
+      const result = await service.pollUntilComplete('file-abc123xyz789');
 
       expect(result.status).toBe('processed');
       expect(mockOpenAIClient.files.retrieve).toHaveBeenCalledTimes(1);
@@ -560,7 +560,7 @@ describe('OpenAIFilesService', () => {
     it('should return error file immediately', async () => {
       mockOpenAIClient.files.retrieve.mockResolvedValue(mockErrorFile);
 
-      const result = await service.waitForProcessing('file-abc123xyz789');
+      const result = await service.pollUntilComplete('file-abc123xyz789');
 
       expect(result.status).toBe('error');
       expect(mockOpenAIClient.files.retrieve).toHaveBeenCalledTimes(1);
@@ -574,10 +574,7 @@ describe('OpenAIFilesService', () => {
         .mockResolvedValueOnce(uploadedFile)
         .mockResolvedValueOnce(mockProcessedFile);
 
-      const result = await service.waitForProcessing('file-abc123xyz789', {
-        pollInterval: 100,
-        maxWait: 30000,
-      });
+      const result = await service.pollUntilComplete('file-abc123xyz789', 30000);
 
       expect(result.status).toBe('processed');
       expect(mockOpenAIClient.files.retrieve).toHaveBeenCalledTimes(3);
@@ -590,76 +587,23 @@ describe('OpenAIFilesService', () => {
       });
 
       await expect(
-        service.waitForProcessing('file-abc123xyz789', {
-          pollInterval: 100,
-          maxWait: 500,
-        }),
-      ).rejects.toThrow(/timeout/i);
+        service.pollUntilComplete('file-abc123xyz789', 100),
+      ).rejects.toThrow('did not complete within 100ms');
     }, 10000);
 
-    it('should use exponential backoff', async () => {
+    it('should poll until file completes with custom timeout', async () => {
       const uploadedFile = { ...mockFile, status: 'uploaded' };
 
-      // Mock sequence: uploaded → uploaded → processed
       mockOpenAIClient.files.retrieve
         .mockResolvedValueOnce(uploadedFile)
         .mockResolvedValueOnce(uploadedFile)
         .mockResolvedValueOnce(mockProcessedFile);
 
-      const result = await service.waitForProcessing('file-abc123xyz789', {
-        pollInterval: 100,
-        maxWait: 30000,
-      });
+      const result = await service.pollUntilComplete('file-abc123xyz789', 30000);
 
       expect(result.status).toBe('processed');
       expect(mockOpenAIClient.files.retrieve).toHaveBeenCalledTimes(3);
     }, 30000);
-
-    it('should respect custom pollInterval', async () => {
-      mockOpenAIClient.files.retrieve.mockResolvedValue(mockProcessedFile);
-
-      await service.waitForProcessing('file-abc123xyz789', {
-        pollInterval: 1000,
-      });
-
-      expect(mockOpenAIClient.files.retrieve).toHaveBeenCalledTimes(1);
-    });
-
-    it('should respect custom maxWait', async () => {
-      mockOpenAIClient.files.retrieve.mockResolvedValue({
-        ...mockFile,
-        status: 'uploaded',
-      });
-
-      const customTimeout = 2000;
-
-      await expect(
-        service.waitForProcessing('file-abc123xyz789', {
-          pollInterval: 100,
-          maxWait: customTimeout,
-        }),
-      ).rejects.toThrow(`timeout: exceeded ${customTimeout}ms`);
-    }, 10000);
-
-    it('should cap backoff at 20 seconds', async () => {
-      const uploadedFile = { ...mockFile, status: 'uploaded' };
-
-      // Mock many calls before completion
-      mockOpenAIClient.files.retrieve
-        .mockResolvedValueOnce(uploadedFile)
-        .mockResolvedValueOnce(uploadedFile)
-        .mockResolvedValueOnce(uploadedFile)
-        .mockResolvedValueOnce(uploadedFile)
-        .mockResolvedValueOnce(mockProcessedFile);
-
-      const result = await service.waitForProcessing('file-abc123xyz789', {
-        pollInterval: 100,
-        maxWait: 60000,
-      });
-
-      expect(result.status).toBe('processed');
-      expect(mockOpenAIClient.files.retrieve).toHaveBeenCalled();
-    }, 60000);
   });
 
   describe('extractFileMetadata', () => {

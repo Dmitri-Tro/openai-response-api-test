@@ -1919,6 +1919,971 @@ curl -X DELETE http://localhost:3000/api/files/file-abc123
 6. **Use proper file formats** - JSONL for batch/fine-tune, PDF/TXT for assistants
 7. **Validate file sizes** - Keep files under 512 MB for standard API
 
+### Vector Stores API
+
+The Vector Stores API provides file indexing and semantic search capabilities for Retrieval-Augmented Generation (RAG) workflows. Vector stores enable AI models to search through large document collections using natural language queries.
+
+**Key Features:**
+- Create searchable indexes from uploaded files
+- Automatic text chunking with configurable strategies
+- Semantic search with ranking and filtering
+- Batch file operations (up to 500 files at once)
+- Async polling for indexing completion
+- Integration with file_search tool in Responses API
+
+#### Create Vector Store
+
+**Endpoint:** `POST /api/vector-stores`
+
+**Example Requests:**
+
+```bash
+# Minimal - create empty vector store
+curl -X POST http://localhost:3000/api/vector-stores \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# With name and files
+curl -X POST http://localhost:3000/api/vector-stores \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Product Documentation",
+    "file_ids": ["file-abc123", "file-def456"]
+  }'
+
+# With static chunking strategy
+curl -X POST http://localhost:3000/api/vector-stores \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Technical Docs",
+    "file_ids": ["file-abc123"],
+    "chunking_strategy": {
+      "type": "static",
+      "static": {
+        "max_chunk_size_tokens": 800,
+        "chunk_overlap_tokens": 400
+      }
+    }
+  }'
+
+# With expiration and metadata
+curl -X POST http://localhost:3000/api/vector-stores \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Temporary Knowledge Base",
+    "file_ids": ["file-abc123"],
+    "expires_after": {
+      "anchor": "last_active_at",
+      "days": 7
+    },
+    "metadata": {
+      "project": "acme-corp",
+      "environment": "production"
+    }
+  }'
+```
+
+**Example Response:**
+
+```json
+{
+  "id": "vs_abc123",
+  "object": "vector_store",
+  "created_at": 1234567890,
+  "name": "Product Documentation",
+  "usage_bytes": 0,
+  "file_counts": {
+    "in_progress": 2,
+    "completed": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "total": 2
+  },
+  "status": "in_progress",
+  "expires_after": null,
+  "expires_at": null,
+  "last_active_at": 1234567890,
+  "metadata": {}
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Description | Required | Options/Range |
+|-----------|------|-------------|----------|---------------|
+| `name` | string | Display name for vector store | No | Max 256 chars |
+| `file_ids` | string[] | Files to attach on creation | No | Max 500 files |
+| `chunking_strategy` | object | Text chunking configuration | No | See Chunking Strategies |
+| `expires_after` | object | Auto-expiration config | No | See below |
+| `expires_after.anchor` | string | Expiration start point | Yes (if expires_after) | `last_active_at` |
+| `expires_after.days` | number | Days until expiration | Yes (if expires_after) | 1-365 |
+| `metadata` | object | Custom key-value pairs | No | Max 16 keys, 64 chars each |
+| `description` | string | Description of vector store | No | Max 512 chars |
+
+**Vector Store Status:**
+
+- `in_progress` - Files are being indexed
+- `completed` - All files successfully indexed
+- `expired` - Vector store has expired (see `expires_at`)
+
+**File Counts Object:**
+
+- `in_progress` - Files currently being indexed
+- `completed` - Successfully indexed files
+- `failed` - Files that failed indexing
+- `cancelled` - Cancelled batch operations
+- `total` - Total files in vector store
+
+#### Chunking Strategies
+
+Chunking strategies determine how documents are split into searchable chunks. Proper chunking improves search relevance and retrieval quality.
+
+**Auto Chunking (Default):**
+
+OpenAI automatically determines optimal chunk size based on document content.
+
+```json
+{
+  "chunking_strategy": {
+    "type": "auto"
+  }
+}
+```
+
+**Benefits:**
+- No configuration needed
+- Optimized for different file types
+- Respects document structure (paragraphs, sections)
+
+**Static Chunking:**
+
+Manual control over chunk size and overlap for specialized use cases.
+
+```json
+{
+  "chunking_strategy": {
+    "type": "static",
+    "static": {
+      "max_chunk_size_tokens": 800,
+      "chunk_overlap_tokens": 400
+    }
+  }
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Range | Description |
+|-----------|------|-------|-------------|
+| `max_chunk_size_tokens` | number | 100-4096 | Maximum tokens per chunk |
+| `chunk_overlap_tokens` | number | 0 to max/2 | Overlap between chunks (improves context) |
+
+**Validation Rules:**
+- `max_chunk_size_tokens` must be between 100 and 4096
+- `chunk_overlap_tokens` cannot exceed half of `max_chunk_size_tokens`
+- Example: If `max_chunk_size_tokens=800`, then `chunk_overlap_tokens` max is 400
+
+**Best Practices:**
+1. Use **auto** for most use cases - optimized by OpenAI
+2. Use **static** for specialized domains requiring consistent chunk sizes
+3. Larger chunks (800-4096 tokens) - Better context, fewer chunks
+4. Smaller chunks (100-400 tokens) - More granular search, more chunks
+5. Add overlap (200-400 tokens) - Prevents context loss at chunk boundaries
+
+#### Retrieve Vector Store
+
+**Endpoint:** `GET /api/vector-stores/:vectorStoreId`
+
+**Example Request:**
+
+```bash
+curl http://localhost:3000/api/vector-stores/vs_abc123
+```
+
+**Example Response:**
+
+```json
+{
+  "id": "vs_abc123",
+  "object": "vector_store",
+  "created_at": 1234567890,
+  "name": "Product Documentation",
+  "usage_bytes": 2048576,
+  "file_counts": {
+    "in_progress": 0,
+    "completed": 2,
+    "failed": 0,
+    "cancelled": 0,
+    "total": 2
+  },
+  "status": "completed",
+  "expires_after": {
+    "anchor": "last_active_at",
+    "days": 7
+  },
+  "expires_at": 1235172690,
+  "last_active_at": 1234567890,
+  "metadata": {
+    "project": "acme-corp"
+  }
+}
+```
+
+#### Update Vector Store
+
+**Endpoint:** `PATCH /api/vector-stores/:vectorStoreId`
+
+**Example Request:**
+
+```bash
+curl -X PATCH http://localhost:3000/api/vector-stores/vs_abc123 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Documentation",
+    "metadata": {
+      "version": "2.0",
+      "updated_by": "admin"
+    }
+  }'
+```
+
+**Updatable Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string \| null | Update name or set to null |
+| `expires_after` | object \| null | Update expiration or set to null |
+| `metadata` | object \| null | Replace all metadata or set to null |
+
+#### List Vector Stores
+
+**Endpoint:** `GET /api/vector-stores`
+
+**Example Requests:**
+
+```bash
+# List all vector stores
+curl http://localhost:3000/api/vector-stores
+
+# With pagination and sorting
+curl "http://localhost:3000/api/vector-stores?limit=20&order=desc"
+
+# Cursor-based pagination
+curl "http://localhost:3000/api/vector-stores?after=vs_abc123&limit=10"
+```
+
+**Example Response:**
+
+```json
+[
+  {
+    "id": "vs_abc123",
+    "object": "vector_store",
+    "name": "Product Documentation",
+    "status": "completed",
+    "file_counts": { "total": 5, "completed": 5 }
+  },
+  {
+    "id": "vs_def456",
+    "object": "vector_store",
+    "name": "Customer Support KB",
+    "status": "in_progress",
+    "file_counts": { "total": 10, "in_progress": 3, "completed": 7 }
+  }
+]
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Description | Options | Default |
+|-----------|------|-------------|---------|---------|
+| `limit` | number | Max results to return | 1-100 | 20 |
+| `order` | string | Sort order by `created_at` | `asc`, `desc` | `desc` |
+| `after` | string | Cursor for next page | Vector store ID | None |
+| `before` | string | Cursor for previous page | Vector store ID | None |
+
+#### Delete Vector Store
+
+**Endpoint:** `DELETE /api/vector-stores/:vectorStoreId`
+
+**Example Request:**
+
+```bash
+curl -X DELETE http://localhost:3000/api/vector-stores/vs_abc123
+```
+
+**Example Response:**
+
+```json
+{
+  "id": "vs_abc123",
+  "object": "vector_store.deleted",
+  "deleted": true
+}
+```
+
+**Notes:**
+- Deletes the vector store and all file associations
+- Does NOT delete the original files (use Files API to delete files)
+- Irreversible operation
+
+#### Search Vector Store
+
+**Endpoint:** `POST /api/vector-stores/:vectorStoreId/search`
+
+**Example Requests:**
+
+```bash
+# Basic search
+curl -X POST http://localhost:3000/api/vector-stores/vs_abc123/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "How do I reset my password?"
+  }'
+
+# Advanced search with ranking
+curl -X POST http://localhost:3000/api/vector-stores/vs_abc123/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "API authentication",
+    "max_num_results": 5,
+    "ranking_options": {
+      "ranker": "default-2024-11-15",
+      "score_threshold": 0.7
+    }
+  }'
+
+# Multi-query search
+curl -X POST http://localhost:3000/api/vector-stores/vs_abc123/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": ["authentication", "authorization", "OAuth"],
+    "max_num_results": 10
+  }'
+
+# Search with filters
+curl -X POST http://localhost:3000/api/vector-stores/vs_abc123/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "product features",
+    "filters": {
+      "file_id": ["file-abc123", "file-def456"]
+    },
+    "rewrite_query": true
+  }'
+```
+
+**Example Response:**
+
+```json
+[
+  {
+    "id": "chunk_abc123",
+    "content": "To reset your password, navigate to Settings > Security...",
+    "score": 0.95,
+    "file_id": "file-abc123",
+    "metadata": {
+      "file_name": "user-guide.pdf",
+      "page": 42
+    }
+  },
+  {
+    "id": "chunk_def456",
+    "content": "Password reset functionality is available in the...",
+    "score": 0.87,
+    "file_id": "file-def456",
+    "metadata": {
+      "file_name": "faq.txt"
+    }
+  }
+]
+```
+
+**Parameters:**
+
+| Parameter | Type | Description | Required | Default |
+|-----------|------|-------------|----------|---------|
+| `query` | string \| string[] | Search query (single or multiple) | Yes | - |
+| `max_num_results` | number | Max results to return | No | 20 |
+| `ranking_options` | object | Ranking configuration | No | - |
+| `ranking_options.ranker` | string | Ranking algorithm | No | `auto` |
+| `ranking_options.score_threshold` | number | Minimum score (0-1) | No | 0 |
+| `filters` | object | Filter search scope | No | - |
+| `filters.file_id` | string[] | Limit to specific files | No | All files |
+| `rewrite_query` | boolean | Auto-optimize query | No | `false` |
+
+**Ranking Options:**
+
+- `ranker: "auto"` - OpenAI selects best ranker
+- `ranker: "default-2024-11-15"` - Specific ranker version
+- `score_threshold: 0.7` - Only return results with score ≥ 0.7
+
+**Search Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Chunk ID |
+| `content` | string | Matched text content |
+| `score` | number | Relevance score (0-1) |
+| `file_id` | string | Source file ID |
+| `metadata` | object | File metadata (name, page, etc.) |
+
+#### Add File to Vector Store
+
+**Endpoint:** `POST /api/vector-stores/:vectorStoreId/files`
+
+**Example Request:**
+
+```bash
+curl -X POST http://localhost:3000/api/vector-stores/vs_abc123/files \
+  -H "Content-Type: application/json" \
+  -d '{
+    "file_id": "file-abc123",
+    "chunking_strategy": {
+      "type": "auto"
+    }
+  }'
+```
+
+**Example Response:**
+
+```json
+{
+  "id": "file-abc123",
+  "object": "vector_store.file",
+  "usage_bytes": 512000,
+  "created_at": 1234567890,
+  "vector_store_id": "vs_abc123",
+  "status": "in_progress",
+  "last_error": null,
+  "chunking_strategy": {
+    "type": "auto"
+  }
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Description | Required |
+|-----------|------|-------------|----------|
+| `file_id` | string | File ID to attach | Yes |
+| `chunking_strategy` | object | Override default chunking | No |
+| `attributes` | object | Custom attributes | No |
+
+**File Status:**
+
+- `in_progress` - Currently indexing
+- `completed` - Successfully indexed
+- `failed` - Indexing failed (see `last_error`)
+- `cancelled` - Operation cancelled
+
+#### List Files in Vector Store
+
+**Endpoint:** `GET /api/vector-stores/:vectorStoreId/files`
+
+**Example Requests:**
+
+```bash
+# List all files
+curl http://localhost:3000/api/vector-stores/vs_abc123/files
+
+# Filter by status
+curl "http://localhost:3000/api/vector-stores/vs_abc123/files?filter=completed"
+
+# With pagination
+curl "http://localhost:3000/api/vector-stores/vs_abc123/files?limit=20&order=asc"
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Options | Description |
+|-----------|------|---------|-------------|
+| `limit` | number | 1-100 | Max results to return |
+| `order` | string | `asc`, `desc` | Sort by `created_at` |
+| `after` | string | File ID | Cursor for next page |
+| `before` | string | File ID | Cursor for previous page |
+| `filter` | string | `in_progress`, `completed`, `failed`, `cancelled` | Filter by status |
+
+#### Get File from Vector Store
+
+**Endpoint:** `GET /api/vector-stores/:vectorStoreId/files/:fileId`
+
+**Example Request:**
+
+```bash
+curl http://localhost:3000/api/vector-stores/vs_abc123/files/file-abc123
+```
+
+#### Update File Attributes
+
+**Endpoint:** `PATCH /api/vector-stores/:vectorStoreId/files/:fileId`
+
+**Example Request:**
+
+```bash
+curl -X PATCH http://localhost:3000/api/vector-stores/vs_abc123/files/file-abc123 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "attributes": {
+      "priority": "high",
+      "category": "technical"
+    }
+  }'
+```
+
+#### Remove File from Vector Store
+
+**Endpoint:** `DELETE /api/vector-stores/:vectorStoreId/files/:fileId`
+
+**Example Request:**
+
+```bash
+curl -X DELETE http://localhost:3000/api/vector-stores/vs_abc123/files/file-abc123
+```
+
+**Example Response:**
+
+```json
+{
+  "id": "file-abc123",
+  "object": "vector_store.file.deleted",
+  "deleted": true
+}
+```
+
+**Notes:**
+- Removes file from vector store only
+- Does NOT delete the original file (use Files API to delete file)
+
+#### Get File Content Chunks
+
+**Endpoint:** `GET /api/vector-stores/:vectorStoreId/files/:fileId/content`
+
+**Example Request:**
+
+```bash
+curl http://localhost:3000/api/vector-stores/vs_abc123/files/file-abc123/content
+```
+
+**Example Response:**
+
+```json
+[
+  {
+    "id": "chunk_abc123",
+    "content": "Introduction to API authentication...",
+    "start_offset": 0,
+    "end_offset": 512,
+    "metadata": {
+      "chunk_index": 0,
+      "total_chunks": 10
+    }
+  },
+  {
+    "id": "chunk_abc124",
+    "content": "OAuth 2.0 provides secure authentication...",
+    "start_offset": 312,
+    "end_offset": 824,
+    "metadata": {
+      "chunk_index": 1,
+      "total_chunks": 10
+    }
+  }
+]
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique chunk ID |
+| `content` | string | Text content of chunk |
+| `start_offset` | number | Character offset in original file |
+| `end_offset` | number | End character offset |
+| `metadata` | object | Chunk position info |
+
+#### Create File Batch
+
+**Endpoint:** `POST /api/vector-stores/:vectorStoreId/file_batches`
+
+Add multiple files to a vector store in a single operation. More efficient than adding files individually.
+
+**Example Requests:**
+
+```bash
+# Batch add existing files
+curl -X POST http://localhost:3000/api/vector-stores/vs_abc123/file_batches \
+  -H "Content-Type: application/json" \
+  -d '{
+    "file_ids": ["file-abc123", "file-def456", "file-ghi789"]
+  }'
+
+# Batch with new file specifications
+curl -X POST http://localhost:3000/api/vector-stores/vs_abc123/file_batches \
+  -H "Content-Type: application/json" \
+  -d '{
+    "files": [
+      {
+        "file_id": "file-abc123",
+        "chunking_strategy": { "type": "auto" }
+      },
+      {
+        "file_id": "file-def456",
+        "chunking_strategy": {
+          "type": "static",
+          "static": {
+            "max_chunk_size_tokens": 800,
+            "chunk_overlap_tokens": 200
+          }
+        },
+        "attributes": { "priority": "high" }
+      }
+    ]
+  }'
+```
+
+**Example Response:**
+
+```json
+{
+  "id": "vsfb_abc123",
+  "object": "vector_store.file_batch",
+  "created_at": 1234567890,
+  "vector_store_id": "vs_abc123",
+  "status": "in_progress",
+  "file_counts": {
+    "in_progress": 3,
+    "completed": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "total": 3
+  }
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Description | Max | Mutually Exclusive With |
+|-----------|------|-------------|-----|------------------------|
+| `file_ids` | string[] | Simple file ID list | 500 | `files` |
+| `files` | object[] | File specs with config | 500 | `file_ids` |
+| `files[].file_id` | string | File ID | - | Required if using `files` |
+| `files[].chunking_strategy` | object | Per-file chunking | - | Optional |
+| `files[].attributes` | object | Per-file attributes | - | Optional |
+| `chunking_strategy` | object | Default for all files | - | Optional |
+| `attributes` | object | Default for all files | - | Optional |
+
+**Batch Limits:**
+- Max 500 files per batch
+- Use `file_ids` OR `files`, not both
+- Batch processing is asynchronous - use polling endpoint
+
+#### Get File Batch
+
+**Endpoint:** `GET /api/vector-stores/:vectorStoreId/file_batches/:batchId`
+
+**Example Request:**
+
+```bash
+curl http://localhost:3000/api/vector-stores/vs_abc123/file_batches/vsfb_abc123
+```
+
+**Example Response:**
+
+```json
+{
+  "id": "vsfb_abc123",
+  "object": "vector_store.file_batch",
+  "created_at": 1234567890,
+  "vector_store_id": "vs_abc123",
+  "status": "completed",
+  "file_counts": {
+    "in_progress": 0,
+    "completed": 3,
+    "failed": 0,
+    "cancelled": 0,
+    "total": 3
+  }
+}
+```
+
+#### Cancel File Batch
+
+**Endpoint:** `POST /api/vector-stores/:vectorStoreId/file_batches/:batchId/cancel`
+
+**Example Request:**
+
+```bash
+curl -X POST http://localhost:3000/api/vector-stores/vs_abc123/file_batches/vsfb_abc123/cancel
+```
+
+**Example Response:**
+
+```json
+{
+  "id": "vsfb_abc123",
+  "object": "vector_store.file_batch",
+  "status": "cancelling",
+  "file_counts": {
+    "in_progress": 0,
+    "completed": 5,
+    "failed": 0,
+    "cancelled": 2,
+    "total": 7
+  }
+}
+```
+
+**Notes:**
+- Only in-progress batches can be cancelled
+- Already completed files remain in vector store
+- Status transitions: `in_progress` → `cancelling` → `cancelled`
+
+#### List Batch Files
+
+**Endpoint:** `GET /api/vector-stores/:vectorStoreId/file_batches/:batchId/files`
+
+**Example Request:**
+
+```bash
+curl "http://localhost:3000/api/vector-stores/vs_abc123/file_batches/vsfb_abc123/files?filter=completed"
+```
+
+**Query Parameters:** Same as List Files in Vector Store
+
+#### Poll Vector Store Until Complete
+
+**Endpoint:** `GET /api/vector-stores/:vectorStoreId/poll`
+
+Polls the vector store status until all files are indexed or timeout is reached.
+
+**Example Request:**
+
+```bash
+# Default timeout (30 seconds)
+curl http://localhost:3000/api/vector-stores/vs_abc123/poll
+
+# Custom timeout (60 seconds)
+curl "http://localhost:3000/api/vector-stores/vs_abc123/poll?max_wait_ms=60000"
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Description | Default | Max |
+|-----------|------|-------------|---------|-----|
+| `max_wait_ms` | number | Max wait time (milliseconds) | 30000 | 600000 |
+
+**Polling Strategy:**
+- Initial wait: 5 seconds
+- Exponential backoff: 5s → 10s → 15s → 20s (max)
+- Returns when `status` is `completed` or `expired`
+- Throws error on timeout
+
+**Example Response:**
+
+```json
+{
+  "id": "vs_abc123",
+  "object": "vector_store",
+  "status": "completed",
+  "file_counts": {
+    "in_progress": 0,
+    "completed": 5,
+    "failed": 0,
+    "cancelled": 0,
+    "total": 5
+  }
+}
+```
+
+#### Poll File Until Complete
+
+**Endpoint:** `GET /api/vector-stores/:vectorStoreId/files/:fileId/poll`
+
+**Example Request:**
+
+```bash
+curl "http://localhost:3000/api/vector-stores/vs_abc123/files/file-abc123/poll?max_wait_ms=30000"
+```
+
+#### Poll Batch Until Complete
+
+**Endpoint:** `GET /api/vector-stores/:vectorStoreId/file_batches/:batchId/poll`
+
+**Example Request:**
+
+```bash
+curl "http://localhost:3000/api/vector-stores/vs_abc123/file_batches/vsfb_abc123/poll?max_wait_ms=60000"
+```
+
+#### Error Responses
+
+**Vector Store Not Found (404):**
+
+```json
+{
+  "statusCode": 404,
+  "message": "Vector store not found",
+  "error": "Not Found",
+  "code": "vector_store_not_found",
+  "hint": "The vector store ID does not exist or has been deleted. Verify the ID is correct.",
+  "timestamp": "2025-01-23T12:00:00.000Z",
+  "path": "/api/vector-stores/vs_invalid"
+}
+```
+
+**Invalid Chunking Strategy (400):**
+
+```json
+{
+  "statusCode": 400,
+  "message": "Invalid chunking strategy configuration",
+  "error": "Bad Request",
+  "code": "invalid_chunking_strategy",
+  "hint": "max_chunk_size_tokens must be between 100 and 4096. chunk_overlap_tokens cannot exceed half of max_chunk_size_tokens.",
+  "timestamp": "2025-01-23T12:00:00.000Z",
+  "path": "/api/vector-stores"
+}
+```
+
+**Batch Too Large (400):**
+
+```json
+{
+  "statusCode": 400,
+  "message": "File batch exceeds maximum size",
+  "error": "Bad Request",
+  "code": "batch_too_large",
+  "hint": "Batch operations support a maximum of 500 files. Split your request into multiple batches.",
+  "timestamp": "2025-01-23T12:00:00.000Z",
+  "path": "/api/vector-stores/vs_abc123/file_batches"
+}
+```
+
+**Search Failed (500):**
+
+```json
+{
+  "statusCode": 500,
+  "message": "Vector store search operation failed",
+  "error": "Internal Server Error",
+  "code": "search_failed",
+  "hint": "The search query could not be processed. Verify the vector store has indexed files and try again.",
+  "timestamp": "2025-01-23T12:00:00.000Z",
+  "path": "/api/vector-stores/vs_abc123/search"
+}
+```
+
+#### Best Practices
+
+1. **Chunking Strategy Selection**
+   - Use `auto` for general use cases - OpenAI optimizes automatically
+   - Use `static` only for specialized domains requiring consistent chunk sizes
+   - Test different chunk sizes to find optimal retrieval quality
+
+2. **Batch Operations**
+   - Add multiple files using batch endpoint (more efficient than individual adds)
+   - Monitor batch status with polling endpoint
+   - Cancel long-running batches if needed
+
+3. **Polling Strategy**
+   - Use provided polling endpoints for automatic retry logic
+   - Set appropriate timeouts based on file count and size
+   - Exponential backoff prevents rate limiting
+
+4. **Search Optimization**
+   - Set `max_num_results` based on use case (default: 20)
+   - Use `score_threshold` to filter low-quality results (recommended: 0.7-0.9)
+   - Enable `rewrite_query` for natural language queries
+   - Use `filters.file_id` to limit search scope
+
+5. **Lifecycle Management**
+   - Set `expires_after` for temporary vector stores
+   - Delete unused vector stores to manage quota
+   - Monitor `usage_bytes` for storage tracking
+
+6. **File Management**
+   - Upload files via Files API first
+   - Verify file status before attaching to vector store
+   - Use appropriate file formats (PDF, TXT, DOCX, MD for RAG)
+
+7. **Integration with Responses API**
+   - Use `vector_store_ids` in file_search tool configuration
+   - Enable `include: ['file_search_call.results']` for result details
+   - Combine with other tools (code_interpreter, web_search)
+
+#### RAG Workflow Example
+
+Complete workflow demonstrating file upload, vector store creation, indexing, and search integration with Responses API.
+
+**Step 1: Upload Files**
+
+```bash
+# Upload product documentation
+curl -X POST http://localhost:3000/api/files \
+  -F "file=@product-guide.pdf" \
+  -F "purpose=assistants"
+# Response: { "id": "file-abc123", ... }
+
+curl -X POST http://localhost:3000/api/files \
+  -F "file=@faq.txt" \
+  -F "purpose=assistants"
+# Response: { "id": "file-def456", ... }
+```
+
+**Step 2: Create Vector Store**
+
+```bash
+curl -X POST http://localhost:3000/api/vector-stores \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Product Knowledge Base",
+    "file_ids": ["file-abc123", "file-def456"],
+    "chunking_strategy": { "type": "auto" }
+  }'
+# Response: { "id": "vs_abc123", "status": "in_progress", ... }
+```
+
+**Step 3: Poll Until Indexing Complete**
+
+```bash
+curl "http://localhost:3000/api/vector-stores/vs_abc123/poll?max_wait_ms=60000"
+# Response: { "id": "vs_abc123", "status": "completed", ... }
+```
+
+**Step 4: Test Search**
+
+```bash
+curl -X POST http://localhost:3000/api/vector-stores/vs_abc123/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "How do I reset my password?",
+    "max_num_results": 3
+  }'
+# Response: [ { "content": "To reset your password...", "score": 0.95 }, ... ]
+```
+
+**Step 5: Use with Responses API**
+
+```bash
+curl -X POST http://localhost:3000/api/responses/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "input": "How do I reset my password?",
+    "tools": [{
+      "type": "file_search",
+      "vector_store_ids": ["vs_abc123"]
+    }],
+    "include": ["file_search_call.results"]
+  }'
+```
+
+**Response includes:**
+- AI-generated answer based on retrieved content
+- Source citations from vector store
+- file_search tool call results with matched chunks
+
 ### Complete Workflow: File Upload + AI Analysis
 
 This example demonstrates the end-to-end workflow of uploading a data file and analyzing it with AI using Code Interpreter.

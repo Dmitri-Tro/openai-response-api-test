@@ -54,7 +54,7 @@ export class OpenAIVideosService {
       timestamp: new Date().toISOString(),
       api: 'videos',
       endpoint: '/v1/videos',
-      request: params as unknown as Record<string, unknown>,
+      request: params,
       response: video,
       metadata: {
         latency_ms: Date.now() - startTime,
@@ -73,7 +73,25 @@ export class OpenAIVideosService {
    * @returns OpenAI Video object with current status
    */
   async getVideoStatus(videoId: string): Promise<Videos.Video> {
-    return await this.client.videos.retrieve(videoId);
+    const startTime = Date.now();
+
+    const video: Videos.Video = await this.client.videos.retrieve(videoId);
+
+    this.loggerService.logOpenAIInteraction({
+      timestamp: new Date().toISOString(),
+      api: 'videos',
+      endpoint: `/v1/videos/${videoId}`,
+      request: {},
+      response: video,
+      metadata: {
+        latency_ms: Date.now() - startTime,
+        video_id: video.id,
+        model: video.model,
+        status: video.status,
+      },
+    });
+
+    return video;
   }
 
   /**
@@ -96,6 +114,20 @@ export class OpenAIVideosService {
 
       // Return when generation completes or fails
       if (video.status === 'completed' || video.status === 'failed') {
+        this.loggerService.logOpenAIInteraction({
+          timestamp: new Date().toISOString(),
+          api: 'videos',
+          endpoint: `/v1/videos/${videoId}/poll`,
+          request: { max_wait_ms: maxWaitMs },
+          response: video,
+          metadata: {
+            latency_ms: Date.now() - startTime,
+            video_id: video.id,
+            model: video.model,
+            status: video.status,
+          },
+        });
+
         return video; // Return OpenAI response as-is
       }
 
@@ -120,7 +152,28 @@ export class OpenAIVideosService {
     videoId: string,
     variant: 'video' | 'thumbnail' | 'spritesheet' = 'video',
   ): Promise<Response> {
-    return await this.client.videos.downloadContent(videoId, { variant });
+    const startTime = Date.now();
+
+    const response: Response = await this.client.videos.downloadContent(
+      videoId,
+      { variant },
+    );
+
+    this.loggerService.logOpenAIInteraction({
+      timestamp: new Date().toISOString(),
+      api: 'videos',
+      endpoint: `/v1/videos/${videoId}/content`,
+      request: { variant },
+      response: {
+        content_type: response.headers?.get('content-type') || 'application/octet-stream',
+      },
+      metadata: {
+        latency_ms: Date.now() - startTime,
+        video_id: videoId,
+      },
+    });
+
+    return response;
   }
 
   /**
@@ -133,7 +186,22 @@ export class OpenAIVideosService {
     limit: number = 10,
     order: 'asc' | 'desc' = 'desc',
   ): Promise<Videos.Video[]> {
+    const startTime = Date.now();
+
     const page = await this.client.videos.list({ limit, order });
+
+    this.loggerService.logOpenAIInteraction({
+      timestamp: new Date().toISOString(),
+      api: 'videos',
+      endpoint: '/v1/videos',
+      request: { limit, order },
+      response: page.data,
+      metadata: {
+        latency_ms: Date.now() - startTime,
+        result_count: page.data.length,
+      },
+    });
+
     return page.data; // Return data array as-is
   }
 
@@ -143,7 +211,25 @@ export class OpenAIVideosService {
    * @returns OpenAI deletion confirmation response
    */
   async deleteVideo(videoId: string): Promise<Videos.VideoDeleteResponse> {
-    return await this.client.videos.delete(videoId);
+    const startTime = Date.now();
+
+    const result: Videos.VideoDeleteResponse =
+      await this.client.videos.delete(videoId);
+
+    this.loggerService.logOpenAIInteraction({
+      timestamp: new Date().toISOString(),
+      api: 'videos',
+      endpoint: `/v1/videos/${videoId}`,
+      request: {},
+      response: result,
+      metadata: {
+        latency_ms: Date.now() - startTime,
+        video_id: videoId,
+        deleted: result.deleted,
+      },
+    });
+
+    return result;
   }
 
   /**
@@ -153,7 +239,27 @@ export class OpenAIVideosService {
    * @returns New OpenAI Video object for remix job
    */
   async remixVideo(videoId: string, newPrompt: string): Promise<Videos.Video> {
-    return await this.client.videos.remix(videoId, { prompt: newPrompt });
+    const startTime = Date.now();
+
+    const video: Videos.Video = await this.client.videos.remix(videoId, {
+      prompt: newPrompt,
+    });
+
+    this.loggerService.logOpenAIInteraction({
+      timestamp: new Date().toISOString(),
+      api: 'videos',
+      endpoint: `/v1/videos/${videoId}/remix`,
+      request: { prompt: newPrompt },
+      response: video,
+      metadata: {
+        latency_ms: Date.now() - startTime,
+        video_id: video.id,
+        model: video.model,
+        status: video.status,
+      },
+    });
+
+    return video;
   }
 
   /**

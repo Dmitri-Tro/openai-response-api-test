@@ -87,7 +87,27 @@ export class OpenAIFilesService {
    * @returns OpenAI FileObject with metadata
    */
   async retrieveFile(fileId: string): Promise<Files.FileObject> {
-    return await this.client.files.retrieve(fileId);
+    const startTime = Date.now();
+
+    const file: Files.FileObject = await this.client.files.retrieve(fileId);
+
+    this.loggerService.logOpenAIInteraction({
+      timestamp: new Date().toISOString(),
+      api: 'files',
+      endpoint: `/v1/files/${fileId}`,
+      request: {},
+      response: file,
+      metadata: {
+        latency_ms: Date.now() - startTime,
+        file_id: file.id,
+        filename: file.filename,
+        bytes: file.bytes,
+        purpose: file.purpose,
+        status: file.status,
+      },
+    });
+
+    return file;
   }
 
   /**
@@ -102,6 +122,8 @@ export class OpenAIFilesService {
     order: 'asc' | 'desc' = 'desc',
     limit?: number,
   ): Promise<Files.FileObject[]> {
+    const startTime = Date.now();
+
     const params: Files.FileListParams = {
       ...(purpose && { purpose }),
       ...(order && { order }),
@@ -109,6 +131,19 @@ export class OpenAIFilesService {
     };
 
     const page = await this.client.files.list(params);
+
+    this.loggerService.logOpenAIInteraction({
+      timestamp: new Date().toISOString(),
+      api: 'files',
+      endpoint: '/v1/files',
+      request: params,
+      response: page.data,
+      metadata: {
+        latency_ms: Date.now() - startTime,
+        result_count: page.data.length,
+      },
+    });
+
     return page.data; // Return data array as-is
   }
 
@@ -118,7 +153,24 @@ export class OpenAIFilesService {
    * @returns OpenAI deletion confirmation response
    */
   async deleteFile(fileId: string): Promise<Files.FileDeleted> {
-    return await this.client.files.delete(fileId);
+    const startTime = Date.now();
+
+    const result: Files.FileDeleted = await this.client.files.delete(fileId);
+
+    this.loggerService.logOpenAIInteraction({
+      timestamp: new Date().toISOString(),
+      api: 'files',
+      endpoint: `/v1/files/${fileId}`,
+      request: {},
+      response: result,
+      metadata: {
+        latency_ms: Date.now() - startTime,
+        file_id: fileId,
+        deleted: result.deleted,
+      },
+    });
+
+    return result;
   }
 
   /**
@@ -128,34 +180,63 @@ export class OpenAIFilesService {
    * @throws Error if file purpose is 'assistants' (download forbidden)
    */
   async downloadFileContent(fileId: string): Promise<Response> {
-    return await this.client.files.content(fileId);
+    const startTime = Date.now();
+
+    const response: Response = await this.client.files.content(fileId);
+
+    this.loggerService.logOpenAIInteraction({
+      timestamp: new Date().toISOString(),
+      api: 'files',
+      endpoint: `/v1/files/${fileId}/content`,
+      request: {},
+      response: {
+        content_type: response.headers?.get('content-type') || 'application/octet-stream',
+      },
+      metadata: {
+        latency_ms: Date.now() - startTime,
+        file_id: fileId,
+      },
+    });
+
+    return response;
   }
 
   /**
-   * Wait for file processing to complete
+   * Poll until file processing completes
    * Uses exponential backoff: 5s → 10s → 15s → 20s (max)
    * @param fileId - File ID to poll
-   * @param options - Polling configuration
+   * @param maxWaitMs - Maximum wait time (default: 10 minutes)
    * @returns Final OpenAI FileObject (status: 'processed' or 'error')
    * @throws Error if timeout exceeded
    */
-  async waitForProcessing(
+  async pollUntilComplete(
     fileId: string,
-    options?: {
-      pollInterval?: number;
-      maxWait?: number;
-    },
+    maxWaitMs: number = 600000,
   ): Promise<Files.FileObject> {
-    const pollInterval = options?.pollInterval || 5000;
-    const maxWait = options?.maxWait || 1800000; // 30 minutes default
     const startTime = Date.now();
-    let waitTime = pollInterval;
+    let waitTime = 5000; // Start with 5 seconds
 
-    while (Date.now() - startTime < maxWait) {
+    while (Date.now() - startTime < maxWaitMs) {
       const file: Files.FileObject = await this.retrieveFile(fileId);
 
       // Return when processing completes or fails
       if (file.status === 'processed' || file.status === 'error') {
+        this.loggerService.logOpenAIInteraction({
+          timestamp: new Date().toISOString(),
+          api: 'files',
+          endpoint: `/v1/files/${fileId}/poll`,
+          request: { max_wait_ms: maxWaitMs },
+          response: file,
+          metadata: {
+            latency_ms: Date.now() - startTime,
+            file_id: file.id,
+            filename: file.filename,
+            bytes: file.bytes,
+            purpose: file.purpose,
+            status: file.status,
+          },
+        });
+
         return file; // Return OpenAI response as-is
       }
 
@@ -166,7 +247,7 @@ export class OpenAIFilesService {
 
     // Timeout exceeded
     throw new Error(
-      `File processing timeout: exceeded ${maxWait}ms waiting for file ${fileId}`,
+      `File ${fileId} did not complete within ${maxWaitMs}ms`,
     );
   }
 

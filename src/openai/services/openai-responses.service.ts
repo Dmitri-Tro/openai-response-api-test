@@ -470,8 +470,7 @@ export class OpenAIResponsesService {
         endpoint: '/v1/responses (stream)',
         event_type: 'stream_start',
         sequence: 0,
-        // Type assertion for logging: serialize extended params as plain object
-        request: params as unknown as Record<string, unknown>,
+        request: params,
       });
 
       // Make the streaming API call
@@ -928,8 +927,11 @@ export class OpenAIResponsesService {
       }
 
       // Build image_generation tool parameters
-      // Build as a plain object to avoid type conflicts, then cast to Tool type
-      const imageGenerationToolConfig: Record<string, unknown> = {
+      // Build image_generation tool config
+      // Using Responses.Tool type directly - TypeScript allows building it incrementally
+      const imageGenerationToolConfig: Partial<Responses.Tool> & {
+        type: 'image_generation';
+      } = {
         type: 'image_generation',
       };
 
@@ -978,11 +980,8 @@ export class OpenAIResponsesService {
         imageGenerationToolConfig.partial_images = dto.partial_images;
       }
 
-      // Intentional type assertion: Building image_generation tool config dynamically
-      // The SDK's Tool type is a discriminated union, and we're constructing it incrementally
-      // Double cast is necessary because we're building the object dynamically
-      const imageGenerationTool =
-        imageGenerationToolConfig as unknown as Responses.Tool;
+      // Cast to final Tool type after building all optional fields
+      const imageGenerationTool = imageGenerationToolConfig as Responses.Tool;
 
       // Combine user-provided tools with image_generation tool
       params.tools = dto.tools
@@ -1214,8 +1213,10 @@ export class OpenAIResponsesService {
         params.modalities = dto.modalities;
       }
 
-      // Build image_generation tool parameters
-      const imageGenerationToolConfig: Record<string, unknown> = {
+      // Build image_generation tool config
+      const imageGenerationToolConfig: Partial<Responses.Tool> & {
+        type: 'image_generation';
+      } = {
         type: 'image_generation',
       };
 
@@ -1247,9 +1248,8 @@ export class OpenAIResponsesService {
       // Enable progressive rendering - default to 3 for best streaming experience
       imageGenerationToolConfig.partial_images = dto.partial_images ?? 3;
 
-      // Cast to Tool type
-      const imageGenerationTool =
-        imageGenerationToolConfig as unknown as Responses.Tool;
+      // Cast to final Tool type after building all optional fields
+      const imageGenerationTool = imageGenerationToolConfig as Responses.Tool;
 
       // Combine user-provided tools with image_generation tool
       params.tools = dto.tools
