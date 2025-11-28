@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, Inject } from '@nestjs/common';
 import OpenAI, { toFile } from 'openai';
+import { OPENAI_CLIENT } from '../providers/openai-client.provider';
 import type { Images } from 'openai/resources/images';
 import { LoggerService } from '../../common/services/logger.service';
 import {
@@ -9,6 +9,7 @@ import {
   ImageVariationDto,
 } from '../dto/images';
 import type { ImagesResponse, Image } from '../interfaces/images';
+import { calculateImageCost } from '../../common/utils/cost-estimation.utils';
 
 /**
  * Service for interacting with OpenAI Images API
@@ -29,26 +30,10 @@ import type { ImagesResponse, Image } from '../interfaces/images';
  */
 @Injectable()
 export class OpenAIImagesService {
-  private client: OpenAI;
-
   constructor(
-    private readonly configService: ConfigService,
+    @Inject(OPENAI_CLIENT) private readonly client: OpenAI,
     private readonly loggerService: LoggerService,
-  ) {
-    const apiKey = this.configService.get<string>('openai.apiKey');
-    const baseURL = this.configService.get<string>('openai.baseUrl');
-
-    if (!apiKey) {
-      throw new Error('OpenAI API key is not configured');
-    }
-
-    this.client = new OpenAI({
-      apiKey,
-      baseURL,
-      timeout: this.configService.get<number>('openai.timeout'),
-      maxRetries: this.configService.get<number>('openai.maxRetries'),
-    });
-  }
+  ) {}
 
   /**
    * Generate images from text prompts using DALL-E 2 or DALL-E 3
@@ -96,7 +81,8 @@ export class OpenAIImagesService {
         ...(dto.size && { size: dto.size }),
         ...(dto.quality && { quality: dto.quality }),
         ...(dto.style && { style: dto.style }),
-        ...(dto.response_format && { response_format: dto.response_format }),
+        // Note: gpt-image-1 doesn't accept response_format (only returns b64_json)
+        ...(dto.response_format && dto.model !== 'gpt-image-1' && { response_format: dto.response_format }),
         ...(dto.user && { user: dto.user }),
       };
 
@@ -105,7 +91,7 @@ export class OpenAIImagesService {
         await this.client.images.generate(params);
 
       // Calculate cost estimate
-      const costEstimate = this.estimateImageCost(
+      const costEstimate = calculateImageCost(
         dto.model || 'dall-e-2',
         dto.size || '1024x1024',
         dto.quality,
@@ -210,7 +196,8 @@ export class OpenAIImagesService {
         ...(dto.model && { model: dto.model }),
         ...(dto.n && { n: dto.n }),
         ...(dto.size && { size: dto.size }),
-        ...(dto.response_format && { response_format: dto.response_format }),
+        // NOTE: response_format removed - OpenAI API rejects this parameter (as of SDK 6.9.1)
+        // ...(dto.response_format && { response_format: dto.response_format }),
         ...(dto.user && { user: dto.user }),
       };
 
@@ -218,7 +205,7 @@ export class OpenAIImagesService {
       const response: ImagesResponse = await this.client.images.edit(params);
 
       // Calculate cost estimate
-      const costEstimate = this.estimateImageCost(
+      const costEstimate = calculateImageCost(
         'dall-e-2',
         dto.size || '1024x1024',
         undefined,
@@ -325,7 +312,8 @@ export class OpenAIImagesService {
         ...(dto.model && { model: dto.model }),
         ...(dto.n && { n: dto.n }),
         ...(dto.size && { size: dto.size }),
-        ...(dto.response_format && { response_format: dto.response_format }),
+        // NOTE: response_format removed - OpenAI API rejects this parameter (as of SDK 6.9.1)
+        // ...(dto.response_format && { response_format: dto.response_format }),
         ...(dto.user && { user: dto.user }),
       };
 
@@ -334,7 +322,7 @@ export class OpenAIImagesService {
         await this.client.images.createVariation(params);
 
       // Calculate cost estimate
-      const costEstimate = this.estimateImageCost(
+      const costEstimate = calculateImageCost(
         'dall-e-2',
         dto.size || '1024x1024',
         undefined,
@@ -441,75 +429,5 @@ export class OpenAIImagesService {
     return response.data
       .filter((image: Image) => image.b64_json !== undefined)
       .map((image: Image) => image.b64_json!);
-  }
-
-  /**
-   * Estimate cost of image generation based on model, size, quality, and quantity
-   *
-   * **Pricing** (as of 2025):
-   *
-   * **DALL-E 3**:
-   * - Standard 1024x1024: $0.040 per image
-   * - HD 1024x1024: $0.080 per image
-   * - HD 1792x1024 or 1024x1792: $0.120 per image
-   *
-   * **DALL-E 2**:
-   * - 1024x1024: $0.020 per image
-   * - 512x512: $0.018 per image
-   * - 256x256: $0.016 per image
-   *
-   * @param model - Image model (dall-e-2 or dall-e-3)
-   * @param size - Image size
-   * @param quality - Quality setting (DALL-E 3 only)
-   * @param n - Number of images
-   * @returns Estimated cost in USD
-   *
-   * @example
-   * ```typescript
-   * const cost = service.estimateImageCost('dall-e-3', '1792x1024', 'hd', 1);
-   * // 0.12 (HD large image)
-   *
-   * const cost = service.estimateImageCost('dall-e-2', '512x512', undefined, 5);
-   * // 0.09 (5 medium images)
-   * ```
-   */
-  estimateImageCost(
-    model: string,
-    size: string,
-    quality?: string,
-    n: number = 1,
-  ): number {
-    let costPerImage = 0;
-
-    if (model === 'dall-e-3') {
-      if (quality === 'hd') {
-        // HD quality
-        if (size === '1024x1024') {
-          costPerImage = 0.08;
-        } else if (size === '1792x1024' || size === '1024x1792') {
-          costPerImage = 0.12;
-        } else {
-          costPerImage = 0.08; // Default HD price
-        }
-      } else {
-        // Standard quality
-        costPerImage = 0.04;
-      }
-    } else if (model === 'dall-e-2') {
-      if (size === '1024x1024') {
-        costPerImage = 0.02;
-      } else if (size === '512x512') {
-        costPerImage = 0.018;
-      } else if (size === '256x256') {
-        costPerImage = 0.016;
-      } else {
-        costPerImage = 0.02; // Default price
-      }
-    } else {
-      // Unknown model - use DALL-E 2 default
-      costPerImage = 0.02;
-    }
-
-    return costPerImage * n;
   }
 }

@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
 import { OpenAIImagesService } from './openai-images.service';
+import { OPENAI_CLIENT } from '../providers/openai-client.provider';
 import { LoggerService } from '../../common/services/logger.service';
 import type { ImagesResponse } from '../interfaces/images';
 import type {
@@ -9,33 +9,37 @@ import type {
   ImageVariationDto,
 } from '../dto/images';
 
-// Mock OpenAI client
-const mockOpenAIClient = {
-  images: {
-    generate: jest.fn(),
-    edit: jest.fn(),
-    createVariation: jest.fn(),
-  },
-};
-
+// Mock toFile function
 jest.mock('openai', () => {
   return {
     __esModule: true,
-    default: jest.fn().mockImplementation(() => mockOpenAIClient),
-    toFile: jest.fn((buffer, filename, options) =>
-      Promise.resolve({
-        name: filename,
-        type: options?.type || 'application/octet-stream',
-        size: buffer.length,
-      }),
+    toFile: jest.fn(
+      (
+        buffer: Buffer,
+        filename: string,
+        options?: { type?: string },
+      ): Promise<{ name: string; type: string; size: number }> =>
+        Promise.resolve({
+          name: filename,
+          type: options?.type || 'application/octet-stream',
+          size: buffer.length,
+        }),
     ),
   };
 });
 
 describe('OpenAIImagesService', () => {
   let service: OpenAIImagesService;
-  let configService: ConfigService;
   let loggerService: LoggerService;
+
+  // Mock OpenAI client (singleton provider pattern)
+  const mockOpenAIClient = {
+    images: {
+      generate: jest.fn(),
+      edit: jest.fn(),
+      createVariation: jest.fn(),
+    },
+  };
 
   const mockImageResponse: ImagesResponse = {
     created: 1234567890,
@@ -81,49 +85,31 @@ describe('OpenAIImagesService', () => {
     ],
   };
 
-  const mockMulterFile: Express.Multer.File = {
+  const mockMulterFile = {
     fieldname: 'image',
     originalname: 'test-image.png',
     encoding: '7bit',
     mimetype: 'image/png',
     buffer: Buffer.from('mock image data'),
     size: 1024,
-    stream: null as any,
-    destination: '',
-    filename: '',
-    path: '',
-  };
+  } as Express.Multer.File;
 
-  const mockMaskFile: Express.Multer.File = {
+  const mockMaskFile = {
     fieldname: 'mask',
     originalname: 'test-mask.png',
     encoding: '7bit',
     mimetype: 'image/png',
     buffer: Buffer.from('mock mask data'),
     size: 512,
-    stream: null as any,
-    destination: '',
-    filename: '',
-    path: '',
-  };
+  } as Express.Multer.File;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OpenAIImagesService,
         {
-          provide: ConfigService,
-          useValue: {
-            get: jest.fn((key: string) => {
-              const config: Record<string, unknown> = {
-                'openai.apiKey': 'test-api-key',
-                'openai.baseUrl': 'https://api.openai.com/v1',
-                'openai.timeout': 60000,
-                'openai.maxRetries': 3,
-              };
-              return config[key];
-            }),
-          },
+          provide: OPENAI_CLIENT,
+          useValue: mockOpenAIClient,
         },
         {
           provide: LoggerService,
@@ -135,7 +121,6 @@ describe('OpenAIImagesService', () => {
     }).compile();
 
     service = module.get<OpenAIImagesService>(OpenAIImagesService);
-    configService = module.get<ConfigService>(ConfigService);
     loggerService = module.get<LoggerService>(LoggerService);
 
     // Reset all mocks before each test
@@ -166,14 +151,14 @@ describe('OpenAIImagesService', () => {
         expect.objectContaining({
           api: 'images',
           endpoint: '/v1/images/generations',
-          request: expect.any(Object),
+          request: expect.any(Object) as Record<string, unknown>,
           response: mockImageResponse,
           metadata: expect.objectContaining({
-            latency_ms: expect.any(Number),
+            latency_ms: expect.any(Number) as number,
             model: 'dall-e-2',
             images_generated: 1,
-            cost_estimate: expect.any(Number),
-          }),
+            cost_estimate: expect.any(Number) as number,
+          }) as Record<string, unknown>,
         }),
       );
     });
@@ -207,7 +192,7 @@ describe('OpenAIImagesService', () => {
         expect.objectContaining({
           metadata: expect.objectContaining({
             has_revised_prompt: true,
-          }),
+          }) as Record<string, unknown>,
         }),
       );
     });
@@ -232,7 +217,7 @@ describe('OpenAIImagesService', () => {
         expect.objectContaining({
           metadata: expect.objectContaining({
             images_generated: 3,
-          }),
+          }) as Record<string, unknown>,
         }),
       );
     });
@@ -288,10 +273,10 @@ describe('OpenAIImagesService', () => {
           endpoint: '/v1/images/generations',
           error: expect.objectContaining({
             message: 'API rate limit exceeded',
-          }),
+          }) as Record<string, unknown>,
           metadata: expect.objectContaining({
-            latency_ms: expect.any(Number),
-          }),
+            latency_ms: expect.any(Number) as number,
+          }) as Record<string, unknown>,
         }),
       );
     });
@@ -321,7 +306,7 @@ describe('OpenAIImagesService', () => {
             prompt: 'Add a red door',
             has_mask: false,
             image_size_bytes: mockMulterFile.size,
-          }),
+          }) as Record<string, unknown>,
         }),
       );
     });
@@ -341,7 +326,7 @@ describe('OpenAIImagesService', () => {
           request: expect.objectContaining({
             has_mask: true,
             mask_size_bytes: mockMaskFile.size,
-          }),
+          }) as Record<string, unknown>,
         }),
       );
     });
@@ -391,7 +376,7 @@ describe('OpenAIImagesService', () => {
         expect.objectContaining({
           error: expect.objectContaining({
             message: 'Invalid image format',
-          }),
+          }) as Record<string, unknown>,
         }),
       );
     });
@@ -415,7 +400,7 @@ describe('OpenAIImagesService', () => {
           endpoint: '/v1/images/variations',
           request: expect.objectContaining({
             image_size_bytes: mockMulterFile.size,
-          }),
+          }) as Record<string, unknown>,
         }),
       );
     });
@@ -483,7 +468,7 @@ describe('OpenAIImagesService', () => {
         expect.objectContaining({
           error: expect.objectContaining({
             message: 'Image must be square',
-          }),
+          }) as Record<string, unknown>,
         }),
       );
     });
@@ -542,91 +527,6 @@ describe('OpenAIImagesService', () => {
       const base64Images = service.extractBase64Images(emptyResponse);
 
       expect(base64Images).toEqual([]);
-    });
-  });
-
-  describe('estimateImageCost', () => {
-    describe('DALL-E 3 pricing', () => {
-      it('should calculate standard 1024x1024 cost', () => {
-        const cost = service.estimateImageCost('dall-e-3', '1024x1024');
-        expect(cost).toBe(0.04);
-      });
-
-      it('should calculate HD 1024x1024 cost', () => {
-        const cost = service.estimateImageCost('dall-e-3', '1024x1024', 'hd');
-        expect(cost).toBe(0.08);
-      });
-
-      it('should calculate HD 1792x1024 cost', () => {
-        const cost = service.estimateImageCost('dall-e-3', '1792x1024', 'hd');
-        expect(cost).toBe(0.12);
-      });
-
-      it('should calculate HD 1024x1792 cost', () => {
-        const cost = service.estimateImageCost('dall-e-3', '1024x1792', 'hd');
-        expect(cost).toBe(0.12);
-      });
-
-      it('should use default price for unknown size with HD', () => {
-        const cost = service.estimateImageCost('dall-e-3', '2048x2048', 'hd');
-        expect(cost).toBe(0.08);
-      });
-    });
-
-    describe('DALL-E 2 pricing', () => {
-      it('should calculate 1024x1024 cost', () => {
-        const cost = service.estimateImageCost('dall-e-2', '1024x1024');
-        expect(cost).toBe(0.02);
-      });
-
-      it('should calculate 512x512 cost', () => {
-        const cost = service.estimateImageCost('dall-e-2', '512x512');
-        expect(cost).toBe(0.018);
-      });
-
-      it('should calculate 256x256 cost', () => {
-        const cost = service.estimateImageCost('dall-e-2', '256x256');
-        expect(cost).toBe(0.016);
-      });
-
-      it('should use default price for unknown size', () => {
-        const cost = service.estimateImageCost('dall-e-2', '128x128');
-        expect(cost).toBe(0.02);
-      });
-    });
-
-    describe('Multiple images', () => {
-      it('should calculate cost for multiple DALL-E 2 images', () => {
-        const cost = service.estimateImageCost(
-          'dall-e-2',
-          '512x512',
-          undefined,
-          5,
-        );
-        expect(cost).toBe(0.09); // 0.018 * 5
-      });
-
-      it('should calculate cost for multiple DALL-E 3 images', () => {
-        const cost = service.estimateImageCost(
-          'dall-e-3',
-          '1024x1024',
-          'hd',
-          1,
-        );
-        expect(cost).toBe(0.08);
-      });
-
-      it('should handle default n=1', () => {
-        const cost = service.estimateImageCost('dall-e-2', '1024x1024');
-        expect(cost).toBe(0.02);
-      });
-    });
-
-    describe('Unknown model', () => {
-      it('should use DALL-E 2 default for unknown model', () => {
-        const cost = service.estimateImageCost('unknown-model', '1024x1024');
-        expect(cost).toBe(0.02);
-      });
     });
   });
 });

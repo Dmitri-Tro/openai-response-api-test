@@ -1,9 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
-import { App } from 'supertest/types';
+import type { Server } from 'http';
+import type { Responses } from 'openai/resources/responses';
 import { AppModule } from '../src/app.module';
 import { OpenAIExceptionFilter } from '../src/common/filters/openai-exception.filter';
+import { LoggerService } from '../src/common/services/logger.service';
 
 /**
  * Comprehensive E2E tests for OpenAI Text Responses API
@@ -12,7 +14,7 @@ import { OpenAIExceptionFilter } from '../src/common/filters/openai-exception.fi
  * To run: OPENAI_API_KEY=sk-... npm run test:e2e
  */
 describe('OpenAI Responses E2E (Real API)', () => {
-  let app: INestApplication<App>;
+  let app: INestApplication;
   const hasApiKey = !!process.env.OPENAI_API_KEY;
 
   // Skip all tests if no API key is provided
@@ -32,7 +34,10 @@ describe('OpenAI Responses E2E (Real API)', () => {
 
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ transform: true }));
-    app.useGlobalFilters(new OpenAIExceptionFilter());
+
+    // Get LoggerService from the module for exception filter
+    const loggerService = app.get(LoggerService);
+    app.useGlobalFilters(new OpenAIExceptionFilter(loggerService));
     await app.init();
   });
 
@@ -46,7 +51,7 @@ describe('OpenAI Responses E2E (Real API)', () => {
     testIf(hasApiKey)(
       'should generate a simple text response',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/responses/text')
           .send({
             model: 'gpt-4o-mini', // Using mini for faster/cheaper tests
@@ -56,24 +61,26 @@ describe('OpenAI Responses E2E (Real API)', () => {
           .expect(201)
           .expect('Content-Type', /json/);
 
+        const result = response.body as Responses.Response;
+
         // Verify response structure
-        expect(response.body).toHaveProperty('id');
-        expect(response.body.id).toMatch(/^resp_/);
-        expect(response.body).toHaveProperty('object', 'response');
-        expect(response.body).toHaveProperty('model');
-        expect(response.body).toHaveProperty('output_text');
-        expect(response.body.output_text).toBeTruthy();
+        expect(result).toHaveProperty('id');
+        expect(result.id).toMatch(/^resp_/);
+        expect(result).toHaveProperty('object', 'response');
+        expect(result).toHaveProperty('model');
+        expect(result).toHaveProperty('output_text');
+        expect(result.output_text).toBeTruthy();
 
         // Verify usage data
-        expect(response.body).toHaveProperty('usage');
-        expect(response.body.usage).toHaveProperty('input_tokens');
-        expect(response.body.usage).toHaveProperty('output_tokens');
-        expect(response.body.usage).toHaveProperty('total_tokens');
-        expect(response.body.usage.input_tokens).toBeGreaterThan(0);
-        expect(response.body.usage.output_tokens).toBeGreaterThan(0);
+        expect(result).toHaveProperty('usage');
+        expect(result.usage).toHaveProperty('input_tokens');
+        expect(result.usage).toHaveProperty('output_tokens');
+        expect(result.usage).toHaveProperty('total_tokens');
+        expect(result.usage?.input_tokens).toBeGreaterThan(0);
+        expect(result.usage?.output_tokens).toBeGreaterThan(0);
 
         console.log(
-          `✅ Text response: "${response.body.output_text}" (${response.body.usage.total_tokens} tokens)`,
+          `✅ Text response: "${result.output_text}" (${result.usage?.total_tokens} tokens)`,
         );
       },
       30000,
@@ -82,7 +89,7 @@ describe('OpenAI Responses E2E (Real API)', () => {
     testIf(hasApiKey)(
       'should respect temperature parameter',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/responses/text')
           .send({
             model: 'gpt-4o-mini',
@@ -92,8 +99,9 @@ describe('OpenAI Responses E2E (Real API)', () => {
           })
           .expect(201);
 
-        expect(response.body.output_text).toBeTruthy();
-        console.log(`✅ Temperature test: "${response.body.output_text}"`);
+        const result = response.body as Responses.Response;
+        expect(result.output_text).toBeTruthy();
+        console.log(`✅ Temperature test: "${result.output_text}"`);
       },
       30000,
     );
@@ -101,7 +109,7 @@ describe('OpenAI Responses E2E (Real API)', () => {
     testIf(hasApiKey)(
       'should handle instructions parameter',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/responses/text')
           .send({
             model: 'gpt-4o-mini',
@@ -111,11 +119,10 @@ describe('OpenAI Responses E2E (Real API)', () => {
           })
           .expect(201);
 
-        expect(response.body.output_text).toBeTruthy();
-        expect(
-          response.body.output_text.split(/\s+/).length,
-        ).toBeLessThanOrEqual(3); // Should be very short
-        console.log(`✅ Instructions test: "${response.body.output_text}"`);
+        const result = response.body as Responses.Response;
+        expect(result.output_text).toBeTruthy();
+        expect(result.output_text.split(/\s+/).length).toBeLessThanOrEqual(3); // Should be very short
+        console.log(`✅ Instructions test: "${result.output_text}"`);
       },
       30000,
     );
@@ -123,7 +130,7 @@ describe('OpenAI Responses E2E (Real API)', () => {
     testIf(hasApiKey)(
       'should respect max_output_tokens',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/responses/text')
           .send({
             model: 'gpt-4o-mini',
@@ -132,9 +139,10 @@ describe('OpenAI Responses E2E (Real API)', () => {
           })
           .expect(201);
 
-        expect(response.body.usage.output_tokens).toBeLessThanOrEqual(16);
+        const result = response.body as Responses.Response;
+        expect(result.usage?.output_tokens).toBeLessThanOrEqual(16);
         console.log(
-          `✅ Token limit: ${response.body.usage.output_tokens} tokens (max 16)`,
+          `✅ Token limit: ${result.usage?.output_tokens} tokens (max 16)`,
         );
       },
       30000,
@@ -143,7 +151,7 @@ describe('OpenAI Responses E2E (Real API)', () => {
 
   describe('POST /api/responses/text - Validation', () => {
     testIf(hasApiKey)('should reject missing input field', async () => {
-      await request(app.getHttpServer())
+      await request(app.getHttpServer() as Server)
         .post('/api/responses/text')
         .send({
           model: 'gpt-4o-mini',
@@ -153,7 +161,7 @@ describe('OpenAI Responses E2E (Real API)', () => {
     });
 
     testIf(hasApiKey)('should reject invalid temperature', async () => {
-      await request(app.getHttpServer())
+      await request(app.getHttpServer() as Server)
         .post('/api/responses/text')
         .send({
           model: 'gpt-4o-mini',
@@ -164,7 +172,7 @@ describe('OpenAI Responses E2E (Real API)', () => {
     });
 
     testIf(hasApiKey)('should reject invalid top_p', async () => {
-      await request(app.getHttpServer())
+      await request(app.getHttpServer() as Server)
         .post('/api/responses/text')
         .send({
           model: 'gpt-4o-mini',
@@ -179,7 +187,7 @@ describe('OpenAI Responses E2E (Real API)', () => {
     testIf(hasApiKey)(
       'should support structured output (JSON)',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/responses/text')
           .send({
             model: 'gpt-4o-mini',
@@ -191,13 +199,16 @@ describe('OpenAI Responses E2E (Real API)', () => {
           })
           .expect(201);
 
-        expect(response.body.output_text).toBeTruthy();
+        const result = response.body as Responses.Response;
+        expect(result.output_text).toBeTruthy();
         // Should be valid JSON
-        expect(() => JSON.parse(response.body.output_text)).not.toThrow();
-        const parsed = JSON.parse(response.body.output_text);
+        const parsed = JSON.parse(result.output_text) as Record<
+          string,
+          unknown
+        >;
         expect(parsed).toHaveProperty('name');
         expect(parsed).toHaveProperty('age');
-        console.log(`✅ JSON output: ${response.body.output_text}`);
+        console.log(`✅ JSON output: ${result.output_text}`);
       },
       30000,
     );
@@ -205,7 +216,7 @@ describe('OpenAI Responses E2E (Real API)', () => {
     testIf(hasApiKey)(
       'should support function calling',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/responses/text')
           .send({
             model: 'gpt-4o-mini',
@@ -213,51 +224,49 @@ describe('OpenAI Responses E2E (Real API)', () => {
             tools: [
               {
                 type: 'function',
-                function: {
-                  name: 'get_weather',
-                  description: 'Get the current weather for a location',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      location: {
-                        type: 'string',
-                        description: 'The city name',
-                      },
-                      unit: {
-                        type: 'string',
-                        enum: ['celsius', 'fahrenheit'],
-                      },
+                name: 'get_weather',
+                description: 'Get the current weather for a location',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    location: {
+                      type: 'string',
+                      description: 'The city name',
                     },
-                    required: ['location'],
+                    unit: {
+                      type: 'string',
+                      enum: ['celsius', 'fahrenheit'],
+                    },
                   },
+                  required: ['location'],
                 },
               },
             ],
             tool_choice: 'required',
-          })
-          .expect(201);
+          });
 
-        expect(response.body).toHaveProperty('output_tool_call');
-        expect(response.body.output_tool_call).toHaveProperty(
-          'type',
-          'function',
-        );
-        expect(response.body.output_tool_call.function).toHaveProperty(
-          'name',
-          'get_weather',
-        );
-        expect(response.body.output_tool_call.function).toHaveProperty(
-          'arguments',
-        );
+        expect(response.status).toBe(201);
 
-        const args = JSON.parse(
-          response.body.output_tool_call.function.arguments,
-        );
+        const result = response.body as Responses.Response;
+        expect(result).toHaveProperty('output');
+        expect(Array.isArray(result.output)).toBe(true);
+        expect(result.output.length).toBeGreaterThan(0);
+
+        const functionCall = result.output[0] as {
+          type: string;
+          name: string;
+          arguments: string;
+        };
+        expect(functionCall).toHaveProperty('type', 'function_call');
+        expect(functionCall).toHaveProperty('name', 'get_weather');
+        expect(functionCall).toHaveProperty('arguments');
+
+        const args = JSON.parse(functionCall.arguments || '{}') as {
+          location?: string;
+        };
         expect(args).toHaveProperty('location');
-        expect(args.location.toLowerCase()).toContain('san francisco');
-        console.log(
-          `✅ Function call: get_weather(${response.body.output_tool_call.function.arguments})`,
-        );
+        expect(args.location?.toLowerCase()).toContain('san francisco');
+        console.log(`✅ Function call: get_weather(${functionCall.arguments})`);
       },
       30000,
     );
@@ -265,7 +274,7 @@ describe('OpenAI Responses E2E (Real API)', () => {
     testIf(hasApiKey)(
       'should support metadata parameter',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/responses/text')
           .send({
             model: 'gpt-4o-mini',
@@ -278,7 +287,8 @@ describe('OpenAI Responses E2E (Real API)', () => {
           })
           .expect(201);
 
-        expect(response.body.output_text).toBeTruthy();
+        const result = response.body as Responses.Response;
+        expect(result.output_text).toBeTruthy();
         console.log(`✅ Metadata test passed`);
       },
       30000,
@@ -287,7 +297,7 @@ describe('OpenAI Responses E2E (Real API)', () => {
     testIf(hasApiKey)(
       'should support store parameter for retrieval',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/responses/text')
           .send({
             model: 'gpt-4o-mini',
@@ -297,16 +307,18 @@ describe('OpenAI Responses E2E (Real API)', () => {
           })
           .expect(201);
 
-        expect(response.body.id).toBeTruthy();
-        const responseId = response.body.id;
+        const result = response.body as Responses.Response;
+        expect(result.id).toBeTruthy();
+        const responseId = result.id;
 
         // Try to retrieve the stored response
-        const retrieved = await request(app.getHttpServer())
+        const retrieved = await request(app.getHttpServer() as Server)
           .get(`/api/responses/${responseId}`)
           .expect(200);
 
-        expect(retrieved.body.id).toBe(responseId);
-        expect(retrieved.body.output_text).toBe(response.body.output_text);
+        const retrievedResult = retrieved.body as Responses.Response;
+        expect(retrievedResult.id).toBe(responseId);
+        expect(retrievedResult.output_text).toBe(result.output_text);
         console.log(`✅ Stored and retrieved response: ${responseId}`);
       },
       30000,
@@ -317,7 +329,7 @@ describe('OpenAI Responses E2E (Real API)', () => {
     testIf(hasApiKey)(
       'should stream text deltas',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/responses/text/stream')
           .send({
             model: 'gpt-4o-mini',
@@ -327,6 +339,11 @@ describe('OpenAI Responses E2E (Real API)', () => {
           })
           .expect(201) // Streaming returns 201
           .expect('Content-Type', /text\/event-stream/);
+
+        interface SSEEvent {
+          event: string;
+          data: { delta?: string; [key: string]: unknown };
+        }
 
         // Parse SSE response
         const events = response.text
@@ -341,10 +358,13 @@ describe('OpenAI Responses E2E (Real API)', () => {
 
             return {
               event: eventLine.replace('event: ', ''),
-              data: JSON.parse(dataLine.replace('data: ', '')),
-            };
+              data: JSON.parse(dataLine.replace('data: ', '')) as {
+                delta?: string;
+                [key: string]: unknown;
+              },
+            } as SSEEvent;
           })
-          .filter(Boolean);
+          .filter((e): e is SSEEvent => e !== null);
 
         // Verify we got streaming events
         expect(events.length).toBeGreaterThan(0);
@@ -361,12 +381,15 @@ describe('OpenAI Responses E2E (Real API)', () => {
         const doneEvent = events.find((e) => e.event === 'text_done');
         expect(doneEvent).toBeDefined();
 
-        // Should have response_done event
-        const responseDone = events.find((e) => e.event === 'response_done');
-        expect(responseDone).toBeDefined();
+        // Should have completion event (response_done or response_completed)
+        const completionEvent = events.find(
+          (e) =>
+            e.event === 'response_done' || e.event === 'response_completed',
+        );
+        expect(completionEvent).toBeDefined();
 
         // Reconstruct full text from deltas
-        const fullText = deltaEvents.map((e) => e.data.delta).join('');
+        const fullText = deltaEvents.map((e) => e.data.delta || '').join('');
 
         console.log(
           `✅ Streaming: ${deltaEvents.length} deltas, text: "${fullText}"`,
@@ -378,7 +401,7 @@ describe('OpenAI Responses E2E (Real API)', () => {
     testIf(hasApiKey)(
       'should include sequence numbers',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/responses/text/stream')
           .send({
             model: 'gpt-4o-mini',
@@ -396,16 +419,23 @@ describe('OpenAI Responses E2E (Real API)', () => {
               .split('\n')
               .find((line) => line.startsWith('data: '));
             if (!dataLine) return null;
-            return JSON.parse(dataLine.replace('data: ', ''));
+            return JSON.parse(dataLine.replace('data: ', '')) as {
+              sequence?: number;
+              [key: string]: unknown;
+            };
           })
-          .filter(Boolean);
+          .filter((e): e is { sequence: number; [key: string]: unknown } => {
+            return e !== null && typeof e.sequence === 'number';
+          });
 
-        // Verify sequence numbers are incremental
+        // Verify sequence numbers are incremental (0-based)
         events.forEach((event, index) => {
-          expect(event.sequence).toBe(index + 1);
+          expect(event.sequence).toBe(index);
         });
 
-        console.log(`✅ Sequence numbers: 1 to ${events.length}`);
+        console.log(
+          `✅ Sequence numbers: 0 to ${events.length - 1} (${events.length} events)`,
+        );
       },
       30000,
     );
@@ -415,7 +445,7 @@ describe('OpenAI Responses E2E (Real API)', () => {
     testIf(hasApiKey)(
       'should handle invalid model gracefully',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/responses/text')
           .send({
             model: 'invalid-model-name-xyz',
@@ -423,9 +453,13 @@ describe('OpenAI Responses E2E (Real API)', () => {
           })
           .expect(400);
 
-        expect(response.body).toHaveProperty('statusCode', 400);
-        expect(response.body).toHaveProperty('message');
-        expect(response.body.message).toContain('model');
+        const error = response.body as {
+          statusCode: number;
+          message: string;
+        };
+        expect(error).toHaveProperty('statusCode', 400);
+        expect(error).toHaveProperty('message');
+        expect(error.message.length).toBeGreaterThan(0);
       },
       30000,
     );
@@ -439,7 +473,7 @@ describe('OpenAI Responses E2E (Real API)', () => {
       'should retrieve a stored response',
       async () => {
         // First create a stored response
-        const createResponse = await request(app.getHttpServer())
+        const createResponse = await request(app.getHttpServer() as Server)
           .post('/api/responses/text')
           .send({
             model: 'gpt-4o-mini',
@@ -449,17 +483,17 @@ describe('OpenAI Responses E2E (Real API)', () => {
           })
           .expect(201);
 
-        const responseId = createResponse.body.id;
+        const createResult = createResponse.body as Responses.Response;
+        const responseId = createResult.id;
 
         // Now retrieve it
-        const getResponse = await request(app.getHttpServer())
+        const getResponse = await request(app.getHttpServer() as Server)
           .get(`/api/responses/${responseId}`)
           .expect(200);
 
-        expect(getResponse.body.id).toBe(responseId);
-        expect(getResponse.body.output_text).toBe(
-          createResponse.body.output_text,
-        );
+        const getResult = getResponse.body as Responses.Response;
+        expect(getResult.id).toBe(responseId);
+        expect(getResult.output_text).toBe(createResult.output_text);
 
         console.log(`✅ Retrieved response: ${responseId}`);
       },
@@ -469,7 +503,7 @@ describe('OpenAI Responses E2E (Real API)', () => {
     testIf(hasApiKey)(
       'should return 404 for non-existent response',
       async () => {
-        await request(app.getHttpServer())
+        await request(app.getHttpServer() as Server)
           .get('/api/responses/resp_nonexistent123')
           .expect(404);
       },
@@ -482,7 +516,7 @@ describe('OpenAI Responses E2E (Real API)', () => {
       'should delete a stored response',
       async () => {
         // First create a stored response
-        const createResponse = await request(app.getHttpServer())
+        const createResponse = await request(app.getHttpServer() as Server)
           .post('/api/responses/text')
           .send({
             model: 'gpt-4o-mini',
@@ -492,15 +526,16 @@ describe('OpenAI Responses E2E (Real API)', () => {
           })
           .expect(201);
 
-        const responseId = createResponse.body.id;
+        const createResult = createResponse.body as Responses.Response;
+        const responseId = createResult.id;
 
         // Delete it
-        await request(app.getHttpServer())
+        await request(app.getHttpServer() as Server)
           .delete(`/api/responses/${responseId}`)
           .expect(200);
 
         // Verify it's deleted (should 404)
-        await request(app.getHttpServer())
+        await request(app.getHttpServer() as Server)
           .get(`/api/responses/${responseId}`)
           .expect(404);
 

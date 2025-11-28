@@ -1,3 +1,4 @@
+import { Readable } from 'stream';
 import {
   IsImageFileValidConstraint,
   isMulterFile,
@@ -20,7 +21,7 @@ describe('IsImageFileValidConstraint', () => {
     mimetype,
     buffer: Buffer.alloc(size),
     size,
-    stream: null as any,
+    stream: null as unknown as Readable,
     destination: '',
     filename: '',
     path: '',
@@ -29,43 +30,43 @@ describe('IsImageFileValidConstraint', () => {
   describe('Mimetype validation', () => {
     it('should accept image/png', () => {
       const file = createMockFile('image/png', 1024);
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(true);
     });
 
     it('should accept image/jpeg', () => {
       const file = createMockFile('image/jpeg', 1024);
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(true);
     });
 
     it('should accept image/webp', () => {
       const file = createMockFile('image/webp', 1024);
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(true);
     });
 
     it('should reject image/gif', () => {
       const file = createMockFile('image/gif', 1024);
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(false);
     });
 
     it('should reject image/bmp', () => {
       const file = createMockFile('image/bmp', 1024);
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(false);
     });
 
     it('should reject application/pdf', () => {
       const file = createMockFile('application/pdf', 1024);
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(false);
     });
 
     it('should reject text/plain', () => {
       const file = createMockFile('text/plain', 1024);
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(false);
     });
   });
@@ -73,37 +74,37 @@ describe('IsImageFileValidConstraint', () => {
   describe('File size validation', () => {
     it('should accept file under 4MB', () => {
       const file = createMockFile('image/png', 1024 * 1024); // 1MB
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(true);
     });
 
     it('should accept file exactly at 4MB', () => {
       const file = createMockFile('image/png', 4 * 1024 * 1024); // 4MB
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(true);
     });
 
     it('should reject file over 4MB', () => {
       const file = createMockFile('image/png', 4 * 1024 * 1024 + 1); // 4MB + 1 byte
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(false);
     });
 
     it('should reject file at 5MB', () => {
       const file = createMockFile('image/png', 5 * 1024 * 1024);
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(false);
     });
 
     it('should accept small file (1KB)', () => {
       const file = createMockFile('image/png', 1024);
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(true);
     });
 
     it('should accept very small file (100 bytes)', () => {
       const file = createMockFile('image/png', 100);
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(true);
     });
   });
@@ -111,51 +112,51 @@ describe('IsImageFileValidConstraint', () => {
   describe('Combined validation', () => {
     it('should accept valid PNG at 3MB', () => {
       const file = createMockFile('image/png', 3 * 1024 * 1024);
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(true);
     });
 
     it('should reject invalid mimetype even if size is ok', () => {
       const file = createMockFile('image/gif', 1024);
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(false);
     });
 
     it('should reject valid mimetype if size is too large', () => {
       const file = createMockFile('image/png', 5 * 1024 * 1024);
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(false);
     });
   });
 
   describe('Invalid input types', () => {
     it('should reject non-Multer file object', () => {
-      const result = validator.validate({ notAFile: true }, {} as any);
+      const result = validator.validate({ notAFile: true });
       expect(result).toBe(false);
     });
 
     it('should accept null (for optional mask parameter)', () => {
-      const result = validator.validate(null, {} as any);
+      const result = validator.validate(null);
       expect(result).toBe(true);
     });
 
     it('should accept undefined (for optional mask parameter)', () => {
-      const result = validator.validate(undefined, {} as any);
+      const result = validator.validate(undefined);
       expect(result).toBe(true);
     });
 
     it('should reject string', () => {
-      const result = validator.validate('not-a-file', {} as any);
+      const result = validator.validate('not-a-file');
       expect(result).toBe(false);
     });
 
     it('should reject number', () => {
-      const result = validator.validate(12345, {} as any);
+      const result = validator.validate(12345);
       expect(result).toBe(false);
     });
 
     it('should reject array', () => {
-      const result = validator.validate([], {} as any);
+      const result = validator.validate([]);
       expect(result).toBe(false);
     });
   });
@@ -163,27 +164,27 @@ describe('IsImageFileValidConstraint', () => {
   describe('File object edge cases', () => {
     it('should reject file object missing mimetype', () => {
       const file = createMockFile('image/png', 1024);
-      delete (file as any).mimetype;
-      const result = validator.validate(file, {} as any);
+      delete (file as unknown as Record<string, unknown>).mimetype;
+      const result = validator.validate(file);
       expect(result).toBe(false);
     });
 
     it('should reject file object missing size', () => {
       const file = createMockFile('image/png', 1024);
-      delete (file as any).size;
-      const result = validator.validate(file, {} as any);
+      delete (file as unknown as Record<string, unknown>).size;
+      const result = validator.validate(file);
       expect(result).toBe(false);
     });
 
     it('should reject file object with empty mimetype', () => {
       const file = createMockFile('', 1024);
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(false);
     });
 
     it('should reject file object with zero size', () => {
       const file = createMockFile('image/png', 0);
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(false);
     });
 
@@ -195,19 +196,19 @@ describe('IsImageFileValidConstraint', () => {
         mimetype: 'image/png',
         buffer: Buffer.alloc(0),
         size: -1024,
-        stream: null as any,
+        stream: null as unknown as Readable,
         destination: '',
         filename: '',
         path: '',
       };
-      const result = validator.validate(file, {} as any);
+      const result = validator.validate(file);
       expect(result).toBe(false);
     });
   });
 
   describe('defaultMessage', () => {
     it('should return correct error message', () => {
-      const message = validator.defaultMessage({} as any);
+      const message = validator.defaultMessage();
       expect(message).toContain('Image file must be');
       expect(message).toContain('PNG, JPEG, or WEBP');
       expect(message).toContain('less than 4MB');
@@ -226,7 +227,7 @@ describe('isMulterFile type guard', () => {
     mimetype,
     buffer: Buffer.alloc(size),
     size,
-    stream: null as any,
+    stream: null as unknown as Readable,
     destination: '',
     filename: '',
     path: '',
@@ -239,25 +240,25 @@ describe('isMulterFile type guard', () => {
 
   it('should return false for object missing mimetype', () => {
     const file = createMockFile('image/png', 1024);
-    delete (file as any).mimetype;
+    delete (file as unknown as Record<string, unknown>).mimetype;
     expect(isMulterFile(file)).toBe(false);
   });
 
   it('should return false for object missing size', () => {
     const file = createMockFile('image/png', 1024);
-    delete (file as any).size;
+    delete (file as unknown as Record<string, unknown>).size;
     expect(isMulterFile(file)).toBe(false);
   });
 
   it('should return false for object missing buffer', () => {
     const file = createMockFile('image/png', 1024);
-    delete (file as any).buffer;
+    delete (file as unknown as Record<string, unknown>).buffer;
     expect(isMulterFile(file)).toBe(false);
   });
 
   it('should return false for object missing originalname', () => {
     const file = createMockFile('image/png', 1024);
-    delete (file as any).originalname;
+    delete (file as unknown as Record<string, unknown>).originalname;
     expect(isMulterFile(file)).toBe(false);
   });
 

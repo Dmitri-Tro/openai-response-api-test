@@ -14,7 +14,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           type: 'code_interpreter',
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should accept code_interpreter with valid container', () => {
@@ -26,7 +26,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should ignore non-code_interpreter tools', () => {
@@ -36,27 +36,27 @@ describe('IsCodeInterpreterToolConstraint', () => {
           vector_store_ids: ['vs_abc123'],
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should handle non-array input', () => {
       const tools = 'not an array';
-      expect(constraint.validate(tools, {} as any)).toBe(true); // Let @IsArray handle
+      expect(constraint.validate(tools)).toBe(true); // Let @IsArray handle
     });
 
     it('should handle null input', () => {
       const tools = null;
-      expect(constraint.validate(tools, {} as any)).toBe(true); // Let @IsArray handle
+      expect(constraint.validate(tools)).toBe(true); // Let @IsArray handle
     });
 
     it('should handle undefined input', () => {
       const tools = undefined;
-      expect(constraint.validate(tools, {} as any)).toBe(true); // Let @IsArray handle
+      expect(constraint.validate(tools)).toBe(true); // Let @IsArray handle
     });
 
     it('should handle empty array', () => {
       const tools: unknown[] = [];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
   });
 
@@ -70,7 +70,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should reject container.type = "manual"', () => {
@@ -82,7 +82,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject container.type = "persistent"', () => {
@@ -94,7 +94,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject container.type = empty string', () => {
@@ -106,7 +106,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject container without type field', () => {
@@ -116,7 +116,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           container: {},
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject container.type = null', () => {
@@ -128,7 +128,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject container.type = undefined', () => {
@@ -140,7 +140,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject container.type = number', () => {
@@ -152,7 +152,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject container.type = object', () => {
@@ -164,7 +164,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject container.type = array', () => {
@@ -176,7 +176,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
   });
 
@@ -188,7 +188,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           container: null,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should accept string container (container ID)', () => {
@@ -198,7 +198,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           container: 'container_abc123xyz789',
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should accept container ID with proper prefix', () => {
@@ -208,7 +208,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           container: 'container_def456uvw012',
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should reject empty string container', () => {
@@ -218,7 +218,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           container: '',
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject array container', () => {
@@ -228,7 +228,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           container: ['auto'],
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject number container', () => {
@@ -238,7 +238,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           container: 123,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should accept undefined container (optional)', () => {
@@ -248,7 +248,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           container: undefined,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
   });
 
@@ -263,7 +263,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should accept multiple valid file_ids', () => {
@@ -280,7 +280,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should accept file_ids with exactly 24 characters after prefix', () => {
@@ -293,7 +293,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should accept file_ids with more than 24 characters (OpenAI may vary)', () => {
@@ -306,7 +306,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should accept file_ids with alphanumeric characters', () => {
@@ -319,7 +319,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should reject empty file_ids array', () => {
@@ -332,7 +332,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject file_ids not starting with "file-"', () => {
@@ -345,7 +345,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject file_ids with wrong prefix', () => {
@@ -358,7 +358,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject file_ids with "files-" prefix', () => {
@@ -371,7 +371,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject non-string file_ids', () => {
@@ -384,7 +384,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject file_ids with objects', () => {
@@ -397,7 +397,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject mixed valid and invalid file_ids', () => {
@@ -410,7 +410,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject non-array file_ids', () => {
@@ -423,7 +423,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject null file_ids', () => {
@@ -436,7 +436,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should accept undefined file_ids (optional)', () => {
@@ -449,7 +449,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should accept container without file_ids field (optional)', () => {
@@ -461,7 +461,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
   });
 
@@ -477,7 +477,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           vector_store_ids: ['vs_abc123'],
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should validate mixed tool array (code_interpreter + web_search)', () => {
@@ -493,7 +493,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           type: 'web_search',
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should validate mixed tool array (code_interpreter + function)', () => {
@@ -514,7 +514,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should validate all tools together', () => {
@@ -530,7 +530,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should fail if code_interpreter has invalid container', () => {
@@ -543,7 +543,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           type: 'web_search', // Valid tool
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should validate multiple code_interpreter tools', () => {
@@ -563,7 +563,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
   });
 
@@ -575,7 +575,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           container: { type: 'auto' },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true); // Ignores non-code_interpreter
+      expect(constraint.validate(tools)).toBe(true); // Ignores non-code_interpreter
     });
 
     it('should handle tool with undefined type', () => {
@@ -585,7 +585,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           container: { type: 'auto' },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true); // Ignores non-code_interpreter
+      expect(constraint.validate(tools)).toBe(true); // Ignores non-code_interpreter
     });
 
     it('should handle tool without type field', () => {
@@ -594,27 +594,27 @@ describe('IsCodeInterpreterToolConstraint', () => {
           container: { type: 'auto' },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true); // Ignores non-code_interpreter
+      expect(constraint.validate(tools)).toBe(true); // Ignores non-code_interpreter
     });
 
     it('should handle null tool in array', () => {
       const tools = [null];
-      expect(constraint.validate(tools, {} as any)).toBe(true); // Ignores null
+      expect(constraint.validate(tools)).toBe(true); // Ignores null
     });
 
     it('should handle undefined tool in array', () => {
       const tools = [undefined];
-      expect(constraint.validate(tools, {} as any)).toBe(true); // Ignores undefined
+      expect(constraint.validate(tools)).toBe(true); // Ignores undefined
     });
 
     it('should handle string in tools array', () => {
       const tools = ['not an object'];
-      expect(constraint.validate(tools, {} as any)).toBe(true); // Ignores non-objects
+      expect(constraint.validate(tools)).toBe(true); // Ignores non-objects
     });
 
     it('should handle number in tools array', () => {
       const tools = [123];
-      expect(constraint.validate(tools, {} as any)).toBe(true); // Ignores non-objects
+      expect(constraint.validate(tools)).toBe(true); // Ignores non-objects
     });
 
     it('should handle mixed valid and invalid tools', () => {
@@ -625,7 +625,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
         { type: 'web_search' },
         'string',
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should reject if any code_interpreter is invalid', () => {
@@ -633,7 +633,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
         { type: 'code_interpreter', container: { type: 'auto' } }, // Valid
         { type: 'code_interpreter', container: { type: 'manual' } }, // Invalid
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
   });
 
@@ -663,7 +663,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should accept minimal code_interpreter configuration', () => {
@@ -672,7 +672,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           type: 'code_interpreter',
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should reject code_interpreter with invalid container and valid file_ids', () => {
@@ -685,7 +685,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject code_interpreter with valid container and invalid file_ids', () => {
@@ -698,7 +698,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should handle deeply nested invalid structures', () => {
@@ -717,7 +717,7 @@ describe('IsCodeInterpreterToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
   });
 });

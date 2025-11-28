@@ -14,8 +14,12 @@ describe('RetryInterceptor', () => {
   let mockLoggerService: jest.Mocked<LoggerService>;
   let mockExecutionContext: jest.Mocked<ExecutionContext>;
   let mockCallHandler: jest.Mocked<CallHandler>;
+  let handleSpy: jest.Mock;
 
   beforeEach(() => {
+    // Create spy first
+    handleSpy = jest.fn();
+
     // Mock LoggerService using factory
     mockLoggerService = createMockLoggerService();
 
@@ -35,7 +39,7 @@ describe('RetryInterceptor', () => {
     } as unknown as jest.Mocked<ExecutionContext>;
 
     mockCallHandler = {
-      handle: jest.fn(),
+      handle: handleSpy,
     } as unknown as jest.Mocked<CallHandler>;
   });
 
@@ -46,7 +50,7 @@ describe('RetryInterceptor', () => {
   describe('Successful Requests', () => {
     it('should pass through successful requests without retry', async () => {
       const response = { id: 'resp_123', output_text: 'Success' };
-      mockCallHandler.handle.mockReturnValue(of(response));
+      handleSpy.mockReturnValue(of(response));
 
       const result$ = interceptor.intercept(
         mockExecutionContext,
@@ -55,7 +59,7 @@ describe('RetryInterceptor', () => {
       const result = await lastValueFrom(result$);
 
       expect(result).toEqual(response);
-      expect(mockCallHandler.handle).toHaveBeenCalledTimes(1);
+      expect(handleSpy).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -67,7 +71,7 @@ describe('RetryInterceptor', () => {
       );
       let attemptCount = 0;
 
-      mockCallHandler.handle.mockImplementation(() => {
+      handleSpy.mockImplementation(() => {
         attemptCount++;
         if (attemptCount < 3) {
           return throwError(() => error);
@@ -84,7 +88,9 @@ describe('RetryInterceptor', () => {
           expect(attemptCount).toBe(3);
           done();
         },
-        error: (err) => done(err),
+        error: (err) => {
+          done(err);
+        },
       });
     }, 5000);
 
@@ -92,7 +98,7 @@ describe('RetryInterceptor', () => {
       const error = { status: 429, message: 'Rate limit exceeded' };
       let attemptCount = 0;
 
-      mockCallHandler.handle.mockImplementation(() => {
+      handleSpy.mockImplementation(() => {
         attemptCount++;
         if (attemptCount < 2) {
           return throwError(() => error);
@@ -106,7 +112,9 @@ describe('RetryInterceptor', () => {
           expect(attemptCount).toBe(2);
           done();
         },
-        error: (err) => done(err),
+        error: (err) => {
+          done(err);
+        },
       });
     }, 5000);
   });
@@ -119,7 +127,7 @@ describe('RetryInterceptor', () => {
       );
       let attemptCount = 0;
 
-      mockCallHandler.handle.mockImplementation(() => {
+      handleSpy.mockImplementation(() => {
         attemptCount++;
         if (attemptCount < 2) {
           return throwError(() => error);
@@ -132,7 +140,9 @@ describe('RetryInterceptor', () => {
           expect(attemptCount).toBe(2);
           done();
         },
-        error: (err) => done(err),
+        error: (err) => {
+          done(err);
+        },
       });
     }, 5000);
 
@@ -140,7 +150,7 @@ describe('RetryInterceptor', () => {
       const error = new HttpException('Bad Gateway', HttpStatus.BAD_GATEWAY);
       let attemptCount = 0;
 
-      mockCallHandler.handle.mockImplementation(() => {
+      handleSpy.mockImplementation(() => {
         attemptCount++;
         if (attemptCount < 2) {
           return throwError(() => error);
@@ -153,7 +163,9 @@ describe('RetryInterceptor', () => {
           expect(attemptCount).toBe(2);
           done();
         },
-        error: (err) => done(err),
+        error: (err) => {
+          done(err);
+        },
       });
     }, 5000);
 
@@ -164,7 +176,7 @@ describe('RetryInterceptor', () => {
       );
       let attemptCount = 0;
 
-      mockCallHandler.handle.mockImplementation(() => {
+      handleSpy.mockImplementation(() => {
         attemptCount++;
         if (attemptCount < 2) {
           return throwError(() => error);
@@ -177,7 +189,9 @@ describe('RetryInterceptor', () => {
           expect(attemptCount).toBe(2);
           done();
         },
-        error: (err) => done(err),
+        error: (err) => {
+          done(err);
+        },
       });
     }, 5000);
   });
@@ -185,7 +199,7 @@ describe('RetryInterceptor', () => {
   describe('Non-Retryable Errors - Client Errors (4xx)', () => {
     it('should NOT retry on 400 Bad Request', async () => {
       const error = new HttpException('Bad Request', HttpStatus.BAD_REQUEST);
-      mockCallHandler.handle.mockReturnValue(throwError(() => error));
+      handleSpy.mockReturnValue(throwError(() => error));
 
       const result$ = interceptor.intercept(
         mockExecutionContext,
@@ -193,12 +207,12 @@ describe('RetryInterceptor', () => {
       );
 
       await expect(lastValueFrom(result$)).rejects.toBe(error);
-      expect(mockCallHandler.handle).toHaveBeenCalledTimes(1);
+      expect(handleSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should NOT retry on 401 Unauthorized', async () => {
       const error = new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
-      mockCallHandler.handle.mockReturnValue(throwError(() => error));
+      handleSpy.mockReturnValue(throwError(() => error));
 
       const result$ = interceptor.intercept(
         mockExecutionContext,
@@ -206,12 +220,12 @@ describe('RetryInterceptor', () => {
       );
 
       await expect(lastValueFrom(result$)).rejects.toBe(error);
-      expect(mockCallHandler.handle).toHaveBeenCalledTimes(1);
+      expect(handleSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should NOT retry on 404 Not Found', async () => {
       const error = new HttpException('Not Found', HttpStatus.NOT_FOUND);
-      mockCallHandler.handle.mockReturnValue(throwError(() => error));
+      handleSpy.mockReturnValue(throwError(() => error));
 
       const result$ = interceptor.intercept(
         mockExecutionContext,
@@ -219,7 +233,7 @@ describe('RetryInterceptor', () => {
       );
 
       await expect(lastValueFrom(result$)).rejects.toBe(error);
-      expect(mockCallHandler.handle).toHaveBeenCalledTimes(1);
+      expect(handleSpy).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -228,7 +242,7 @@ describe('RetryInterceptor', () => {
       const error = new Error('socket hang up ECONNRESET');
       let attemptCount = 0;
 
-      mockCallHandler.handle.mockImplementation(() => {
+      handleSpy.mockImplementation(() => {
         attemptCount++;
         if (attemptCount < 2) {
           return throwError(() => error);
@@ -241,7 +255,9 @@ describe('RetryInterceptor', () => {
           expect(attemptCount).toBe(2);
           done();
         },
-        error: (err) => done(err),
+        error: (err) => {
+          done(err);
+        },
       });
     }, 5000);
 
@@ -249,7 +265,7 @@ describe('RetryInterceptor', () => {
       const error = new Error('Connection timed out ETIMEDOUT');
       let attemptCount = 0;
 
-      mockCallHandler.handle.mockImplementation(() => {
+      handleSpy.mockImplementation(() => {
         attemptCount++;
         if (attemptCount < 2) {
           return throwError(() => error);
@@ -262,7 +278,9 @@ describe('RetryInterceptor', () => {
           expect(attemptCount).toBe(2);
           done();
         },
-        error: (err) => done(err),
+        error: (err) => {
+          done(err);
+        },
       });
     }, 5000);
 
@@ -270,7 +288,7 @@ describe('RetryInterceptor', () => {
       const error = { code: 'ECONNREFUSED', message: 'Connection refused' };
       let attemptCount = 0;
 
-      mockCallHandler.handle.mockImplementation(() => {
+      handleSpy.mockImplementation(() => {
         attemptCount++;
         if (attemptCount < 2) {
           return throwError(() => error);
@@ -283,7 +301,9 @@ describe('RetryInterceptor', () => {
           expect(attemptCount).toBe(2);
           done();
         },
-        error: (err) => done(err),
+        error: (err) => {
+          done(err);
+        },
       });
     }, 5000);
   });
@@ -296,7 +316,7 @@ describe('RetryInterceptor', () => {
       );
       let attemptCount = 0;
 
-      mockCallHandler.handle.mockImplementation(() => {
+      handleSpy.mockImplementation(() => {
         attemptCount++;
         return throwError(() => error);
       });
@@ -308,7 +328,9 @@ describe('RetryInterceptor', () => {
           expect(attemptCount).toBe(4);
           done();
         },
-        next: () => done(new Error('Should not succeed')),
+        next: () => {
+          done(new Error('Should not succeed'));
+        },
       });
     }, 5000);
 
@@ -316,7 +338,7 @@ describe('RetryInterceptor', () => {
       const error = new HttpException('Bad Request', HttpStatus.BAD_REQUEST);
       let attemptCount = 0;
 
-      mockCallHandler.handle.mockImplementation(() => {
+      handleSpy.mockImplementation(() => {
         attemptCount++;
         return throwError(() => error);
       });
@@ -339,7 +361,7 @@ describe('RetryInterceptor', () => {
       );
       let attemptCount = 0;
 
-      mockCallHandler.handle.mockImplementation(() => {
+      handleSpy.mockImplementation(() => {
         attemptCount++;
         if (attemptCount < 3) {
           return throwError(() => error);
@@ -353,7 +375,9 @@ describe('RetryInterceptor', () => {
           expect(attemptCount).toBe(3);
           done();
         },
-        error: (err) => done(err),
+        error: (err) => {
+          done(err);
+        },
       });
     }, 5000);
   });
@@ -363,7 +387,7 @@ describe('RetryInterceptor', () => {
       const error = { status: 503, message: 'Service temporarily unavailable' };
       let attemptCount = 0;
 
-      mockCallHandler.handle.mockImplementation(() => {
+      handleSpy.mockImplementation(() => {
         attemptCount++;
         if (attemptCount === 1) {
           return throwError(() => error);
@@ -377,7 +401,9 @@ describe('RetryInterceptor', () => {
           expect(result).toEqual({ id: 'resp_123', output_text: 'Success' });
           done();
         },
-        error: (err) => done(err),
+        error: (err) => {
+          done(err);
+        },
       });
     }, 5000);
 
@@ -386,7 +412,7 @@ describe('RetryInterceptor', () => {
       const nonRetryableError = { status: 400, message: 'Bad request' };
       let attemptCount = 0;
 
-      mockCallHandler.handle.mockImplementation(() => {
+      handleSpy.mockImplementation(() => {
         attemptCount++;
         if (attemptCount === 1) {
           return throwError(() => retryableError);
@@ -402,7 +428,9 @@ describe('RetryInterceptor', () => {
           expect(err).toBe(nonRetryableError);
           done();
         },
-        next: () => done(new Error('Should not succeed')),
+        next: () => {
+          done(new Error('Should not succeed'));
+        },
       });
     }, 5000);
   });

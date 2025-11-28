@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, Inject } from '@nestjs/common';
 import OpenAI from 'openai';
+import { OPENAI_CLIENT } from '../providers/openai-client.provider';
 import type { VectorStores } from 'openai/resources/vector-stores';
 import { LoggerService } from '../../common/services/logger.service';
 import { CreateVectorStoreDto } from '../dto/vector-stores/create-vector-store.dto';
@@ -10,6 +10,7 @@ import { SearchVectorStoreDto } from '../dto/vector-stores/search-vector-store.d
 import { AddFileDto } from '../dto/vector-stores/add-file.dto';
 import { AddFileBatchDto } from '../dto/vector-stores/add-file-batch.dto';
 import { ListVectorStoreFilesDto } from '../dto/vector-stores/list-vector-store-files.dto';
+import { validateChunkingParametersOrThrow } from '../validators/chunking-strategy.validator';
 
 /**
  * Service for interacting with OpenAI Vector Stores API
@@ -38,36 +39,49 @@ import { ListVectorStoreFilesDto } from '../dto/vector-stores/list-vector-store-
  */
 @Injectable()
 export class OpenAIVectorStoresService {
-  private client: OpenAI;
-
   constructor(
-    private readonly configService: ConfigService,
+    @Inject(OPENAI_CLIENT) private readonly client: OpenAI,
     private readonly loggerService: LoggerService,
-  ) {
-    const apiKey = this.configService.get<string>('openai.apiKey');
-    const baseURL = this.configService.get<string>('openai.baseUrl');
-
-    if (!apiKey) {
-      throw new Error('OpenAI API key is not configured');
-    }
-
-    this.client = new OpenAI({
-      apiKey,
-      baseURL,
-      timeout: this.configService.get<number>('openai.timeout'),
-      maxRetries: this.configService.get<number>('openai.maxRetries'),
-    });
-  }
+  ) {}
 
   // ============================================================
   // VECTOR STORE MANAGEMENT (6 methods)
   // ============================================================
 
   /**
-   * Create a new vector store
+   * Create a new vector store for semantic search over files
+   *
+   * **Chunking Strategies**:
+   * - `auto`: OpenAI determines optimal chunk size
+   * - `static`: Manual control (max_chunk_size_tokens: 100-4096, chunk_overlap_tokens: ≤ max/2)
+   *
+   * **Expiration**: Files auto-delete after inactivity (anchor: 'last_active_at', days: 1-365)
    *
    * @param dto - Vector store creation parameters
    * @returns Created vector store with status: 'in_progress' | 'completed'
+   *
+   * @example
+   * ```typescript
+   * // Basic vector store
+   * const vectorStore = await service.createVectorStore({
+   *   name: 'Product Documentation',
+   *   file_ids: ['file-abc123', 'file-xyz789']
+   * });
+   *
+   * // With custom chunking
+   * const vectorStore = await service.createVectorStore({
+   *   name: 'Technical Docs',
+   *   file_ids: ['file-abc123'],
+   *   chunking_strategy: {
+   *     type: 'static',
+   *     static: {
+   *       max_chunk_size_tokens: 800,
+   *       chunk_overlap_tokens: 400
+   *     }
+   *   },
+   *   expires_after: { anchor: 'last_active_at', days: 30 }
+   * });
+   * ```
    */
   async createVectorStore(
     dto: CreateVectorStoreDto,
@@ -242,11 +256,39 @@ export class OpenAIVectorStoresService {
   }
 
   /**
-   * Search a vector store
+   * Search a vector store using semantic similarity
+   *
+   * **Search Parameters**:
+   * - `query`: Search text (single string or array for batch queries)
+   * - `max_num_results`: 1-50 results (default: 20)
+   * - `ranking_options`: Ranker type and score threshold (0-1)
+   * - `filters`: Filter by file_id array
    *
    * @param vectorStoreId - Vector store ID
    * @param dto - Search parameters
-   * @returns Array of search results
+   * @returns Array of search results with scores and content
+   *
+   * @example
+   * ```typescript
+   * // Basic search
+   * const results = await service.searchVectorStore('vs_abc123', {
+   *   query: 'What is the return policy?',
+   *   max_num_results: 5
+   * });
+   *
+   * // Advanced search with filters
+   * const results = await service.searchVectorStore('vs_abc123', {
+   *   query: 'API authentication methods',
+   *   max_num_results: 10,
+   *   ranking_options: {
+   *     ranker: 'default-2024-11-15',
+   *     score_threshold: 0.7
+   *   },
+   *   filters: {
+   *     file_ids: ['file-doc1', 'file-doc2']
+   *   }
+   * });
+   * ```
    */
   async searchVectorStore(
     vectorStoreId: string,
@@ -869,6 +911,9 @@ export class OpenAIVectorStoresService {
   /**
    * Validate chunking strategy parameters
    *
+   * Delegates to the validator function for consistency.
+   * Kept as public method for backward compatibility.
+   *
    * @param strategy - Chunking strategy to validate
    * @returns true if valid
    * @throws Error if invalid
@@ -876,23 +921,9 @@ export class OpenAIVectorStoresService {
   validateChunkingParameters(
     strategy: VectorStores.FileChunkingStrategyParam,
   ): boolean {
-    if (strategy.type === 'static' && 'static' in strategy) {
-      const staticConfig = strategy.static;
-      const maxTokens = staticConfig.max_chunk_size_tokens;
-      const overlapTokens = staticConfig.chunk_overlap_tokens;
-
-      if (maxTokens < 100 || maxTokens > 4096) {
-        throw new Error('max_chunk_size_tokens must be between 100 and 4096');
-      }
-
-      if (overlapTokens > maxTokens / 2) {
-        throw new Error(
-          'chunk_overlap_tokens cannot exceed half of max_chunk_size_tokens',
-        );
-      }
-    }
-
-    return true;
+    return validateChunkingParametersOrThrow(
+      strategy as unknown as Record<string, unknown>,
+    );
   }
 
   /**

@@ -5,7 +5,7 @@
  * Reduces code duplication across test files.
  */
 
-import type OpenAI from 'openai';
+import OpenAI from 'openai';
 import type { ConfigService } from '@nestjs/config';
 import type { LoggerService } from '../services/logger.service';
 import type { StreamState } from '../../openai/interfaces/streaming-events.interface';
@@ -80,7 +80,7 @@ export const createMockConfigService = (): jest.Mocked<ConfigService> => {
 export const createMockOpenAIResponse = (
   overrides?: Partial<Responses.Response>,
 ): Responses.Response => {
-  const defaults = {
+  const defaults: Responses.Response = {
     id: 'resp_test123',
     object: 'response' as const,
     created_at: 1234567890,
@@ -98,9 +98,21 @@ export const createMockOpenAIResponse = (
         reasoning_tokens: 0,
       },
     },
+    // Required fields from SDK
+    conversation: null,
+    error: null,
+    incomplete_details: null,
+    instructions: null,
+    metadata: null,
+    output: [],
+    parallel_tool_calls: false,
+    temperature: null,
+    tool_choice: 'auto' as const,
+    tools: [],
+    top_p: null,
   };
 
-  return { ...defaults, ...overrides } as Responses.Response;
+  return { ...defaults, ...overrides };
 };
 
 /**
@@ -209,8 +221,15 @@ export const createMockArgumentsHost = () => {
 
 /**
  * Helper to create OpenAI SDK error with proper typing
+ * @param ErrorClass - OpenAI error class constructor
+ * @param status - HTTP status code
+ * @param message - Error message
+ * @param requestId - Optional request ID
+ * @param headers - Optional headers
  */
-export const createOpenAIError = <T extends typeof OpenAI.APIError>(
+export const createOpenAIError = <
+  T extends new (...args: unknown[]) => unknown,
+>(
   ErrorClass: T,
   status: number,
   message: string,
@@ -228,13 +247,13 @@ export const createOpenAIError = <T extends typeof OpenAI.APIError>(
     },
     message,
     headers,
-  );
+  ) as InstanceType<T>;
 
   if (requestId) {
     (error as unknown as { request_id: string }).request_id = requestId;
   }
 
-  return error as InstanceType<T>;
+  return error;
 };
 
 /**

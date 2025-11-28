@@ -7,9 +7,27 @@ import type { VectorStores } from 'openai/resources/vector-stores';
 
 describe('VectorStoresController', () => {
   let controller: VectorStoresController;
-  let service: OpenAIVectorStoresService;
+  let createVectorStoreSpy: jest.Mock;
+  let retrieveVectorStoreSpy: jest.Mock;
+  let updateVectorStoreSpy: jest.Mock;
+  let listVectorStoresSpy: jest.Mock;
+  let deleteVectorStoreSpy: jest.Mock;
+  let searchVectorStoreSpy: jest.Mock;
+  let addFileSpy: jest.Mock;
+  let listFilesSpy: jest.Mock;
+  let getFileSpy: jest.Mock;
+  let updateFileSpy: jest.Mock;
+  let removeFileSpy: jest.Mock;
+  let getFileContentSpy: jest.Mock;
+  let createFileBatchSpy: jest.Mock;
+  let getFileBatchSpy: jest.Mock;
+  let cancelFileBatchSpy: jest.Mock;
+  let listBatchFilesSpy: jest.Mock;
+  let pollUntilCompleteSpy: jest.Mock;
+  let pollFileUntilCompleteSpy: jest.Mock;
+  let pollBatchUntilCompleteSpy: jest.Mock;
 
-  const mockFileCounts: VectorStores.FileCounts = {
+  const mockFileCounts = {
     in_progress: 0,
     completed: 2,
     failed: 0,
@@ -25,7 +43,7 @@ describe('VectorStoresController', () => {
     usage_bytes: 1024,
     file_counts: mockFileCounts,
     status: 'completed',
-    expires_after: null,
+    expires_after: undefined,
     expires_at: null,
     last_active_at: 1234567990,
     metadata: {},
@@ -70,43 +88,68 @@ describe('VectorStoresController', () => {
   };
 
   const mockSearchResult: VectorStores.VectorStoreSearchResponse = {
-    object: 'vector_store.search.result',
-    id: 'result_abc123',
     score: 0.95,
-    content: 'Sample search result content',
-    metadata: {},
+    content: [
+      {
+        type: 'text',
+        text: 'Sample search result content',
+      },
+    ],
+    attributes: null,
+    file_id: 'file-abc123',
+    filename: 'test-document.txt',
   };
 
   const mockFileContentResponse: VectorStores.FileContentResponse = {
-    id: 'chunk_abc123',
-    object: 'vector_store.file.chunk',
-    content: 'Sample file content chunk',
-    metadata: {},
+    type: 'text',
+    text: 'Sample file content chunk',
   };
 
-  const mockVectorStoreService = {
-    createVectorStore: jest.fn(),
-    retrieveVectorStore: jest.fn(),
-    updateVectorStore: jest.fn(),
-    listVectorStores: jest.fn(),
-    deleteVectorStore: jest.fn(),
-    searchVectorStore: jest.fn(),
-    addFile: jest.fn(),
-    listFiles: jest.fn(),
-    getFile: jest.fn(),
-    updateFile: jest.fn(),
-    removeFile: jest.fn(),
-    getFileContent: jest.fn(),
-    createFileBatch: jest.fn(),
-    getFileBatch: jest.fn(),
-    cancelFileBatch: jest.fn(),
-    listBatchFiles: jest.fn(),
-    pollUntilComplete: jest.fn(),
-    pollFileUntilComplete: jest.fn(),
-    pollBatchUntilComplete: jest.fn(),
-  };
+  let mockVectorStoreService: jest.Mocked<OpenAIVectorStoresService>;
 
   beforeEach(async () => {
+    createVectorStoreSpy = jest.fn();
+    retrieveVectorStoreSpy = jest.fn();
+    updateVectorStoreSpy = jest.fn();
+    listVectorStoresSpy = jest.fn();
+    deleteVectorStoreSpy = jest.fn();
+    searchVectorStoreSpy = jest.fn();
+    addFileSpy = jest.fn();
+    listFilesSpy = jest.fn();
+    getFileSpy = jest.fn();
+    updateFileSpy = jest.fn();
+    removeFileSpy = jest.fn();
+    getFileContentSpy = jest.fn();
+    createFileBatchSpy = jest.fn();
+    getFileBatchSpy = jest.fn();
+    cancelFileBatchSpy = jest.fn();
+    listBatchFilesSpy = jest.fn();
+    pollUntilCompleteSpy = jest.fn();
+    pollFileUntilCompleteSpy = jest.fn();
+    pollBatchUntilCompleteSpy = jest.fn();
+
+    mockVectorStoreService = {
+      createVectorStore: createVectorStoreSpy,
+      retrieveVectorStore: retrieveVectorStoreSpy,
+      updateVectorStore: updateVectorStoreSpy,
+      listVectorStores: listVectorStoresSpy,
+      deleteVectorStore: deleteVectorStoreSpy,
+      searchVectorStore: searchVectorStoreSpy,
+      addFile: addFileSpy,
+      listFiles: listFilesSpy,
+      getFile: getFileSpy,
+      updateFile: updateFileSpy,
+      removeFile: removeFileSpy,
+      getFileContent: getFileContentSpy,
+      createFileBatch: createFileBatchSpy,
+      getFileBatch: getFileBatchSpy,
+      cancelFileBatch: cancelFileBatchSpy,
+      listBatchFiles: listBatchFilesSpy,
+      pollUntilComplete: pollUntilCompleteSpy,
+      pollFileUntilComplete: pollFileUntilCompleteSpy,
+      pollBatchUntilComplete: pollBatchUntilCompleteSpy,
+    } as unknown as jest.Mocked<OpenAIVectorStoresService>;
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [VectorStoresController],
       providers: [
@@ -131,7 +174,6 @@ describe('VectorStoresController', () => {
     }).compile();
 
     controller = module.get<VectorStoresController>(VectorStoresController);
-    service = module.get<OpenAIVectorStoresService>(OpenAIVectorStoresService);
 
     jest.clearAllMocks();
   });
@@ -161,7 +203,7 @@ describe('VectorStoresController', () => {
 
       const result = await controller.createVectorStore(dto);
 
-      expect(service.createVectorStore).toHaveBeenCalledWith(dto);
+      expect(createVectorStoreSpy).toHaveBeenCalledWith(dto);
       expect(result).toEqual(mockVectorStore);
     });
 
@@ -173,7 +215,7 @@ describe('VectorStoresController', () => {
       const dto = { name: 'Minimal Store' };
       const result = await controller.createVectorStore(dto);
 
-      expect(service.createVectorStore).toHaveBeenCalledWith(dto);
+      expect(createVectorStoreSpy).toHaveBeenCalledWith(dto);
       expect(result).toEqual(mockVectorStore);
     });
 
@@ -206,7 +248,7 @@ describe('VectorStoresController', () => {
 
       const result = await controller.retrieveVectorStore('vs_abc123');
 
-      expect(service.retrieveVectorStore).toHaveBeenCalledWith('vs_abc123');
+      expect(retrieveVectorStoreSpy).toHaveBeenCalledWith('vs_abc123');
       expect(result).toEqual(mockVectorStore);
     });
 
@@ -249,7 +291,7 @@ describe('VectorStoresController', () => {
 
       const result = await controller.updateVectorStore('vs_abc123', dto);
 
-      expect(service.updateVectorStore).toHaveBeenCalledWith('vs_abc123', dto);
+      expect(updateVectorStoreSpy).toHaveBeenCalledWith('vs_abc123', dto);
       expect(result).toEqual(mockVectorStore);
     });
 
@@ -261,7 +303,7 @@ describe('VectorStoresController', () => {
       const dto = { name: 'New Name' };
       await controller.updateVectorStore('vs_abc123', dto);
 
-      expect(service.updateVectorStore).toHaveBeenCalledWith('vs_abc123', dto);
+      expect(updateVectorStoreSpy).toHaveBeenCalledWith('vs_abc123', dto);
     });
 
     it('should handle empty update', async () => {
@@ -271,7 +313,7 @@ describe('VectorStoresController', () => {
 
       await controller.updateVectorStore('vs_abc123', {});
 
-      expect(service.updateVectorStore).toHaveBeenCalledWith('vs_abc123', {});
+      expect(updateVectorStoreSpy).toHaveBeenCalledWith('vs_abc123', {});
     });
   });
 
@@ -283,7 +325,7 @@ describe('VectorStoresController', () => {
 
       const result = await controller.listVectorStores();
 
-      expect(service.listVectorStores).toHaveBeenCalledWith(undefined);
+      expect(listVectorStoresSpy).toHaveBeenCalledWith(undefined);
       expect(result).toEqual([mockVectorStore]);
     });
 
@@ -295,7 +337,7 @@ describe('VectorStoresController', () => {
       const dto = { limit: 20, order: 'desc' as const };
       const result = await controller.listVectorStores(dto);
 
-      expect(service.listVectorStores).toHaveBeenCalledWith(dto);
+      expect(listVectorStoresSpy).toHaveBeenCalledWith(dto);
       expect(result).toHaveLength(1);
     });
 
@@ -317,7 +359,7 @@ describe('VectorStoresController', () => {
 
       const result = await controller.deleteVectorStore('vs_abc123');
 
-      expect(service.deleteVectorStore).toHaveBeenCalledWith('vs_abc123');
+      expect(deleteVectorStoreSpy).toHaveBeenCalledWith('vs_abc123');
       expect(result).toEqual(mockVectorStoreDeleted);
       expect(result.deleted).toBe(true);
     });
@@ -352,7 +394,7 @@ describe('VectorStoresController', () => {
       const dto = { query: 'test query' };
       const result = await controller.searchVectorStore('vs_abc123', dto);
 
-      expect(service.searchVectorStore).toHaveBeenCalledWith('vs_abc123', dto);
+      expect(searchVectorStoreSpy).toHaveBeenCalledWith('vs_abc123', dto);
       expect(result).toEqual([mockSearchResult]);
     });
 
@@ -372,7 +414,7 @@ describe('VectorStoresController', () => {
 
       await controller.searchVectorStore('vs_abc123', dto);
 
-      expect(service.searchVectorStore).toHaveBeenCalledWith('vs_abc123', dto);
+      expect(searchVectorStoreSpy).toHaveBeenCalledWith('vs_abc123', dto);
     });
 
     it('should return search results with scores', async () => {
@@ -400,7 +442,7 @@ describe('VectorStoresController', () => {
       const dto = { file_id: 'file-abc123' };
       const result = await controller.addFile('vs_abc123', dto);
 
-      expect(service.addFile).toHaveBeenCalledWith('vs_abc123', dto);
+      expect(addFileSpy).toHaveBeenCalledWith('vs_abc123', dto);
       expect(result).toEqual(mockVectorStoreFile);
     });
 
@@ -420,7 +462,7 @@ describe('VectorStoresController', () => {
 
       await controller.addFile('vs_abc123', dto);
 
-      expect(service.addFile).toHaveBeenCalledWith('vs_abc123', dto);
+      expect(addFileSpy).toHaveBeenCalledWith('vs_abc123', dto);
     });
 
     it('should return file with completed status', async () => {
@@ -441,7 +483,7 @@ describe('VectorStoresController', () => {
 
       const result = await controller.listFiles('vs_abc123');
 
-      expect(service.listFiles).toHaveBeenCalledWith('vs_abc123', undefined);
+      expect(listFilesSpy).toHaveBeenCalledWith('vs_abc123', undefined);
       expect(result).toEqual([mockVectorStoreFile]);
     });
 
@@ -456,7 +498,7 @@ describe('VectorStoresController', () => {
 
       await controller.listFiles('vs_abc123', dto);
 
-      expect(service.listFiles).toHaveBeenCalledWith('vs_abc123', dto);
+      expect(listFilesSpy).toHaveBeenCalledWith('vs_abc123', dto);
     });
 
     it('should return empty array when no files', async () => {
@@ -474,7 +516,7 @@ describe('VectorStoresController', () => {
 
       const result = await controller.getFile('vs_abc123', 'file-abc123');
 
-      expect(service.getFile).toHaveBeenCalledWith('vs_abc123', 'file-abc123');
+      expect(getFileSpy).toHaveBeenCalledWith('vs_abc123', 'file-abc123');
       expect(result).toEqual(mockVectorStoreFile);
     });
 
@@ -508,7 +550,7 @@ describe('VectorStoresController', () => {
         attributes,
       );
 
-      expect(service.updateFile).toHaveBeenCalledWith(
+      expect(updateFileSpy).toHaveBeenCalledWith(
         'vs_abc123',
         'file-abc123',
         attributes,
@@ -521,7 +563,7 @@ describe('VectorStoresController', () => {
 
       await controller.updateFile('vs_abc123', 'file-abc123', null);
 
-      expect(service.updateFile).toHaveBeenCalledWith(
+      expect(updateFileSpy).toHaveBeenCalledWith(
         'vs_abc123',
         'file-abc123',
         null,
@@ -537,10 +579,7 @@ describe('VectorStoresController', () => {
 
       const result = await controller.removeFile('vs_abc123', 'file-abc123');
 
-      expect(service.removeFile).toHaveBeenCalledWith(
-        'vs_abc123',
-        'file-abc123',
-      );
+      expect(removeFileSpy).toHaveBeenCalledWith('vs_abc123', 'file-abc123');
       expect(result).toEqual(mockVectorStoreFileDeleted);
       expect(result.deleted).toBe(true);
     });
@@ -577,7 +616,7 @@ describe('VectorStoresController', () => {
         'file-abc123',
       );
 
-      expect(service.getFileContent).toHaveBeenCalledWith(
+      expect(getFileContentSpy).toHaveBeenCalledWith(
         'vs_abc123',
         'file-abc123',
       );
@@ -603,8 +642,8 @@ describe('VectorStoresController', () => {
         'file-abc123',
       );
 
-      expect(result[0].content).toBeDefined();
-      expect(result[0].object).toBe('vector_store.file.chunk');
+      expect(result[0].text).toBeDefined();
+      expect(result[0].type).toBe('text');
     });
   });
 
@@ -624,7 +663,7 @@ describe('VectorStoresController', () => {
 
       const result = await controller.createFileBatch('vs_abc123', dto);
 
-      expect(service.createFileBatch).toHaveBeenCalledWith('vs_abc123', dto);
+      expect(createFileBatchSpy).toHaveBeenCalledWith('vs_abc123', dto);
       expect(result).toEqual(mockVectorStoreFileBatch);
     });
 
@@ -642,7 +681,7 @@ describe('VectorStoresController', () => {
 
       await controller.createFileBatch('vs_abc123', dto);
 
-      expect(service.createFileBatch).toHaveBeenCalledWith('vs_abc123', dto);
+      expect(createFileBatchSpy).toHaveBeenCalledWith('vs_abc123', dto);
     });
 
     it('should return batch with file_counts', async () => {
@@ -667,10 +706,7 @@ describe('VectorStoresController', () => {
 
       const result = await controller.getFileBatch('vs_abc123', 'vsfb_abc123');
 
-      expect(service.getFileBatch).toHaveBeenCalledWith(
-        'vs_abc123',
-        'vsfb_abc123',
-      );
+      expect(getFileBatchSpy).toHaveBeenCalledWith('vs_abc123', 'vsfb_abc123');
       expect(result).toEqual(mockVectorStoreFileBatch);
     });
 
@@ -708,7 +744,7 @@ describe('VectorStoresController', () => {
         'vsfb_abc123',
       );
 
-      expect(service.cancelFileBatch).toHaveBeenCalledWith(
+      expect(cancelFileBatchSpy).toHaveBeenCalledWith(
         'vs_abc123',
         'vsfb_abc123',
       );
@@ -736,7 +772,7 @@ describe('VectorStoresController', () => {
         'vsfb_abc123',
       );
 
-      expect(service.listBatchFiles).toHaveBeenCalledWith(
+      expect(listBatchFilesSpy).toHaveBeenCalledWith(
         'vs_abc123',
         'vsfb_abc123',
         undefined,
@@ -753,7 +789,7 @@ describe('VectorStoresController', () => {
 
       await controller.listBatchFiles('vs_abc123', 'vsfb_abc123', dto);
 
-      expect(service.listBatchFiles).toHaveBeenCalledWith(
+      expect(listBatchFilesSpy).toHaveBeenCalledWith(
         'vs_abc123',
         'vsfb_abc123',
         dto,
@@ -784,10 +820,7 @@ describe('VectorStoresController', () => {
 
       const result = await controller.pollVectorStore('vs_abc123');
 
-      expect(service.pollUntilComplete).toHaveBeenCalledWith(
-        'vs_abc123',
-        30000,
-      );
+      expect(pollUntilCompleteSpy).toHaveBeenCalledWith('vs_abc123', 30000);
       expect(result).toEqual(mockVectorStore);
       expect(result.status).toBe('completed');
     });
@@ -799,10 +832,7 @@ describe('VectorStoresController', () => {
 
       const result = await controller.pollVectorStore('vs_abc123', 60000);
 
-      expect(service.pollUntilComplete).toHaveBeenCalledWith(
-        'vs_abc123',
-        60000,
-      );
+      expect(pollUntilCompleteSpy).toHaveBeenCalledWith('vs_abc123', 60000);
       expect(result).toEqual(mockVectorStore);
     });
 
@@ -824,7 +854,7 @@ describe('VectorStoresController', () => {
 
       const result = await controller.pollFile('vs_abc123', 'file-abc123');
 
-      expect(service.pollFileUntilComplete).toHaveBeenCalledWith(
+      expect(pollFileUntilCompleteSpy).toHaveBeenCalledWith(
         'vs_abc123',
         'file-abc123',
         30000,
@@ -844,7 +874,7 @@ describe('VectorStoresController', () => {
         60000,
       );
 
-      expect(service.pollFileUntilComplete).toHaveBeenCalledWith(
+      expect(pollFileUntilCompleteSpy).toHaveBeenCalledWith(
         'vs_abc123',
         'file-abc123',
         60000,

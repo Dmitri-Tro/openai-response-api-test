@@ -10,6 +10,28 @@ import {
   createMockStreamState,
 } from '../../../common/testing/test.factories';
 
+// Test data interfaces
+interface StructuralItemData {
+  item?: Record<string, unknown>;
+  sequence: number;
+}
+
+interface StructuralPartData {
+  part?: Record<string, unknown>;
+  sequence: number;
+}
+
+interface StructuralCombinedData {
+  item?: Record<string, unknown>;
+  part?: Record<string, unknown>;
+  sequence: number;
+}
+
+interface UnknownEventData {
+  type?: string;
+  sequence: number;
+}
+
 describe('StructuralEventsHandler', () => {
   let handler: StructuralEventsHandler;
   let mockLoggerService: jest.Mocked<LoggerService>;
@@ -57,7 +79,7 @@ describe('StructuralEventsHandler', () => {
       expect(results).toHaveLength(1);
       expect(results[0].event).toBe('output_item.added');
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as StructuralItemData;
       expect(data.item).toEqual({
         id: 'item_123',
         type: 'message',
@@ -100,7 +122,7 @@ describe('StructuralEventsHandler', () => {
       expect(results).toHaveLength(1);
       expect(results[0].event).toBe('content_part.added');
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as StructuralPartData;
       expect(data.part).toEqual({ id: 'part_123', type: 'text' });
     });
 
@@ -150,7 +172,7 @@ describe('StructuralEventsHandler', () => {
       Array.from(handler.handleStructuralEvent(event, mockState, sequence));
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'response.output_item.added',
@@ -174,7 +196,7 @@ describe('StructuralEventsHandler', () => {
       );
       const results: SSEEvent[] = Array.from(generator);
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as StructuralCombinedData;
       expect(data.item).toEqual({ id: 'item_abc' });
       expect(data.part).toEqual({ id: 'part_abc' });
     });
@@ -212,7 +234,7 @@ describe('StructuralEventsHandler', () => {
       Array.from(handler.handleUnknownEvent(event, mockState, sequence));
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'unknown_event',
@@ -232,7 +254,7 @@ describe('StructuralEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as UnknownEventData;
       expect(data.type).toBeUndefined();
     });
   });

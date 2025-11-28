@@ -139,3 +139,96 @@ export function IsImageModelSizeValid(validationOptions?: ValidationOptions) {
     });
   };
 }
+
+/**
+ * Helper function to validate image model-size compatibility
+ *
+ * Use this as a standalone validator in controllers or services.
+ *
+ * @param model - Image generation model ('gpt-image-1', 'dall-e-3', or 'dall-e-2')
+ * @param size - Image size string (e.g., '1024x1024', 'auto')
+ * @returns True if model-size combination is valid, false otherwise
+ *
+ * @example
+ * ```typescript
+ * // In a service
+ * if (!validateImageModelSize(dto.model, dto.size)) {
+ *   throw new BadRequestException(
+ *     getImageModelSizeErrorMessage(dto.model, dto.size)
+ *   );
+ * }
+ * ```
+ */
+export function validateImageModelSize(
+  model: string | undefined,
+  size: unknown,
+): boolean {
+  const effectiveModel = model || 'dall-e-2'; // Default to dall-e-2
+
+  // Size must be a string
+  if (typeof size !== 'string') {
+    return false;
+  }
+
+  // gpt-image-1 size validation
+  if (effectiveModel === 'gpt-image-1') {
+    const validGptImage1Sizes = ['1024x1024', '1024x1536', '1536x1024', 'auto'];
+    return validGptImage1Sizes.includes(size);
+  }
+
+  // DALL-E 3 size validation
+  if (effectiveModel === 'dall-e-3') {
+    const validDalle3Sizes = ['1024x1024', '1792x1024', '1024x1792'];
+    return validDalle3Sizes.includes(size);
+  }
+
+  // DALL-E 2 size validation
+  if (effectiveModel === 'dall-e-2') {
+    const validDalle2Sizes = ['256x256', '512x512', '1024x1024'];
+    return validDalle2Sizes.includes(size);
+  }
+
+  // Unknown model
+  return false;
+}
+
+/**
+ * Helper function to get detailed error message for image model-size validation
+ *
+ * @param model - Image generation model
+ * @param size - Image size that failed validation
+ * @returns Detailed error message
+ *
+ * @example
+ * ```typescript
+ * if (!validateImageModelSize(model, size)) {
+ *   const errorMessage = getImageModelSizeErrorMessage(model, size);
+ *   throw new BadRequestException(errorMessage);
+ * }
+ * ```
+ */
+export function getImageModelSizeErrorMessage(
+  model: string | undefined,
+  size: unknown,
+): string {
+  const effectiveModel = model || 'dall-e-2';
+
+  // Handle non-string size
+  if (typeof size !== 'string') {
+    return `Image size must be a string. Received: ${typeof size}`;
+  }
+
+  if (effectiveModel === 'gpt-image-1') {
+    return `Size '${size}' is not supported for gpt-image-1. Valid sizes: 1024x1024, 1024x1536, 1536x1024, auto`;
+  }
+
+  if (effectiveModel === 'dall-e-3') {
+    return `Size '${size}' is not supported for DALL-E 3. Valid sizes: 1024x1024, 1792x1024, 1024x1792`;
+  }
+
+  if (effectiveModel === 'dall-e-2') {
+    return `Size '${size}' is not supported for DALL-E 2. Valid sizes: 256x256, 512x512, 1024x1024`;
+  }
+
+  return `Invalid model-size combination: model='${effectiveModel}', size='${size}'`;
+}

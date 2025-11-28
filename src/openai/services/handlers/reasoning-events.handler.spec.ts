@@ -10,6 +10,22 @@ import {
   createMockStreamState,
 } from '../../../common/testing/test.factories';
 
+// Test data interfaces
+interface ReasoningDoneData {
+  reasoning_text: string;
+  sequence: number;
+}
+
+interface ReasoningSummaryDoneData {
+  reasoning_summary: string;
+  sequence: number;
+}
+
+interface ReasoningSummaryPartData {
+  part?: Record<string, unknown>;
+  sequence: number;
+}
+
 describe('ReasoningEventsHandler', () => {
   let handler: ReasoningEventsHandler;
   let mockLoggerService: jest.Mocked<LoggerService>;
@@ -101,7 +117,7 @@ describe('ReasoningEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'reasoning_delta',
@@ -179,7 +195,7 @@ describe('ReasoningEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'reasoning_done',
@@ -200,7 +216,7 @@ describe('ReasoningEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as ReasoningDoneData;
       expect(data.reasoning_text).toBe('');
     });
   });
@@ -264,7 +280,7 @@ describe('ReasoningEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'reasoning_summary_delta',
@@ -341,7 +357,7 @@ describe('ReasoningEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'reasoning_summary_done',
@@ -362,7 +378,7 @@ describe('ReasoningEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as ReasoningSummaryDoneData;
       expect(data.reasoning_summary).toBe('');
     });
   });
@@ -438,7 +454,7 @@ describe('ReasoningEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'response.reasoning_summary_part.added',
@@ -479,7 +495,7 @@ describe('ReasoningEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as ReasoningSummaryPartData;
       expect(data.part).toBeUndefined();
     });
   });

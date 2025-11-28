@@ -1,4 +1,4 @@
-import { validate } from 'class-validator';
+import { validate, ValidationArguments } from 'class-validator';
 import { IsVideoDurationConstraint } from './video-duration.validator';
 import { CreateVideoDto } from '../dto/create-video.dto';
 
@@ -136,7 +136,7 @@ describe('IsVideoDurationConstraint', () => {
     it('should return appropriate message for number type', () => {
       const message = validator.defaultMessage({
         value: 4,
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('must be a string literal');
       expect(message).toContain('not a number');
@@ -147,7 +147,7 @@ describe('IsVideoDurationConstraint', () => {
     it('should return appropriate message for non-number non-string type', () => {
       const message = validator.defaultMessage({
         value: true,
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('must be a string literal');
       expect(message).toContain('boolean');
@@ -156,7 +156,7 @@ describe('IsVideoDurationConstraint', () => {
     it('should return appropriate message for duration too short', () => {
       const message = validator.defaultMessage({
         value: '2',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('too short');
       expect(message).toContain('Minimum');
@@ -166,7 +166,7 @@ describe('IsVideoDurationConstraint', () => {
     it('should return appropriate message for duration too long', () => {
       const message = validator.defaultMessage({
         value: '20',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('exceeds maximum');
       expect(message).toContain('Maximum');
@@ -176,7 +176,7 @@ describe('IsVideoDurationConstraint', () => {
     it('should return appropriate message for unsupported in-range duration', () => {
       const message = validator.defaultMessage({
         value: '6',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('not supported');
       expect(message).toContain('"4"');
@@ -188,7 +188,7 @@ describe('IsVideoDurationConstraint', () => {
     it('should return appropriate message for malformed string', () => {
       const message = validator.defaultMessage({
         value: 'invalid',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('Invalid video duration');
       expect(message).toContain('"4"');
@@ -200,7 +200,7 @@ describe('IsVideoDurationConstraint', () => {
     it('should include cost information in error messages', () => {
       const message = validator.defaultMessage({
         value: 'invalid',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('lowest cost');
       expect(message).toContain('highest cost');
@@ -245,7 +245,7 @@ describe('IsVideoDurationConstraint', () => {
     it('should reject invalid duration in DTO', async () => {
       const dto = new CreateVideoDto();
       dto.prompt = 'Test video';
-      dto.seconds = '20' as any;
+      dto.seconds = '20' as unknown as typeof dto.seconds;
 
       const errors = await validate(dto);
       const secondsErrors = errors.filter((e) => e.property === 'seconds');

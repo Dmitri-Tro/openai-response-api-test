@@ -45,9 +45,7 @@ import {
  * ```
  */
 @ValidatorConstraint({ async: false })
-export class IsVideoDurationConstraint
-  implements ValidatorConstraintInterface
-{
+export class IsVideoDurationConstraint implements ValidatorConstraintInterface {
   private readonly validDurations = ['4', '8', '12'];
 
   private readonly durationInfo: Record<
@@ -76,7 +74,7 @@ export class IsVideoDurationConstraint
   }
 
   defaultMessage(args: ValidationArguments): string {
-    const duration = args.value;
+    const duration = args.value as string | number;
 
     if (typeof duration !== 'string') {
       if (typeof duration === 'number') {

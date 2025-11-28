@@ -8,6 +8,7 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigModule } from '@nestjs/config';
+import type { DynamicModule, Provider, Type } from '@nestjs/common';
 import OpenAI from 'openai';
 import type { Responses } from 'openai/resources/responses';
 import configuration from '../../src/config/configuration';
@@ -21,17 +22,22 @@ export async function createIntegrationTestModule(
   imports: unknown[],
   providers: unknown[],
 ): Promise<TestingModule> {
+  // Type assertion: imports and providers are validated by NestJS at runtime
+  const moduleImports = imports as Array<
+    Type<unknown> | DynamicModule | Promise<DynamicModule>
+  >;
+  const moduleProviders = providers as Provider[];
+
   return Test.createTestingModule({
     imports: [
       ConfigModule.forRoot({
         load: [configuration],
         isGlobal: true,
       }),
-
-      ...(imports as any[]),
+      ...moduleImports,
     ],
     providers: [
-      ...(providers as any[]),
+      ...moduleProviders,
       {
         provide: 'OPENAI_CLIENT',
         useValue: createMockOpenAIClient(),
@@ -61,8 +67,8 @@ export function createMockOpenAIClient(): jest.Mocked<OpenAI> {
  * Creates a mock streaming response (AsyncIterable)
  */
 export async function* createMockStreamingResponse(
-  events: Array<{ type: string; data?: any }>,
-): AsyncIterable<any> {
+  events: Array<{ type: string; data?: Record<string, unknown> }>,
+): AsyncIterable<{ type: string; [key: string]: unknown }> {
   for (const event of events) {
     yield await Promise.resolve({
       type: event.type,
@@ -85,6 +91,12 @@ export const MockResponses = {
         input_tokens: 10,
         output_tokens: 20,
         total_tokens: 30,
+        input_tokens_details: {
+          cached_tokens: 0,
+        },
+        output_tokens_details: {
+          reasoning_tokens: 0,
+        },
       },
       ...overrides,
     }),
@@ -96,13 +108,17 @@ export const MockResponses = {
     overrides?: Partial<Responses.Response>,
   ): Responses.Response =>
     createMockOpenAIResponse({
-      output_image: {
-        url: 'https://example.com/image.png',
-      },
+      output_text: 'Image generated',
       usage: {
         input_tokens: 15,
         output_tokens: 0,
         total_tokens: 15,
+        input_tokens_details: {
+          cached_tokens: 0,
+        },
+        output_tokens_details: {
+          reasoning_tokens: 0,
+        },
       },
       ...overrides,
     }),

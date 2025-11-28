@@ -677,8 +677,11 @@ export class OpenAIExceptionFilter implements ExceptionFilter {
               'param' in errorField
             ) {
               const paramValue = (errorField as { param: unknown }).param;
-              if (typeof paramValue === 'string' || paramValue === null) {
+              if (typeof paramValue === 'string') {
                 return paramValue;
+              }
+              if (paramValue === null) {
+                return null;
               }
             }
           }

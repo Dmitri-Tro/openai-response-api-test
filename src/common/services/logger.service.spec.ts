@@ -8,9 +8,15 @@ const mockMkdirSync = jest.fn();
 const mockAppendFileSync = jest.fn();
 
 jest.mock('fs', () => ({
-  existsSync: (...args: unknown[]) => mockExistsSync(...args),
-  mkdirSync: (...args: unknown[]) => mockMkdirSync(...args),
-  appendFileSync: (...args: unknown[]) => mockAppendFileSync(...args),
+  existsSync: (...args: unknown[]) => {
+    return mockExistsSync(...args) as boolean;
+  },
+  mkdirSync: (...args: unknown[]): void => {
+    mockMkdirSync(...args);
+  },
+  appendFileSync: (...args: unknown[]): void => {
+    mockAppendFileSync(...args);
+  },
 }));
 
 describe('LoggerService', () => {
@@ -71,7 +77,9 @@ describe('LoggerService', () => {
     });
 
     it('should use default log directory if not configured', async () => {
-      mockConfigService.get = jest.fn().mockReturnValue(undefined);
+      mockConfigService.get = jest
+        .fn()
+        .mockReturnValue(undefined) as unknown as typeof mockConfigService.get;
       mockExistsSync.mockReturnValue(true);
 
       const module: TestingModule = await Test.createTestingModule({
@@ -133,7 +141,9 @@ describe('LoggerService', () => {
 
       service.logOpenAIInteraction(entry);
 
-      const logContent = mockAppendFileSync.mock.calls[0][1];
+      const logContent = (
+        mockAppendFileSync.mock.calls[0] as unknown[]
+      )[1] as string;
       expect(logContent).toContain(JSON.stringify(entry, null, 2));
       expect(logContent).toContain('-'.repeat(80));
     });
@@ -206,7 +216,7 @@ describe('LoggerService', () => {
         if (key === 'nodeEnv') return 'development';
         if (key === 'logging.dir') return './test-logs';
         return undefined;
-      });
+      }) as unknown as typeof mockConfigService.get;
 
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
@@ -242,7 +252,7 @@ describe('LoggerService', () => {
         if (key === 'nodeEnv') return 'development';
         if (key === 'logging.dir') return './test-logs';
         return undefined;
-      });
+      }) as unknown as typeof mockConfigService.get;
 
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
       const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
@@ -278,7 +288,7 @@ describe('LoggerService', () => {
         if (key === 'nodeEnv') return 'production';
         if (key === 'logging.dir') return './test-logs';
         return undefined;
-      });
+      }) as unknown as typeof mockConfigService.get;
 
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
@@ -329,7 +339,9 @@ describe('LoggerService', () => {
 
       service.logStreamingEvent(entry);
 
-      const logContent = mockAppendFileSync.mock.calls[0][1];
+      const logContent = (
+        mockAppendFileSync.mock.calls[0] as unknown[]
+      )[1] as string;
       expect(logContent).toContain(JSON.stringify(entry, null, 2));
       expect(logContent).toContain('-'.repeat(80));
     });
@@ -339,7 +351,7 @@ describe('LoggerService', () => {
         if (key === 'nodeEnv') return 'development';
         if (key === 'logging.dir') return './test-logs';
         return undefined;
-      });
+      }) as unknown as typeof mockConfigService.get;
 
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
@@ -372,7 +384,7 @@ describe('LoggerService', () => {
         if (key === 'nodeEnv') return 'development';
         if (key === 'logging.dir') return './test-logs';
         return undefined;
-      });
+      }) as unknown as typeof mockConfigService.get;
 
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
@@ -400,7 +412,7 @@ describe('LoggerService', () => {
         if (key === 'nodeEnv') return 'development';
         if (key === 'logging.dir') return './test-logs';
         return undefined;
-      });
+      }) as unknown as typeof mockConfigService.get;
 
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
       const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();

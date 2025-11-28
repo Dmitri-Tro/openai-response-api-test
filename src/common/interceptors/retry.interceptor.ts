@@ -124,6 +124,11 @@ export class RetryInterceptor implements NestInterceptor {
     if (error instanceof HttpException) {
       const status = error.getStatus();
 
+      // Do NOT retry client errors (4xx) except rate limits
+      if (status >= 400 && status < 500 && status !== 429) {
+        return false;
+      }
+
       // Retry on rate limit (429) and server errors (5xx)
       if (status === 429 || (status >= 500 && status < 600)) {
         return true;
@@ -135,6 +140,11 @@ export class RetryInterceptor implements NestInterceptor {
     // Check for error objects with status property
     if (this.hasErrorStatus(error)) {
       const status = error.status;
+
+      // Do NOT retry client errors (4xx) except rate limits
+      if (status >= 400 && status < 500 && status !== 429) {
+        return false;
+      }
 
       // Retry on rate limit (429) and server errors (5xx)
       if (status === 429 || (status >= 500 && status < 600)) {

@@ -10,6 +10,40 @@ import {
   createMockStreamState,
 } from '../../../common/testing/test.factories';
 
+// Test data interfaces
+interface MCPCallDeltaData {
+  call_id: string;
+  delta: string;
+  sequence: number;
+}
+
+interface MCPCallDoneData {
+  call_id: string;
+  arguments: Record<string, unknown>;
+  sequence: number;
+}
+
+interface MCPCallCompletedData {
+  call_id: string;
+  result: Record<string, unknown>;
+  sequence: number;
+}
+
+interface MCPCallFailedData {
+  call_id: string;
+  error: {
+    code?: string;
+    message: string;
+  };
+  sequence: number;
+}
+
+interface MCPListToolsData {
+  tools?: Array<{ name: string; description?: string }>;
+  error?: { message: string };
+  sequence: number;
+}
+
 describe('MCPEventsHandler', () => {
   let handler: MCPEventsHandler;
   let mockLoggerService: jest.Mocked<LoggerService>;
@@ -66,7 +100,7 @@ describe('MCPEventsHandler', () => {
       Array.from(handler.handleMCPCallProgress(event, mockState, sequence));
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'mcp_call_in_progress',
@@ -84,7 +118,7 @@ describe('MCPEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as MCPCallDeltaData;
       expect(data).toEqual({
         call_id: 'mcp_789',
         delta: '{"action":"',
@@ -99,7 +133,7 @@ describe('MCPEventsHandler', () => {
       Array.from(handler.handleMCPCallDelta(event, mockState, sequence));
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'mcp_call_delta',
@@ -121,7 +155,7 @@ describe('MCPEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as MCPCallDoneData;
       expect(data.arguments).toEqual({
         server: 'zapier',
         action: 'send_email',
@@ -135,7 +169,7 @@ describe('MCPEventsHandler', () => {
       Array.from(handler.handleMCPCallDone(event, mockState, sequence));
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'mcp_call_done',
@@ -161,7 +195,7 @@ describe('MCPEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as MCPCallCompletedData;
       expect(data.result).toEqual({
         status: 'success',
         data: { email_sent: true },
@@ -175,7 +209,7 @@ describe('MCPEventsHandler', () => {
       Array.from(handler.handleMCPCallCompleted(event, mockState, sequence));
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'mcp_call_completed',
@@ -197,7 +231,7 @@ describe('MCPEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as MCPCallFailedData;
       expect(data.error).toEqual({
         code: 'authentication_failed',
         message: 'Invalid API key',
@@ -214,7 +248,7 @@ describe('MCPEventsHandler', () => {
       Array.from(handler.handleMCPCallFailed(event, mockState, sequence));
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'mcp_call_failed',
@@ -252,9 +286,9 @@ describe('MCPEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as MCPListToolsData;
       expect(data.tools).toHaveLength(2);
-      expect(data.tools[0].name).toBe('send_email');
+      expect(data.tools?.[0].name).toBe('send_email');
     });
 
     it('should yield mcp_list_tools.failed with error', () => {
@@ -268,7 +302,7 @@ describe('MCPEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as MCPListToolsData;
       expect(data.error).toEqual({ message: 'Connection timeout' });
     });
 
@@ -282,7 +316,7 @@ describe('MCPEventsHandler', () => {
       Array.from(handler.handleMCPListTools(event, mockState, sequence));
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'response.mcp_list_tools.completed',

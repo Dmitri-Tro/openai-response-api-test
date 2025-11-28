@@ -68,6 +68,7 @@ export class RankingOptionsDto {
     example: 0.7,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   @Max(1)
@@ -159,6 +160,7 @@ export class SearchVectorStoreDto {
     example: 10,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(50)

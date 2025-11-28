@@ -60,3 +60,73 @@ export function IsVectorStoreIdValid(validationOptions?: ValidationOptions) {
     });
   };
 }
+
+/**
+ * Helper function to validate vector store ID format
+ *
+ * Use this as a standalone validator in controllers or services.
+ *
+ * @param id - Vector store ID to validate
+ * @returns True if vector store ID is valid, false otherwise
+ *
+ * @example
+ * ```typescript
+ * // In a service
+ * if (!validateVectorStoreId(vectorStoreId)) {
+ *   throw new BadRequestException(
+ *     getVectorStoreIdErrorMessage(vectorStoreId)
+ *   );
+ * }
+ * ```
+ */
+export function validateVectorStoreId(id: unknown): boolean {
+  // Must be a string
+  if (typeof id !== 'string') {
+    return false;
+  }
+
+  // Must start with "vs_"
+  if (!id.startsWith('vs_')) {
+    return false;
+  }
+
+  // Must have content after "vs_" (length > 3)
+  if (id.length <= 3) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Helper function to get detailed error message for vector store ID validation
+ *
+ * @param id - Vector store ID that failed validation
+ * @returns Detailed error message
+ *
+ * @example
+ * ```typescript
+ * if (!validateVectorStoreId(id)) {
+ *   const errorMessage = getVectorStoreIdErrorMessage(id);
+ *   throw new BadRequestException(errorMessage);
+ * }
+ * ```
+ */
+export function getVectorStoreIdErrorMessage(id: unknown): string {
+  // Handle non-string
+  if (typeof id !== 'string') {
+    return `Vector store ID must be a string. Received: ${typeof id}`;
+  }
+
+  // Handle wrong prefix
+  if (!id.startsWith('vs_')) {
+    return `Vector store ID must start with "vs_". Received: "${id}"`;
+  }
+
+  // Handle empty content after prefix
+  if (id.length <= 3) {
+    return `Vector store ID must have content after "vs_" prefix. Received: "${id}"`;
+  }
+
+  return 'Vector store ID must be a string starting with "vs_" followed by an identifier';
+}

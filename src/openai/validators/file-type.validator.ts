@@ -53,13 +53,7 @@ export const ALLOWED_MIME_TYPES: Record<string, string[]> = {
     'application/xml',
     'text/xml',
   ],
-  vision: [
-    'image/png',
-    'image/jpeg',
-    'image/jpg',
-    'image/gif',
-    'image/webp',
-  ],
+  vision: ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'],
   batch: ['application/jsonl'],
   'fine-tune': ['application/jsonl'],
   user_data: [
@@ -172,9 +166,7 @@ export const EXTENSION_TO_MIME: Record<string, string> = {
  * ```
  */
 @ValidatorConstraint({ async: false })
-export class IsFileTypeValidConstraint
-  implements ValidatorConstraintInterface
-{
+export class IsFileTypeValidConstraint implements ValidatorConstraintInterface {
   validate(value: unknown, args: ValidationArguments): boolean {
     // Value must be a string (MIME type or filename)
     if (typeof value !== 'string') {
@@ -182,8 +174,8 @@ export class IsFileTypeValidConstraint
     }
 
     // Get purpose from validation context
-    const object = args.object as any;
-    const purpose = object.purpose;
+    const object = args.object as { purpose?: unknown };
+    const purpose = object.purpose as string;
 
     // If no purpose, cannot validate file type
     if (!purpose || typeof purpose !== 'string') {
@@ -204,9 +196,9 @@ export class IsFileTypeValidConstraint
   }
 
   defaultMessage(args: ValidationArguments): string {
-    const fileType = args.value;
-    const object = args.object as any;
-    const purpose = object.purpose;
+    const fileType = args.value as string;
+    const object = args.object as { purpose?: unknown };
+    const purpose = object.purpose as string;
 
     // Handle invalid file type
     if (typeof fileType !== 'string') {
@@ -225,7 +217,6 @@ export class IsFileTypeValidConstraint
 
     // File type not allowed for this purpose
     const mimeType = this.normalizeMimeType(fileType);
-    const allowedTypes = ALLOWED_MIME_TYPES[purpose];
 
     return `File type "${mimeType}" is not allowed for purpose "${purpose}".
 
@@ -326,9 +317,7 @@ ${this.getCommonFixes(mimeType, purpose)}`;
 
     // No specific fixes
     if (fixes.length === 0) {
-      fixes.push(
-        `  - Check that file format matches purpose requirements`,
-      );
+      fixes.push(`  - Check that file format matches purpose requirements`);
       fixes.push(`  - Consider using purpose "user_data" for general files`);
     }
 

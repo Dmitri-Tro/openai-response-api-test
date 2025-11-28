@@ -116,25 +116,25 @@ export class PricingService {
    * - output_tokens: Generated output tokens
    * - reasoning_tokens: Reasoning tokens (o-series models)
    *
-   * @param usage - Token usage information
    * @param model - Model name
+   * @param usage - Token usage information
    * @returns Estimated cost in USD
    *
    * @example
-   * const cost = pricingService.calculateCost(
-   *   { input_tokens: 1000, output_tokens: 500 },
-   *   'gpt-4o'
-   * );
+   * const cost = pricingService.calculateCost('gpt-4o', {
+   *   input_tokens: 1000,
+   *   output_tokens: 500,
+   * });
    * console.log(`Cost: $${cost.toFixed(6)}`); // Cost: $0.000008
    */
-  calculateCost(usage: TokenUsage | null | undefined, model: string): number {
+  calculateCost(model: string, usage?: TokenUsage | null): number {
     const pricing = this.getModelPricing(model);
     if (!pricing || !usage) return 0;
 
     let cost = 0;
 
     // Input tokens (regular)
-    if (usage.input_tokens) {
+    if (usage.input_tokens !== undefined) {
       cost += (usage.input_tokens / 1_000_000) * pricing.input;
     }
 
@@ -145,7 +145,7 @@ export class PricingService {
     }
 
     // Output tokens
-    if (usage.output_tokens) {
+    if (usage.output_tokens !== undefined) {
       cost += (usage.output_tokens / 1_000_000) * pricing.output;
     }
 
@@ -165,63 +165,18 @@ export class PricingService {
    * Convenience method with proper typing for Responses API.
    * Only uses fields that actually exist in the response data.
    *
-   * @param usage - Usage field from Responses.Response (or any usage-like object)
    * @param model - Model name
+   * @param usage - Usage field from Responses.Response (or any usage-like object)
    * @returns Estimated cost in USD
    *
    * @example
    * const response: Responses.Response = await client.responses.create({...});
-   * const cost = pricingService.estimateCost(response.usage, response.model);
+   * const cost = pricingService.estimateCost(response.model, response.usage);
    * console.log(`Request cost: $${cost.toFixed(6)}`);
    */
-  estimateCost(
-    usage: Record<string, unknown> | undefined,
-    model: string,
-  ): number {
+  estimateCost(model: string, usage?: TokenUsage): number {
     if (!usage) return 0;
-
-    // Extract nested structures safely
-    const inputDetails = usage.input_tokens_details as
-      | Record<string, unknown>
-      | undefined;
-    const outputDetails = usage.output_tokens_details as
-      | Record<string, unknown>
-      | undefined;
-
-    // Extract only fields that actually exist in the response
-    return this.calculateCost(
-      {
-        input_tokens:
-          typeof usage.input_tokens === 'number'
-            ? usage.input_tokens
-            : undefined,
-        output_tokens:
-          typeof usage.output_tokens === 'number'
-            ? usage.output_tokens
-            : undefined,
-        total_tokens:
-          typeof usage.total_tokens === 'number'
-            ? usage.total_tokens
-            : undefined,
-        input_tokens_details: inputDetails
-          ? {
-              cached_tokens:
-                typeof inputDetails.cached_tokens === 'number'
-                  ? inputDetails.cached_tokens
-                  : undefined,
-            }
-          : undefined,
-        output_tokens_details: outputDetails
-          ? {
-              reasoning_tokens:
-                typeof outputDetails.reasoning_tokens === 'number'
-                  ? outputDetails.reasoning_tokens
-                  : undefined,
-            }
-          : undefined,
-      },
-      model,
-    );
+    return this.calculateCost(model, usage);
   }
 
   /**

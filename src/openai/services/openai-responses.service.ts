@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
+import { OPENAI_CLIENT } from '../providers/openai-client.provider';
 import type { Responses } from 'openai/resources/responses';
 import { LoggerService } from '../../common/services/logger.service';
 import { PricingService } from '../../common/services/pricing.service';
@@ -24,6 +25,7 @@ import { AudioEventsHandler } from './handlers/audio-events.handler';
 import { MCPEventsHandler } from './handlers/mcp-events.handler';
 import { RefusalEventsHandler } from './handlers/refusal-events.handler';
 import { StructuralEventsHandler } from './handlers/structural-events.handler';
+import { ComputerUseEventsHandler } from './handlers/computer-use-events.handler';
 
 /**
  * Orchestrator service for interacting with OpenAI Responses API (SDK 6.2+)
@@ -33,10 +35,10 @@ import { StructuralEventsHandler } from './handlers/structural-events.handler';
  */
 @Injectable()
 export class OpenAIResponsesService {
-  private client: OpenAI;
-  private defaultModel: string;
+  private readonly defaultModel: string;
 
   constructor(
+    @Inject(OPENAI_CLIENT) private readonly client: OpenAI,
     private readonly configService: ConfigService,
     private readonly loggerService: LoggerService,
     private readonly pricingService: PricingService,
@@ -49,18 +51,10 @@ export class OpenAIResponsesService {
     private readonly mcpHandler: MCPEventsHandler,
     private readonly refusalHandler: RefusalEventsHandler,
     private readonly structuralHandler: StructuralEventsHandler,
+    private readonly computerUseHandler: ComputerUseEventsHandler,
   ) {
-    const apiKey = this.configService.get<string>('openai.apiKey');
-    const baseURL = this.configService.get<string>('openai.baseUrl');
     this.defaultModel =
       this.configService.get<string>('openai.defaultModel') || 'gpt-5';
-
-    this.client = new OpenAI({
-      apiKey,
-      baseURL,
-      timeout: this.configService.get<number>('openai.timeout'),
-      maxRetries: this.configService.get<number>('openai.maxRetries'),
-    });
   }
 
   /**
@@ -234,8 +228,8 @@ export class OpenAIResponsesService {
         metadata: {
           latency_ms: latency,
           tokens_used: usage?.total_tokens,
-          cached_tokens: usage?.cached_tokens,
-          reasoning_tokens: usage?.reasoning_tokens,
+          cached_tokens: usage?.input_tokens_details?.cached_tokens,
+          reasoning_tokens: usage?.output_tokens_details?.reasoning_tokens,
           cost_estimate: this.estimateCost(usage, response.model),
           rate_limit_headers: {},
           response_status: responseMetadata.status,
@@ -440,7 +434,7 @@ export class OpenAIResponsesService {
       }
 
       // Stream Options
-      if (dto.stream_options !== undefined) {
+      if (dto.stream_options) {
         params.stream_options = dto.stream_options;
       }
 
@@ -1079,8 +1073,8 @@ export class OpenAIResponsesService {
         metadata: {
           latency_ms: latency,
           tokens_used: usage?.total_tokens,
-          cached_tokens: usage?.cached_tokens,
-          reasoning_tokens: usage?.reasoning_tokens,
+          cached_tokens: usage?.input_tokens_details?.cached_tokens,
+          reasoning_tokens: usage?.output_tokens_details?.reasoning_tokens,
           cost_estimate: this.estimateCost(usage, response.model),
           rate_limit_headers: {},
           response_status: responseMetadata.status,
@@ -1542,7 +1536,7 @@ export class OpenAIResponsesService {
         const sequence = event.sequence_number || 0;
 
         // Use the same event routing as createTextResponseStream
-        switch (event.type) {
+        switch (event.type as string) {
           // ===== LIFECYCLE EVENTS (7) =====
           case STREAMING_EVENT_TYPES.RESPONSE_CREATED:
             yield* this.lifecycleHandler.handleResponseCreated(
@@ -1705,6 +1699,55 @@ export class OpenAIResponsesService {
 
           case STREAMING_EVENT_TYPES.CODE_INTERPRETER_CODE_DONE:
             yield* this.toolCallingHandler.handleCodeInterpreterCodeDone(
+              event,
+              state,
+              sequence,
+            );
+            break;
+
+          // ===== COMPUTER USE EVENTS (6) =====
+          case STREAMING_EVENT_TYPES.COMPUTER_USE_IN_PROGRESS:
+            yield* this.computerUseHandler.handleComputerUseProgress(
+              event,
+              state,
+              sequence,
+            );
+            break;
+
+          case STREAMING_EVENT_TYPES.COMPUTER_USE_ACTION_DELTA:
+            yield* this.computerUseHandler.handleActionDelta(
+              event,
+              state,
+              sequence,
+            );
+            break;
+
+          case STREAMING_EVENT_TYPES.COMPUTER_USE_ACTION_DONE:
+            yield* this.computerUseHandler.handleActionDone(
+              event,
+              state,
+              sequence,
+            );
+            break;
+
+          case STREAMING_EVENT_TYPES.COMPUTER_USE_OUTPUT_ITEM_ADDED:
+            yield* this.computerUseHandler.handleOutputItemAdded(
+              event,
+              state,
+              sequence,
+            );
+            break;
+
+          case STREAMING_EVENT_TYPES.COMPUTER_USE_OUTPUT_ITEM_DONE:
+            yield* this.computerUseHandler.handleOutputItemDone(
+              event,
+              state,
+              sequence,
+            );
+            break;
+
+          case STREAMING_EVENT_TYPES.COMPUTER_USE_COMPLETED:
+            yield* this.computerUseHandler.handleComputerUseCompleted(
               event,
               state,
               sequence,
@@ -1978,8 +2021,8 @@ export class OpenAIResponsesService {
         metadata: {
           latency_ms: latency,
           tokens_used: usage?.total_tokens,
-          cached_tokens: usage?.cached_tokens,
-          reasoning_tokens: usage?.reasoning_tokens,
+          cached_tokens: usage?.input_tokens_details?.cached_tokens,
+          reasoning_tokens: usage?.output_tokens_details?.reasoning_tokens,
           cost_estimate: this.estimateCost(usage, response.model),
           ...responseMetadata,
         },
@@ -2182,8 +2225,8 @@ export class OpenAIResponsesService {
         metadata: {
           latency_ms: latency,
           tokens_used: usage?.total_tokens,
-          cached_tokens: usage?.cached_tokens,
-          reasoning_tokens: usage?.reasoning_tokens,
+          cached_tokens: usage?.input_tokens_details?.cached_tokens,
+          reasoning_tokens: usage?.output_tokens_details?.reasoning_tokens,
           cost_estimate: this.estimateCost(usage, response.model),
           ...responseMetadata,
         },
@@ -2245,22 +2288,30 @@ export class OpenAIResponsesService {
    * @private
    */
   private extractUsage(response: Responses.Response): {
-    prompt_tokens?: number;
-    completion_tokens?: number;
+    input_tokens?: number;
+    output_tokens?: number;
     total_tokens?: number;
-    cached_tokens?: number;
-    reasoning_tokens?: number;
+    input_tokens_details?: {
+      cached_tokens?: number;
+    };
+    output_tokens_details?: {
+      reasoning_tokens?: number;
+    };
   } | null {
     if (response.usage) {
       const usage: {
-        prompt_tokens?: number;
-        completion_tokens?: number;
+        input_tokens?: number;
+        output_tokens?: number;
         total_tokens?: number;
-        cached_tokens?: number;
-        reasoning_tokens?: number;
+        input_tokens_details?: {
+          cached_tokens?: number;
+        };
+        output_tokens_details?: {
+          reasoning_tokens?: number;
+        };
       } = {
-        prompt_tokens: response.usage.input_tokens,
-        completion_tokens: response.usage.output_tokens,
+        input_tokens: response.usage.input_tokens,
+        output_tokens: response.usage.output_tokens,
         total_tokens: response.usage.total_tokens,
       };
 
@@ -2269,7 +2320,9 @@ export class OpenAIResponsesService {
         response.usage.input_tokens_details &&
         'cached_tokens' in response.usage.input_tokens_details
       ) {
-        usage.cached_tokens = response.usage.input_tokens_details.cached_tokens;
+        usage.input_tokens_details = {
+          cached_tokens: response.usage.input_tokens_details.cached_tokens,
+        };
       }
 
       // Extract reasoning tokens from output_tokens_details (for o-series models)
@@ -2277,8 +2330,10 @@ export class OpenAIResponsesService {
         response.usage.output_tokens_details &&
         'reasoning_tokens' in response.usage.output_tokens_details
       ) {
-        usage.reasoning_tokens =
-          response.usage.output_tokens_details.reasoning_tokens;
+        usage.output_tokens_details = {
+          reasoning_tokens:
+            response.usage.output_tokens_details.reasoning_tokens,
+        };
       }
 
       return usage;
@@ -2424,9 +2479,6 @@ export class OpenAIResponsesService {
           output_tokens_details?: {
             reasoning_tokens?: number;
           };
-          // Legacy field names for compatibility
-          prompt_tokens?: number;
-          completion_tokens?: number;
         }
       | null
       | undefined,
@@ -2434,16 +2486,7 @@ export class OpenAIResponsesService {
   ): number {
     if (!usage) return 0;
 
-    // Normalize legacy field names to new Responses API format
-    const normalizedUsage = {
-      input_tokens: usage.input_tokens || usage.prompt_tokens || 0,
-      output_tokens: usage.output_tokens || usage.completion_tokens || 0,
-      total_tokens: usage.total_tokens,
-      input_tokens_details: usage.input_tokens_details,
-      output_tokens_details: usage.output_tokens_details,
-    };
-
-    return this.pricingService.calculateCost(normalizedUsage, model);
+    return this.pricingService.calculateCost(model, usage);
   }
 
   /**

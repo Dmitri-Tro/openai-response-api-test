@@ -9,10 +9,13 @@ import type {
   ImageVariationDto,
 } from '../dto/images';
 import type { ImagesResponse } from '../interfaces/images';
+import type { Readable } from 'stream';
 
 describe('ImagesController', () => {
   let controller: ImagesController;
-  let service: OpenAIImagesService;
+  let generateImagesSpy: jest.Mock;
+  let editImageSpy: jest.Mock;
+  let createImageVariationSpy: jest.Mock;
 
   const mockImageResponse: ImagesResponse = {
     created: 1234567890,
@@ -42,7 +45,7 @@ describe('ImagesController', () => {
     mimetype: 'image/png',
     buffer: Buffer.from('mock image data'),
     size: 1024,
-    stream: null as any,
+    stream: null as unknown as Readable,
     destination: '',
     filename: '',
     path: '',
@@ -55,19 +58,25 @@ describe('ImagesController', () => {
     mimetype: 'image/png',
     buffer: Buffer.from('mock mask data'),
     size: 512,
-    stream: null as any,
+    stream: null as unknown as Readable,
     destination: '',
     filename: '',
     path: '',
   };
 
-  const mockImagesService = {
-    generateImages: jest.fn(),
-    editImage: jest.fn(),
-    createImageVariation: jest.fn(),
-  };
+  let mockImagesService: jest.Mocked<OpenAIImagesService>;
 
   beforeEach(async () => {
+    generateImagesSpy = jest.fn();
+    editImageSpy = jest.fn();
+    createImageVariationSpy = jest.fn();
+
+    mockImagesService = {
+      generateImages: generateImagesSpy,
+      editImage: editImageSpy,
+      createImageVariation: createImageVariationSpy,
+    } as unknown as jest.Mocked<OpenAIImagesService>;
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ImagesController],
       providers: [
@@ -92,7 +101,6 @@ describe('ImagesController', () => {
     }).compile();
 
     controller = module.get<ImagesController>(ImagesController);
-    service = module.get<OpenAIImagesService>(OpenAIImagesService);
 
     jest.clearAllMocks();
   });
@@ -112,8 +120,8 @@ describe('ImagesController', () => {
       const result = await controller.generateImages(dto);
 
       expect(result).toEqual(mockImageResponse);
-      expect(service.generateImages).toHaveBeenCalledWith(dto);
-      expect(service.generateImages).toHaveBeenCalledTimes(1);
+      expect(generateImagesSpy).toHaveBeenCalledWith(dto);
+      expect(generateImagesSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should generate images with DALL-E 3 parameters', async () => {
@@ -130,7 +138,7 @@ describe('ImagesController', () => {
       const result = await controller.generateImages(dto);
 
       expect(result).toEqual(mockImageResponse);
-      expect(service.generateImages).toHaveBeenCalledWith(dto);
+      expect(generateImagesSpy).toHaveBeenCalledWith(dto);
     });
 
     it('should generate multiple images with DALL-E 2', async () => {
@@ -148,7 +156,7 @@ describe('ImagesController', () => {
       const result = await controller.generateImages(dto);
 
       expect(result).toEqual(mockMultipleImagesResponse);
-      expect(service.generateImages).toHaveBeenCalledWith(dto);
+      expect(generateImagesSpy).toHaveBeenCalledWith(dto);
     });
 
     it('should generate images in base64 format', async () => {
@@ -164,8 +172,8 @@ describe('ImagesController', () => {
 
       const result = await controller.generateImages(dto);
 
-      expect(result.data[0]).toHaveProperty('b64_json');
-      expect(service.generateImages).toHaveBeenCalledWith(dto);
+      expect(result.data![0]).toHaveProperty('b64_json');
+      expect(generateImagesSpy).toHaveBeenCalledWith(dto);
     });
 
     it('should pass user parameter to service', async () => {
@@ -178,7 +186,7 @@ describe('ImagesController', () => {
 
       await controller.generateImages(dto);
 
-      expect(service.generateImages).toHaveBeenCalledWith(
+      expect(generateImagesSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           user: 'user-123',
         }),
@@ -194,7 +202,7 @@ describe('ImagesController', () => {
       };
 
       await expect(controller.generateImages(dto)).rejects.toThrow(error);
-      expect(service.generateImages).toHaveBeenCalledWith(dto);
+      expect(generateImagesSpy).toHaveBeenCalledWith(dto);
     });
   });
 
@@ -216,11 +224,7 @@ describe('ImagesController', () => {
       const result = await controller.editImage(files, dto);
 
       expect(result).toEqual(mockImageResponse);
-      expect(service.editImage).toHaveBeenCalledWith(
-        mockMulterFile,
-        undefined,
-        dto,
-      );
+      expect(editImageSpy).toHaveBeenCalledWith(mockMulterFile, undefined, dto);
     });
 
     it('should edit image with mask', async () => {
@@ -241,7 +245,7 @@ describe('ImagesController', () => {
       const result = await controller.editImage(files, dto);
 
       expect(result).toEqual(mockImageResponse);
-      expect(service.editImage).toHaveBeenCalledWith(
+      expect(editImageSpy).toHaveBeenCalledWith(
         mockMulterFile,
         mockMaskFile,
         dto,
@@ -270,11 +274,7 @@ describe('ImagesController', () => {
       const result = await controller.editImage(files, dto);
 
       expect(result).toEqual(mockMultipleImagesResponse);
-      expect(service.editImage).toHaveBeenCalledWith(
-        mockMulterFile,
-        undefined,
-        dto,
-      );
+      expect(editImageSpy).toHaveBeenCalledWith(mockMulterFile, undefined, dto);
     });
 
     it('should throw error when image is missing', async () => {
@@ -290,7 +290,7 @@ describe('ImagesController', () => {
       await expect(controller.editImage(files, dto)).rejects.toThrow(
         'Image file is required',
       );
-      expect(service.editImage).not.toHaveBeenCalled();
+      expect(editImageSpy).not.toHaveBeenCalled();
     });
 
     it('should throw error when image array is empty', async () => {
@@ -308,7 +308,7 @@ describe('ImagesController', () => {
       await expect(controller.editImage(files, dto)).rejects.toThrow(
         'Image file is required',
       );
-      expect(service.editImage).not.toHaveBeenCalled();
+      expect(editImageSpy).not.toHaveBeenCalled();
     });
 
     it('should handle service errors', async () => {
@@ -327,7 +327,7 @@ describe('ImagesController', () => {
       };
 
       await expect(controller.editImage(files, dto)).rejects.toThrow(error);
-      expect(service.editImage).toHaveBeenCalled();
+      expect(editImageSpy).toHaveBeenCalled();
     });
   });
 
@@ -342,10 +342,7 @@ describe('ImagesController', () => {
       const result = await controller.createImageVariation(mockMulterFile, dto);
 
       expect(result).toEqual(mockImageResponse);
-      expect(service.createImageVariation).toHaveBeenCalledWith(
-        mockMulterFile,
-        dto,
-      );
+      expect(createImageVariationSpy).toHaveBeenCalledWith(mockMulterFile, dto);
     });
 
     it('should create multiple variations', async () => {
@@ -361,10 +358,7 @@ describe('ImagesController', () => {
       const result = await controller.createImageVariation(mockMulterFile, dto);
 
       expect(result).toEqual(mockMultipleImagesResponse);
-      expect(service.createImageVariation).toHaveBeenCalledWith(
-        mockMulterFile,
-        dto,
-      );
+      expect(createImageVariationSpy).toHaveBeenCalledWith(mockMulterFile, dto);
     });
 
     it('should create variation with all parameters', async () => {
@@ -383,10 +377,7 @@ describe('ImagesController', () => {
       const result = await controller.createImageVariation(mockMulterFile, dto);
 
       expect(result).toEqual(mockImageResponse);
-      expect(service.createImageVariation).toHaveBeenCalledWith(
-        mockMulterFile,
-        dto,
-      );
+      expect(createImageVariationSpy).toHaveBeenCalledWith(mockMulterFile, dto);
     });
 
     it('should handle service errors', async () => {
@@ -398,7 +389,7 @@ describe('ImagesController', () => {
       await expect(
         controller.createImageVariation(mockMulterFile, dto),
       ).rejects.toThrow(error);
-      expect(service.createImageVariation).toHaveBeenCalled();
+      expect(createImageVariationSpy).toHaveBeenCalled();
     });
   });
 });

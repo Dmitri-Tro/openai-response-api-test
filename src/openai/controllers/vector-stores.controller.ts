@@ -7,8 +7,8 @@ import {
   Body,
   Param,
   Query,
-  UseInterceptors,
-  UseFilters,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -17,8 +17,6 @@ import {
   ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
-import { LoggingInterceptor } from '../../common/interceptors/logging.interceptor';
-import { OpenAIExceptionFilter } from '../../common/filters/openai-exception.filter';
 import { OpenAIVectorStoresService } from '../services/openai-vector-stores.service';
 import { CreateVectorStoreDto } from '../dto/vector-stores/create-vector-store.dto';
 import { UpdateVectorStoreDto } from '../dto/vector-stores/update-vector-store.dto';
@@ -49,8 +47,6 @@ import type { VectorStores } from 'openai/resources/vector-stores';
  */
 @ApiTags('Vector Stores API')
 @Controller('api/vector-stores')
-@UseInterceptors(LoggingInterceptor)
-@UseFilters(OpenAIExceptionFilter)
 export class VectorStoresController {
   constructor(
     private readonly vectorStoresService: OpenAIVectorStoresService,
@@ -65,6 +61,7 @@ export class VectorStoresController {
    * Create a new vector store
    */
   @Post()
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create a vector store',
     description: 'Create a new vector store for semantic search over files',
@@ -84,6 +81,7 @@ export class VectorStoresController {
    * Retrieve a vector store by ID
    */
   @Get(':vectorStoreId')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Retrieve a vector store',
     description: 'Get details of a specific vector store by ID',
@@ -108,6 +106,7 @@ export class VectorStoresController {
    * Update a vector store
    */
   @Patch(':vectorStoreId')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Update a vector store',
     description: 'Update vector store name, expiration, or metadata',
@@ -133,6 +132,7 @@ export class VectorStoresController {
    * List vector stores with pagination
    */
   @Get()
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'List vector stores',
     description: 'List all vector stores with cursor-based pagination',
@@ -152,6 +152,7 @@ export class VectorStoresController {
    * Delete a vector store
    */
   @Delete(':vectorStoreId')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Delete a vector store',
     description:
@@ -177,6 +178,7 @@ export class VectorStoresController {
    * Search a vector store
    */
   @Post(':vectorStoreId/search')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Search a vector store',
     description: 'Perform semantic search over files in a vector store',
@@ -206,6 +208,7 @@ export class VectorStoresController {
    * Add a file to a vector store
    */
   @Post(':vectorStoreId/files')
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Add a file to vector store',
     description:
@@ -232,6 +235,7 @@ export class VectorStoresController {
    * List files in a vector store
    */
   @Get(':vectorStoreId/files')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'List vector store files',
     description:
@@ -258,6 +262,7 @@ export class VectorStoresController {
    * Get a file from a vector store
    */
   @Get(':vectorStoreId/files/:fileId')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Get vector store file',
     description: 'Retrieve details of a specific file in a vector store',
@@ -288,6 +293,7 @@ export class VectorStoresController {
    * Update file attributes
    */
   @Patch(':vectorStoreId/files/:fileId')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Update file attributes',
     description: 'Update custom attributes for a file in a vector store',
@@ -324,6 +330,7 @@ export class VectorStoresController {
    * Remove a file from a vector store
    */
   @Delete(':vectorStoreId/files/:fileId')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Remove file from vector store',
     description:
@@ -355,6 +362,7 @@ export class VectorStoresController {
    * Get file content from a vector store
    */
   @Get(':vectorStoreId/files/:fileId/content')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Get file content',
     description: 'Retrieve parsed content chunks from a vector store file',
@@ -389,6 +397,7 @@ export class VectorStoresController {
    * Create a file batch operation
    */
   @Post(':vectorStoreId/file-batches')
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create file batch',
     description:
@@ -415,6 +424,7 @@ export class VectorStoresController {
    * Get a file batch
    */
   @Get(':vectorStoreId/file-batches/:batchId')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Get file batch',
     description: 'Retrieve details of a specific file batch operation',
@@ -445,6 +455,7 @@ export class VectorStoresController {
    * Cancel a file batch operation
    */
   @Post(':vectorStoreId/file-batches/:batchId/cancel')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Cancel file batch',
     description: 'Cancel an in-progress file batch operation',
@@ -478,6 +489,7 @@ export class VectorStoresController {
    * List files in a batch
    */
   @Get(':vectorStoreId/file-batches/:batchId/files')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'List batch files',
     description: 'List all files in a specific batch operation',
@@ -517,6 +529,7 @@ export class VectorStoresController {
    * Poll until vector store indexing completes
    */
   @Post(':vectorStoreId/poll')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Poll vector store',
     description: 'Wait for vector store indexing to complete (max 10 minutes)',
@@ -552,6 +565,7 @@ export class VectorStoresController {
    * Poll until file indexing completes
    */
   @Post(':vectorStoreId/files/:fileId/poll')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Poll file indexing',
     description: 'Wait for file indexing to complete (max 10 minutes)',

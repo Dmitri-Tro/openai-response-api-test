@@ -17,10 +17,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigModule } from '@nestjs/config';
 import OpenAI from 'openai';
-import type { Responses } from 'openai/resources/responses';
 import { OpenAIResponsesService } from '../../src/openai/services/openai-responses.service';
 import { ResponsesController } from '../../src/openai/controllers/responses.controller';
 import { LoggerService } from '../../src/common/services/logger.service';
+import { PricingService } from '../../src/common/services/pricing.service';
 import { OpenAIExceptionFilter } from '../../src/common/filters/openai-exception.filter';
 import { LifecycleEventsHandler } from '../../src/openai/services/handlers/lifecycle-events.handler';
 import { TextEventsHandler } from '../../src/openai/services/handlers/text-events.handler';
@@ -31,12 +31,23 @@ import { AudioEventsHandler } from '../../src/openai/services/handlers/audio-eve
 import { MCPEventsHandler } from '../../src/openai/services/handlers/mcp-events.handler';
 import { RefusalEventsHandler } from '../../src/openai/services/handlers/refusal-events.handler';
 import { StructuralEventsHandler } from '../../src/openai/services/handlers/structural-events.handler';
+import { ComputerUseEventsHandler } from '../../src/openai/services/handlers/computer-use-events.handler';
+import { OPENAI_CLIENT } from '../../src/openai/providers/openai-client.provider';
 import configuration from '../../src/config/configuration';
 import {
   createMockOpenAIResponse,
   createMockLoggerService,
 } from '../../src/common/testing/test.factories';
 import { CreateTextResponseDto } from '../../src/openai/dto/create-text-response.dto';
+
+/**
+ * Type-safe helper to access private client for testing
+ */
+const getClientFromService = (
+  svc: OpenAIResponsesService,
+): jest.Mocked<OpenAI> => {
+  return (svc as unknown as { client: OpenAI }).client as jest.Mocked<OpenAI>;
+};
 
 describe('Token Limits Edge Cases Integration', () => {
   let module: TestingModule;
@@ -55,6 +66,15 @@ describe('Token Limits Edge Cases Integration', () => {
 
     mockLoggerService = createMockLoggerService();
 
+    const mockOpenAIClient = {
+      responses: {
+        create: jest.fn(),
+        retrieve: jest.fn(),
+        cancel: jest.fn(),
+        delete: jest.fn(),
+      },
+    } as unknown as jest.Mocked<OpenAI>;
+
     module = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({
@@ -66,6 +86,7 @@ describe('Token Limits Edge Cases Integration', () => {
       providers: [
         OpenAIResponsesService,
         LoggerService,
+        PricingService,
         OpenAIExceptionFilter,
         LifecycleEventsHandler,
         TextEventsHandler,
@@ -76,6 +97,11 @@ describe('Token Limits Edge Cases Integration', () => {
         MCPEventsHandler,
         RefusalEventsHandler,
         StructuralEventsHandler,
+        ComputerUseEventsHandler,
+        {
+          provide: OPENAI_CLIENT,
+          useValue: mockOpenAIClient,
+        },
       ],
     })
       .overrideProvider(LoggerService)
@@ -84,7 +110,7 @@ describe('Token Limits Edge Cases Integration', () => {
 
     service = module.get<OpenAIResponsesService>(OpenAIResponsesService);
     controller = module.get<ResponsesController>(ResponsesController);
-    mockClient = (service as any).client as jest.Mocked<OpenAI>;
+    mockClient = getClientFromService(service);
   });
 
   afterAll(async () => {
@@ -114,14 +140,19 @@ describe('Token Limits Edge Cases Integration', () => {
       const mockResponse = createMockOpenAIResponse({
         output_text: 'This is a truncated response...',
         status: 'incomplete',
-        status_details: {
-          type: 'max_tokens',
-          reason: 'max_output_tokens_reached',
+        incomplete_details: {
+          reason: 'max_output_tokens',
         },
         usage: {
           input_tokens: 20,
           output_tokens: 100, // Exactly at limit
           total_tokens: 120,
+          input_tokens_details: {
+            cached_tokens: 0,
+          },
+          output_tokens_details: {
+            reasoning_tokens: 0,
+          },
         },
       });
 
@@ -134,8 +165,8 @@ describe('Token Limits Edge Cases Integration', () => {
 
       // Assert
       expect(result.status).toBe('incomplete');
-      expect(result.status_details?.type).toBe('max_tokens');
-      expect(result.usage.output_tokens).toBe(100);
+      expect(result.incomplete_details?.reason).toBe('max_output_tokens');
+      expect(result.usage?.output_tokens).toBe(100);
       expect(mockClient.responses.create).toHaveBeenCalledWith(
         expect.objectContaining({
           max_output_tokens: 100,
@@ -157,6 +188,12 @@ describe('Token Limits Edge Cases Integration', () => {
           input_tokens: 10,
           output_tokens: 1,
           total_tokens: 11,
+          input_tokens_details: {
+            cached_tokens: 0,
+          },
+          output_tokens_details: {
+            reasoning_tokens: 0,
+          },
         },
       });
 
@@ -168,7 +205,7 @@ describe('Token Limits Edge Cases Integration', () => {
       const result = await controller.createTextResponse(dto);
 
       // Assert
-      expect(result.usage.output_tokens).toBe(1);
+      expect(result.usage?.output_tokens).toBe(1);
       expect(result.output_text).toBe('Hi');
     });
 
@@ -186,6 +223,12 @@ describe('Token Limits Edge Cases Integration', () => {
           input_tokens: 50,
           output_tokens: 4000, // Under limit, completed naturally
           total_tokens: 4050,
+          input_tokens_details: {
+            cached_tokens: 0,
+          },
+          output_tokens_details: {
+            reasoning_tokens: 0,
+          },
         },
       });
 
@@ -198,7 +241,7 @@ describe('Token Limits Edge Cases Integration', () => {
 
       // Assert
       expect(result.status).toBe('completed');
-      expect(result.usage.output_tokens).toBeLessThan(4096);
+      expect(result.usage?.output_tokens).toBeLessThan(4096);
       expect(mockClient.responses.create).toHaveBeenCalledWith(
         expect.objectContaining({
           max_output_tokens: 4096,
@@ -216,14 +259,19 @@ describe('Token Limits Edge Cases Integration', () => {
       const mockResponse = createMockOpenAIResponse({
         output_text: 'Generated content that reaches exactly 500 tokens...',
         status: 'incomplete',
-        status_details: {
-          type: 'max_tokens',
-          reason: 'max_output_tokens_reached',
+        incomplete_details: {
+          reason: 'max_output_tokens',
         },
         usage: {
           input_tokens: 30,
           output_tokens: 500, // Exactly at limit
           total_tokens: 530,
+          input_tokens_details: {
+            cached_tokens: 0,
+          },
+          output_tokens_details: {
+            reasoning_tokens: 0,
+          },
         },
       });
 
@@ -239,8 +287,8 @@ describe('Token Limits Edge Cases Integration', () => {
         expect.objectContaining({
           metadata: expect.objectContaining({
             tokens_used: 530,
-          }),
-        }),
+          }) as unknown as Record<string, unknown>,
+        }) as unknown as Record<string, unknown>,
       );
     });
   });
@@ -260,6 +308,12 @@ describe('Token Limits Edge Cases Integration', () => {
           input_tokens: 2500, // Large input token count
           output_tokens: 100,
           total_tokens: 2600,
+          input_tokens_details: {
+            cached_tokens: 0,
+          },
+          output_tokens_details: {
+            reasoning_tokens: 0,
+          },
         },
       });
 
@@ -271,8 +325,8 @@ describe('Token Limits Edge Cases Integration', () => {
       const result = await controller.createTextResponse(dto);
 
       // Assert
-      expect(result.usage.input_tokens).toBeGreaterThan(1000);
-      expect(result.usage.total_tokens).toBeGreaterThan(2000);
+      expect(result.usage?.input_tokens).toBeGreaterThan(1000);
+      expect(result.usage?.total_tokens).toBeGreaterThan(2000);
     });
 
     it('should handle context_length_exceeded error', async () => {
@@ -332,6 +386,12 @@ describe('Token Limits Edge Cases Integration', () => {
           input_tokens: 50,
           output_tokens: 15000,
           total_tokens: 15050,
+          input_tokens_details: {
+            cached_tokens: 0,
+          },
+          output_tokens_details: {
+            reasoning_tokens: 0,
+          },
         },
       });
 
@@ -344,7 +404,7 @@ describe('Token Limits Edge Cases Integration', () => {
 
       // Assert
       expect(result.model).toBe('gpt-4o');
-      expect(result.usage.total_tokens).toBeGreaterThan(10000);
+      expect(result.usage?.total_tokens).toBeGreaterThan(10000);
     });
   });
 
@@ -361,14 +421,16 @@ describe('Token Limits Edge Cases Integration', () => {
         model: 'o1-preview',
         output_text: 'Solution after reasoning...',
         status: 'incomplete',
-        status_details: {
-          type: 'max_tokens',
-          reason: 'max_output_tokens_reached',
+        incomplete_details: {
+          reason: 'max_output_tokens',
         },
         usage: {
           input_tokens: 100,
           output_tokens: 5000, // At limit
           total_tokens: 5100,
+          input_tokens_details: {
+            cached_tokens: 0,
+          },
           output_tokens_details: {
             reasoning_tokens: 4000, // Most tokens used for reasoning
           },
@@ -384,16 +446,16 @@ describe('Token Limits Edge Cases Integration', () => {
 
       // Assert
       expect(result.status).toBe('incomplete');
-      expect(result.usage.output_tokens).toBe(5000);
-      expect(result.usage.output_tokens_details?.reasoning_tokens).toBe(4000);
+      expect(result.usage?.output_tokens).toBe(5000);
+      expect(result.usage?.output_tokens_details?.reasoning_tokens).toBe(4000);
 
       // Verify reasoning tokens were logged
       expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
         expect.objectContaining({
           metadata: expect.objectContaining({
             reasoning_tokens: 4000,
-          }),
-        }),
+          }) as unknown as Record<string, unknown>,
+        }) as unknown as Record<string, unknown>,
       );
     });
 
@@ -412,6 +474,9 @@ describe('Token Limits Edge Cases Integration', () => {
           input_tokens: 200,
           output_tokens: 9500,
           total_tokens: 9700,
+          input_tokens_details: {
+            cached_tokens: 0,
+          },
           output_tokens_details: {
             reasoning_tokens: 9000, // 95% reasoning
           },
@@ -426,10 +491,10 @@ describe('Token Limits Edge Cases Integration', () => {
       const result = await controller.createTextResponse(dto);
 
       // Assert
-      expect(result.usage.output_tokens_details?.reasoning_tokens).toBe(9000);
+      expect(result.usage?.output_tokens_details?.reasoning_tokens).toBe(9000);
       expect(
-        result.usage.output_tokens_details?.reasoning_tokens,
-      ).toBeGreaterThan(result.usage.output_tokens * 0.9);
+        result.usage?.output_tokens_details?.reasoning_tokens,
+      ).toBeGreaterThan((result.usage?.output_tokens || 0) * 0.9);
     });
   });
 
@@ -451,6 +516,9 @@ describe('Token Limits Edge Cases Integration', () => {
           input_tokens_details: {
             cached_tokens: 400, // Most input was cached
           },
+          output_tokens_details: {
+            reasoning_tokens: 0,
+          },
         },
       });
 
@@ -462,8 +530,8 @@ describe('Token Limits Edge Cases Integration', () => {
       const result = await controller.createTextResponse(dto);
 
       // Assert
-      expect(result.usage.input_tokens_details?.cached_tokens).toBe(400);
-      expect(result.usage.output_tokens).toBe(1000);
+      expect(result.usage?.input_tokens_details?.cached_tokens).toBe(400);
+      expect(result.usage?.output_tokens).toBe(1000);
 
       // Verify cached tokens were logged
       expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
@@ -471,8 +539,8 @@ describe('Token Limits Edge Cases Integration', () => {
           metadata: expect.objectContaining({
             cached_tokens: 400,
             tokens_used: 1500,
-          }),
-        }),
+          }) as unknown as Record<string, unknown>,
+        }) as unknown as Record<string, unknown>,
       );
     });
 
@@ -493,6 +561,9 @@ describe('Token Limits Edge Cases Integration', () => {
           input_tokens_details: {
             cached_tokens: 900, // 90% cached
           },
+          output_tokens_details: {
+            reasoning_tokens: 0,
+          },
         },
       });
 
@@ -505,8 +576,8 @@ describe('Token Limits Edge Cases Integration', () => {
 
       // Assert
       const cacheHitRate =
-        (result.usage.input_tokens_details?.cached_tokens || 0) /
-        result.usage.input_tokens;
+        (result.usage?.input_tokens_details?.cached_tokens || 0) /
+        (result.usage?.input_tokens || 1);
       expect(cacheHitRate).toBeGreaterThan(0.8);
     });
   });
@@ -526,6 +597,12 @@ describe('Token Limits Edge Cases Integration', () => {
           input_tokens: 10,
           output_tokens: 5, // Well under limit
           total_tokens: 15,
+          input_tokens_details: {
+            cached_tokens: 0,
+          },
+          output_tokens_details: {
+            reasoning_tokens: 0,
+          },
         },
       });
 
@@ -538,7 +615,7 @@ describe('Token Limits Edge Cases Integration', () => {
 
       // Assert - Completed naturally, not due to token limit
       expect(result.status).toBe('completed');
-      expect(result.usage.output_tokens).toBeLessThan(1000);
+      expect(result.usage?.output_tokens).toBeLessThan(1000);
     });
 
     it('should handle incomplete status when token limit reached', async () => {
@@ -551,14 +628,19 @@ describe('Token Limits Edge Cases Integration', () => {
       const mockResponse = createMockOpenAIResponse({
         output_text: 'Once upon a time... [truncated]',
         status: 'incomplete',
-        status_details: {
-          type: 'max_tokens',
-          reason: 'max_output_tokens_reached',
+        incomplete_details: {
+          reason: 'max_output_tokens',
         },
         usage: {
           input_tokens: 30,
           output_tokens: 200, // Exactly at limit
           total_tokens: 230,
+          input_tokens_details: {
+            cached_tokens: 0,
+          },
+          output_tokens_details: {
+            reasoning_tokens: 0,
+          },
         },
       });
 
@@ -571,8 +653,8 @@ describe('Token Limits Edge Cases Integration', () => {
 
       // Assert
       expect(result.status).toBe('incomplete');
-      expect(result.status_details?.type).toBe('max_tokens');
-      expect(result.usage.output_tokens).toBe(200);
+      expect(result.incomplete_details?.reason).toBe('max_output_tokens');
+      expect(result.usage?.output_tokens).toBe(200);
     });
   });
 
@@ -590,6 +672,12 @@ describe('Token Limits Edge Cases Integration', () => {
           input_tokens: 25,
           output_tokens: 295, // Just under limit
           total_tokens: 320,
+          input_tokens_details: {
+            cached_tokens: 0,
+          },
+          output_tokens_details: {
+            reasoning_tokens: 0,
+          },
         },
       });
 
@@ -601,9 +689,9 @@ describe('Token Limits Edge Cases Integration', () => {
       const result = await controller.createTextResponse(dto);
 
       // Assert
-      expect(result.usage.output_tokens).toBe(295);
-      expect(result.usage.output_tokens).toBeLessThan(300);
-      expect(result.usage.total_tokens).toBe(320);
+      expect(result.usage?.output_tokens).toBe(295);
+      expect(result.usage?.output_tokens).toBeLessThan(300);
+      expect(result.usage?.total_tokens).toBe(320);
     });
 
     it('should track combined input + output approaching total model limit', async () => {
@@ -619,6 +707,12 @@ describe('Token Limits Edge Cases Integration', () => {
           input_tokens: 5000,
           output_tokens: 4000,
           total_tokens: 9000, // High total usage
+          input_tokens_details: {
+            cached_tokens: 0,
+          },
+          output_tokens_details: {
+            reasoning_tokens: 0,
+          },
         },
       });
 
@@ -630,8 +724,8 @@ describe('Token Limits Edge Cases Integration', () => {
       const result = await controller.createTextResponse(dto);
 
       // Assert
-      expect(result.usage.total_tokens).toBeGreaterThan(8000);
-      expect(result.usage.input_tokens).toBeGreaterThan(4000);
+      expect(result.usage?.total_tokens).toBeGreaterThan(8000);
+      expect(result.usage?.input_tokens).toBeGreaterThan(4000);
     });
 
     it('should handle zero output tokens (edge case)', async () => {
@@ -681,6 +775,12 @@ describe('Token Limits Edge Cases Integration', () => {
           input_tokens: 100,
           output_tokens: 7500,
           total_tokens: 7600,
+          input_tokens_details: {
+            cached_tokens: 0,
+          },
+          output_tokens_details: {
+            reasoning_tokens: 0,
+          },
         },
       });
 
@@ -693,7 +793,7 @@ describe('Token Limits Edge Cases Integration', () => {
 
       // Assert
       expect(result.model).toBe('gpt-5');
-      expect(result.usage.output_tokens).toBeGreaterThan(7000);
+      expect(result.usage?.output_tokens).toBeGreaterThan(7000);
     });
 
     it('should handle token limit differences between gpt-4o and gpt-4o-mini', async () => {
@@ -711,6 +811,12 @@ describe('Token Limits Edge Cases Integration', () => {
           input_tokens: 50,
           output_tokens: 2000,
           total_tokens: 2050,
+          input_tokens_details: {
+            cached_tokens: 0,
+          },
+          output_tokens_details: {
+            reasoning_tokens: 0,
+          },
         },
       });
 
@@ -723,7 +829,7 @@ describe('Token Limits Edge Cases Integration', () => {
 
       // Assert
       expect(result.model).toBe('gpt-4o-mini');
-      expect(result.usage.output_tokens).toBeLessThanOrEqual(4096);
+      expect(result.usage?.output_tokens).toBeLessThanOrEqual(4096);
     });
   });
 });

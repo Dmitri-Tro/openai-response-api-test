@@ -1,4 +1,5 @@
-import { validate } from 'class-validator';
+import { validate, ValidationArguments } from 'class-validator';
+import type { Files } from 'openai/resources/files';
 import { IsFilePurposeConstraint } from './file-purpose.validator';
 import { CreateFileDto } from '../dto/create-file.dto';
 
@@ -169,7 +170,7 @@ describe('IsFilePurposeConstraint', () => {
     it('should return appropriate message for non-string type', () => {
       const message = validator.defaultMessage({
         value: 123,
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('must be a string');
       expect(message).toContain('number');
@@ -180,7 +181,7 @@ describe('IsFilePurposeConstraint', () => {
     it('should suggest "assistants" for "assistant" typo', () => {
       const message = validator.defaultMessage({
         value: 'assistant',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('Did you mean');
       expect(message).toContain('"assistants"');
@@ -189,7 +190,7 @@ describe('IsFilePurposeConstraint', () => {
     it('should suggest "fine-tune" for "finetune" typo', () => {
       const message = validator.defaultMessage({
         value: 'finetune',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('Did you mean');
       expect(message).toContain('"fine-tune"');
@@ -198,7 +199,7 @@ describe('IsFilePurposeConstraint', () => {
     it('should suggest "user_data" for "userdata" typo', () => {
       const message = validator.defaultMessage({
         value: 'userdata',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('Did you mean');
       expect(message).toContain('"user_data"');
@@ -207,7 +208,7 @@ describe('IsFilePurposeConstraint', () => {
     it('should suggest "vision" for "image" typo', () => {
       const message = validator.defaultMessage({
         value: 'image',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('Did you mean');
       expect(message).toContain('"vision"');
@@ -216,7 +217,7 @@ describe('IsFilePurposeConstraint', () => {
     it('should suggest "assistants" for "document" typo', () => {
       const message = validator.defaultMessage({
         value: 'document',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('Did you mean');
       expect(message).toContain('"assistants"');
@@ -225,7 +226,7 @@ describe('IsFilePurposeConstraint', () => {
     it('should suggest "evals" for "eval" typo', () => {
       const message = validator.defaultMessage({
         value: 'eval',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('Did you mean');
       expect(message).toContain('"evals"');
@@ -234,7 +235,7 @@ describe('IsFilePurposeConstraint', () => {
     it('should return generic message for completely invalid purpose', () => {
       const message = validator.defaultMessage({
         value: 'random-invalid-purpose',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('Invalid file purpose');
       expect(message).toContain('Purpose guide');
@@ -249,7 +250,7 @@ describe('IsFilePurposeConstraint', () => {
     it('should include format information in error message', () => {
       const message = validator.defaultMessage({
         value: 'invalid',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('PDF, TXT, DOCX');
       expect(message).toContain('PNG, JPEG');
@@ -259,7 +260,7 @@ describe('IsFilePurposeConstraint', () => {
     it('should include size limits in error message', () => {
       const message = validator.defaultMessage({
         value: 'invalid',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('512 MB');
       expect(message).toContain('20 MB');
@@ -269,7 +270,7 @@ describe('IsFilePurposeConstraint', () => {
     it('should include download permissions in error message', () => {
       const message = validator.defaultMessage({
         value: 'invalid',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('Forbidden');
       expect(message).toContain('Allowed');
@@ -278,7 +279,7 @@ describe('IsFilePurposeConstraint', () => {
     it('should include use cases in error message', () => {
       const message = validator.defaultMessage({
         value: 'invalid',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('file_search');
       expect(message).toContain('Image understanding');
@@ -351,7 +352,7 @@ describe('IsFilePurposeConstraint', () => {
 
     it('should reject invalid purpose in DTO', async () => {
       const dto = new CreateFileDto();
-      dto.purpose = 'invalid-purpose' as any;
+      dto.purpose = 'invalid-purpose' as unknown as Files.FilePurpose;
 
       const errors = await validate(dto);
       const purposeErrors = errors.filter((e) => e.property === 'purpose');
@@ -361,7 +362,7 @@ describe('IsFilePurposeConstraint', () => {
 
     it('should reject typo "assistant" in DTO', async () => {
       const dto = new CreateFileDto();
-      dto.purpose = 'assistant' as any;
+      dto.purpose = 'assistant' as unknown as Files.FilePurpose;
 
       const errors = await validate(dto);
       const purposeErrors = errors.filter((e) => e.property === 'purpose');
@@ -371,7 +372,7 @@ describe('IsFilePurposeConstraint', () => {
 
     it('should reject typo "finetune" in DTO', async () => {
       const dto = new CreateFileDto();
-      dto.purpose = 'finetune' as any;
+      dto.purpose = 'finetune' as unknown as Files.FilePurpose;
 
       const errors = await validate(dto);
       const purposeErrors = errors.filter((e) => e.property === 'purpose');
@@ -381,7 +382,7 @@ describe('IsFilePurposeConstraint', () => {
 
     it('should reject typo "userdata" in DTO', async () => {
       const dto = new CreateFileDto();
-      dto.purpose = 'userdata' as any;
+      dto.purpose = 'userdata' as unknown as Files.FilePurpose;
 
       const errors = await validate(dto);
       const purposeErrors = errors.filter((e) => e.property === 'purpose');

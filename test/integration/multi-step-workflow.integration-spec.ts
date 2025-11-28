@@ -17,9 +17,7 @@
  */
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { HttpException } from '@nestjs/common';
 import OpenAI from 'openai';
-import type { Responses } from 'openai/resources/responses';
 import { ResponsesController } from '../../src/openai/controllers/responses.controller';
 import { OpenAIResponsesService } from '../../src/openai/services/openai-responses.service';
 import { LoggerService } from '../../src/common/services/logger.service';
@@ -38,6 +36,13 @@ describe('Multi-Step Workflow Integration', () => {
   let service: OpenAIResponsesService;
   let mockLoggerService: jest.Mocked<LoggerService>;
   let mockClient: jest.Mocked<OpenAI>;
+
+  // Helper to get typed client from service
+  const getClientFromService = (
+    svc: OpenAIResponsesService,
+  ): jest.Mocked<OpenAI> => {
+    return (svc as unknown as { client: OpenAI }).client as jest.Mocked<OpenAI>;
+  };
 
   beforeAll(async () => {
     process.env.OPENAI_API_KEY = 'sk-test-multi-step-key';
@@ -60,7 +65,7 @@ describe('Multi-Step Workflow Integration', () => {
 
     controller = module.get<ResponsesController>(ResponsesController);
     service = module.get<OpenAIResponsesService>(OpenAIResponsesService);
-    mockClient = (service as any).client as jest.Mocked<OpenAI>;
+    mockClient = getClientFromService(service);
   });
 
   afterAll(async () => {
@@ -90,7 +95,7 @@ describe('Multi-Step Workflow Integration', () => {
       const turn1Response = createMockOpenAIResponse({
         id: 'resp_turn1',
         output_text: 'TypeScript is a typed superset of JavaScript.',
-        conversation: conversationId,
+        conversation: { id: conversationId },
       });
 
       jest
@@ -99,7 +104,7 @@ describe('Multi-Step Workflow Integration', () => {
 
       const result1 = await controller.createTextResponse(turn1Dto);
       expect(result1.id).toBe('resp_turn1');
-      expect(result1.conversation).toBe(conversationId);
+      expect(result1.conversation?.id).toBe(conversationId);
 
       // Turn 2: Follow-up question (uses same conversation ID)
       const turn2Dto: CreateTextResponseDto = {
@@ -112,7 +117,7 @@ describe('Multi-Step Workflow Integration', () => {
       const turn2Response = createMockOpenAIResponse({
         id: 'resp_turn2',
         output_text: 'Benefits include type safety and better tooling.',
-        conversation: conversationId,
+        conversation: { id: conversationId },
       });
 
       jest
@@ -121,7 +126,7 @@ describe('Multi-Step Workflow Integration', () => {
 
       const result2 = await controller.createTextResponse(turn2Dto);
       expect(result2.id).toBe('resp_turn2');
-      expect(result2.conversation).toBe(conversationId);
+      expect(result2.conversation?.id).toBe(conversationId);
 
       // Turn 3: Final question
       const turn3Dto: CreateTextResponseDto = {
@@ -135,7 +140,7 @@ describe('Multi-Step Workflow Integration', () => {
         id: 'resp_turn3',
         output_text:
           'Here is a TypeScript example: interface User { name: string }',
-        conversation: conversationId,
+        conversation: { id: conversationId },
       });
 
       jest
@@ -144,7 +149,7 @@ describe('Multi-Step Workflow Integration', () => {
 
       const result3 = await controller.createTextResponse(turn3Dto);
       expect(result3.id).toBe('resp_turn3');
-      expect(result3.conversation).toBe(conversationId);
+      expect(result3.conversation?.id).toBe(conversationId);
 
       // Verify all 3 API calls were made with conversation context
       expect(mockClient.responses.create).toHaveBeenCalledTimes(3);
@@ -185,7 +190,6 @@ describe('Multi-Step Workflow Integration', () => {
       const turn1Response = createMockOpenAIResponse({
         id: 'resp_factual',
         output_text: 'The capital of France is Paris.',
-        conversation: conversationId,
       });
 
       jest
@@ -206,7 +210,6 @@ describe('Multi-Step Workflow Integration', () => {
       const turn2Response = createMockOpenAIResponse({
         id: 'resp_creative',
         output_text: 'In Paris, lights dance on the Seine...',
-        conversation: conversationId,
       });
 
       jest
@@ -261,18 +264,11 @@ describe('Multi-Step Workflow Integration', () => {
       expect(retrieved.output_text).toBe('Lifecycle test response');
 
       // Step 3: Delete the response
-      const deleteResponse = {
-        id: responseId,
-        deleted: true,
-        object: 'response' as const,
-      };
-
       jest
         .spyOn(mockClient.responses, 'delete')
-        .mockResolvedValueOnce(deleteResponse);
+        .mockResolvedValueOnce(undefined);
 
-      const deleted = await controller.deleteResponse(responseId);
-      expect(deleted.deleted).toBe(true);
+      await controller.deleteResponse(responseId);
 
       // Verify all 3 operations occurred
       expect(mockClient.responses.create).toHaveBeenCalledTimes(1);
@@ -371,7 +367,7 @@ describe('Multi-Step Workflow Integration', () => {
       // Step 1: Create response (starts as in_progress)
       const createResponse = createMockOpenAIResponse({
         id: responseId,
-        output_text: null,
+        output_text: '',
         status: 'in_progress',
       });
 
@@ -389,7 +385,7 @@ describe('Multi-Step Workflow Integration', () => {
       // Step 2: Cancel the response
       const cancelResponse = createMockOpenAIResponse({
         id: responseId,
-        output_text: null,
+        output_text: '',
         status: 'cancelled',
       });
 
@@ -455,7 +451,7 @@ describe('Multi-Step Workflow Integration', () => {
       // Step 1: Create background response
       const inProgressResponse = createMockOpenAIResponse({
         id: responseId,
-        output_text: null,
+        output_text: '',
         status: 'in_progress',
       });
 
@@ -504,7 +500,7 @@ describe('Multi-Step Workflow Integration', () => {
       // Step 1: Create background response
       const inProgressResponse = createMockOpenAIResponse({
         id: responseId,
-        output_text: null,
+        output_text: '',
         status: 'in_progress',
       });
 
@@ -520,10 +516,10 @@ describe('Multi-Step Workflow Integration', () => {
       // Step 2: Poll and find it failed
       const failedResponse = createMockOpenAIResponse({
         id: responseId,
-        output_text: null,
+        output_text: '',
         status: 'failed',
         incomplete_details: {
-          reason: 'max_tokens',
+          reason: 'max_output_tokens' as const,
         },
       });
 
@@ -533,7 +529,7 @@ describe('Multi-Step Workflow Integration', () => {
 
       const result = await controller.retrieveResponse(responseId);
       expect(result.status).toBe('failed');
-      expect(result.incomplete_details?.reason).toBe('max_tokens');
+      expect(result.incomplete_details?.reason).toBe('max_output_tokens');
     });
   });
 
@@ -667,7 +663,6 @@ describe('Multi-Step Workflow Integration', () => {
       // Turn 1: Succeeds
       const turn1Response = createMockOpenAIResponse({
         id: 'resp_turn1',
-        conversation: conversationId,
       });
 
       jest
@@ -708,7 +703,6 @@ describe('Multi-Step Workflow Integration', () => {
       // Turn 3: After rate limit, retry succeeds
       const turn2Response = createMockOpenAIResponse({
         id: 'resp_turn2_retry',
-        conversation: conversationId,
       });
 
       jest
@@ -733,7 +727,6 @@ describe('Multi-Step Workflow Integration', () => {
       // Thread 1 - Turn 1
       const conv1Turn1 = createMockOpenAIResponse({
         id: 'resp_c1_t1',
-        conversation: conv1,
         output_text: 'Thread 1 response',
       });
 
@@ -749,7 +742,6 @@ describe('Multi-Step Workflow Integration', () => {
       // Thread 2 - Turn 1
       const conv2Turn1 = createMockOpenAIResponse({
         id: 'resp_c2_t1',
-        conversation: conv2,
         output_text: 'Thread 2 response',
       });
 
@@ -765,7 +757,6 @@ describe('Multi-Step Workflow Integration', () => {
       // Thread 1 - Turn 2
       const conv1Turn2 = createMockOpenAIResponse({
         id: 'resp_c1_t2',
-        conversation: conv1,
         output_text: 'Thread 1 follow-up',
       });
 

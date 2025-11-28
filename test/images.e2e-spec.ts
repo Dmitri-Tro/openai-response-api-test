@@ -1,10 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
+import type { Server } from 'http';
+import type { ImagesResponse } from 'openai/resources/images';
 import { AppModule } from '../src/app.module';
 import { OpenAIExceptionFilter } from '../src/common/filters/openai-exception.filter';
+import { LoggerService } from '../src/common/services/logger.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import { deflateSync, crc32 } from 'zlib';
 
 /**
  * E2E Tests for Images API
@@ -48,7 +52,10 @@ describe('Images API (E2E)', () => {
     app.useGlobalPipes(
       new ValidationPipe({ transform: true, whitelist: true }),
     );
-    app.useGlobalFilters(new OpenAIExceptionFilter());
+
+    // Get LoggerService from the module for exception filter
+    const loggerService = app.get(LoggerService);
+    app.useGlobalFilters(new OpenAIExceptionFilter(loggerService));
     await app.init();
 
     // Create test image files for editing/variations
@@ -57,87 +64,87 @@ describe('Images API (E2E)', () => {
       fs.mkdirSync(testDir, { recursive: true });
     }
 
-    // Create a simple 256x256 test image (PNG)
+    // Generate 256x256 RGBA test image (required for edit/variation endpoints)
     testImagePath = path.join(testDir, 'test-image.png');
+    testMaskPath = path.join(testDir, 'test-mask.png');
+
     if (!fs.existsSync(testImagePath)) {
-      // Create a minimal valid PNG (1x1 pixel, black)
-      const pngData = Buffer.from([
-        0x89,
-        0x50,
-        0x4e,
-        0x47,
-        0x0d,
-        0x0a,
-        0x1a,
-        0x0a, // PNG signature
-        0x00,
-        0x00,
-        0x00,
-        0x0d,
-        0x49,
-        0x48,
-        0x44,
-        0x52, // IHDR chunk
-        0x00,
-        0x00,
-        0x00,
-        0x01,
-        0x00,
-        0x00,
-        0x00,
-        0x01, // 1x1 size
-        0x08,
-        0x02,
-        0x00,
-        0x00,
-        0x00,
-        0x90,
-        0x77,
-        0x53,
-        0xde,
-        0x00,
-        0x00,
-        0x00,
-        0x0c,
-        0x49,
-        0x44,
-        0x41, // IDAT chunk
-        0x54,
-        0x08,
-        0xd7,
-        0x63,
-        0x00,
-        0x00,
-        0x00,
-        0x02,
-        0x00,
-        0x01,
-        0xe2,
-        0x21,
-        0xbc,
-        0x33,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x49,
-        0x45,
-        0x4e,
-        0x44,
-        0xae,
-        0x42, // IEND chunk
-        0x60,
-        0x82,
+      console.log('📸 Generating 256x256 RGBA test image...');
+
+      // Create a simple 256x256 white image with alpha channel (RGBA)
+      // OpenAI edit/variation requires RGBA format
+      const width = 256;
+      const height = 256;
+      const pixelData: number[] = [];
+
+      // Create white pixels with full opacity (RGBA = 255, 255, 255, 255)
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          pixelData.push(255, 255, 255, 255); // White with alpha
+        }
+      }
+
+      // Compress using simple zlib deflate
+      const pixelBuffer = Buffer.from(pixelData);
+
+      // PNG requires scanline filter bytes (0 = no filter)
+      const scanlines: number[] = [];
+      for (let y = 0; y < height; y++) {
+        scanlines.push(0); // Filter type: None
+        for (let x = 0; x < width * 4; x++) {
+          scanlines.push(pixelBuffer[y * width * 4 + x]);
+        }
+      }
+
+      const compressedData = deflateSync(Buffer.from(scanlines));
+
+      // Build PNG file structure
+      const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+      // IHDR chunk (image header)
+      const ihdr = Buffer.alloc(13);
+      ihdr.writeUInt32BE(width, 0);
+      ihdr.writeUInt32BE(height, 4);
+      ihdr[8] = 8; // Bit depth
+      ihdr[9] = 6; // Color type: RGBA (6)
+      ihdr[10] = 0; // Compression method
+      ihdr[11] = 0; // Filter method
+      ihdr[12] = 0; // Interlace method
+
+      const ihdrChunk = createPNGChunk('IHDR', ihdr);
+      const idatChunk = createPNGChunk('IDAT', compressedData);
+      const iendChunk = createPNGChunk('IEND', Buffer.alloc(0));
+
+      const pngBuffer = Buffer.concat([
+        pngSignature,
+        ihdrChunk,
+        idatChunk,
+        iendChunk,
       ]);
-      fs.writeFileSync(testImagePath, pngData);
+
+      fs.writeFileSync(testImagePath, pngBuffer);
+      console.log(`✅ Test image generated: ${testImagePath} (256x256 RGBA)`);
     }
 
-    // Create a minimal test mask (same size)
-    testMaskPath = path.join(testDir, 'test-mask.png');
+    // Create mask by copying the test image
     if (!fs.existsSync(testMaskPath)) {
-      fs.writeFileSync(testMaskPath, fs.readFileSync(testImagePath));
+      fs.copyFileSync(testImagePath, testMaskPath);
+      console.log(`✅ Test mask created: ${testMaskPath}`);
     }
-  });
+
+    // Helper function to create PNG chunks
+    function createPNGChunk(type: string, data: Buffer): Buffer {
+      const length = Buffer.alloc(4);
+      length.writeUInt32BE(data.length, 0);
+
+      const typeBuffer = Buffer.from(type, 'ascii');
+      const crcValue = crc32(Buffer.concat([typeBuffer, data]));
+      const crcBuffer = Buffer.alloc(4);
+      crcBuffer.writeUInt32BE(crcValue, 0);
+
+      return Buffer.concat([length, typeBuffer, data, crcBuffer]);
+    }
+  }, 120000); // 120s timeout for image generation in beforeAll
 
   afterAll(async () => {
     // Cleanup test files
@@ -148,7 +155,7 @@ describe('Images API (E2E)', () => {
       if (testMaskPath && fs.existsSync(testMaskPath)) {
         fs.unlinkSync(testMaskPath);
       }
-    } catch (error) {
+    } catch {
       console.log('Failed to cleanup test files');
     }
 
@@ -161,19 +168,21 @@ describe('Images API (E2E)', () => {
     testIf(hasApiKey)(
       'should generate image with DALL-E 2 minimal parameters',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/images/generate')
           .send({
             prompt: 'A cute baby sea otter',
           })
           .expect(200);
 
-        expect(response.body).toHaveProperty('created');
-        expect(response.body).toHaveProperty('data');
-        expect(Array.isArray(response.body.data)).toBe(true);
-        expect(response.body.data.length).toBeGreaterThan(0);
-        expect(response.body.data[0]).toHaveProperty('url');
-        expect(response.body.data[0].url).toMatch(/^https?:\/\//);
+        const imagesResponse = response.body as ImagesResponse;
+
+        expect(imagesResponse).toHaveProperty('created');
+        expect(imagesResponse).toHaveProperty('data');
+        expect(Array.isArray(imagesResponse.data)).toBe(true);
+        expect(imagesResponse.data?.length).toBeGreaterThan(0);
+        expect(imagesResponse.data?.[0]).toHaveProperty('url');
+        expect(imagesResponse.data?.[0].url).toMatch(/^https?:\/\//);
       },
       60000,
     ); // 60s timeout for image generation
@@ -181,7 +190,7 @@ describe('Images API (E2E)', () => {
     testIf(hasApiKey)(
       'should generate image with DALL-E 2 with all parameters',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/images/generate')
           .send({
             model: 'dall-e-2',
@@ -192,8 +201,10 @@ describe('Images API (E2E)', () => {
           })
           .expect(200);
 
-        expect(response.body.data).toHaveLength(2);
-        response.body.data.forEach((image: any) => {
+        const imagesResponse = response.body as ImagesResponse;
+
+        expect(imagesResponse.data).toHaveLength(2);
+        imagesResponse.data?.forEach((image) => {
           expect(image).toHaveProperty('url');
         });
       },
@@ -203,19 +214,22 @@ describe('Images API (E2E)', () => {
     testIf(hasApiKey)(
       'should generate image with base64 response format',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/images/generate')
           .send({
+            model: 'dall-e-2',
             prompt: 'A sunset',
             response_format: 'b64_json',
             size: '256x256',
           })
           .expect(200);
 
-        expect(response.body.data[0]).toHaveProperty('b64_json');
-        expect(response.body.data[0]).not.toHaveProperty('url');
-        expect(typeof response.body.data[0].b64_json).toBe('string');
-        expect(response.body.data[0].b64_json.length).toBeGreaterThan(100);
+        const imagesResponse = response.body as ImagesResponse;
+
+        expect(imagesResponse.data?.[0]).toHaveProperty('b64_json');
+        expect(imagesResponse.data?.[0]).not.toHaveProperty('url');
+        expect(typeof imagesResponse.data?.[0].b64_json).toBe('string');
+        expect(imagesResponse.data?.[0].b64_json?.length).toBeGreaterThan(100);
       },
       60000,
     );
@@ -223,7 +237,7 @@ describe('Images API (E2E)', () => {
     testIf(hasApiKey)(
       'should generate image with gpt-image-1 minimal parameters',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/images/generate')
           .send({
             model: 'gpt-image-1',
@@ -232,13 +246,15 @@ describe('Images API (E2E)', () => {
           })
           .expect(200);
 
-        expect(response.body).toHaveProperty('created');
-        expect(response.body).toHaveProperty('data');
-        expect(Array.isArray(response.body.data)).toBe(true);
-        expect(response.body.data.length).toBe(1); // gpt-image-1 only generates 1 image
-        expect(response.body.data[0]).toHaveProperty('b64_json');
-        expect(response.body.data[0]).not.toHaveProperty('url'); // gpt-image-1 returns b64_json only
-        expect(typeof response.body.data[0].b64_json).toBe('string');
+        const imagesResponse = response.body as ImagesResponse;
+
+        expect(imagesResponse).toHaveProperty('created');
+        expect(imagesResponse).toHaveProperty('data');
+        expect(Array.isArray(imagesResponse.data)).toBe(true);
+        expect(imagesResponse.data?.length).toBe(1); // gpt-image-1 only generates 1 image
+        expect(imagesResponse.data?.[0]).toHaveProperty('b64_json');
+        expect(imagesResponse.data?.[0]).not.toHaveProperty('url'); // gpt-image-1 returns b64_json only
+        expect(typeof imagesResponse.data?.[0].b64_json).toBe('string');
       },
       90000,
     ); // 90s timeout for gpt-image-1
@@ -246,7 +262,7 @@ describe('Images API (E2E)', () => {
     testIf(hasApiKey)(
       'should generate image with gpt-image-1 and auto size',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/images/generate')
           .send({
             model: 'gpt-image-1',
@@ -256,16 +272,18 @@ describe('Images API (E2E)', () => {
           })
           .expect(200);
 
-        expect(response.body).toHaveProperty('data');
-        expect(response.body.data[0]).toHaveProperty('b64_json');
+        const imagesResponse = response.body as ImagesResponse;
+
+        expect(imagesResponse).toHaveProperty('data');
+        expect(imagesResponse.data?.[0]).toHaveProperty('b64_json');
       },
-      90000,
-    );
+      120000,
+    ); // 120s timeout for gpt-image-1 with auto size
 
     testIf(hasApiKey)(
       'should generate image with gpt-image-1 portrait size',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/images/generate')
           .send({
             model: 'gpt-image-1',
@@ -275,8 +293,10 @@ describe('Images API (E2E)', () => {
           })
           .expect(200);
 
-        expect(response.body).toHaveProperty('data');
-        expect(response.body.data[0]).toHaveProperty('b64_json');
+        const imagesResponse = response.body as ImagesResponse;
+
+        expect(imagesResponse).toHaveProperty('data');
+        expect(imagesResponse.data?.[0]).toHaveProperty('b64_json');
       },
       90000,
     );
@@ -284,7 +304,7 @@ describe('Images API (E2E)', () => {
     testIf(hasApiKey)(
       'should generate image with gpt-image-1 landscape size',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/images/generate')
           .send({
             model: 'gpt-image-1',
@@ -294,25 +314,28 @@ describe('Images API (E2E)', () => {
           })
           .expect(200);
 
-        expect(response.body).toHaveProperty('data');
-        expect(response.body.data[0]).toHaveProperty('b64_json');
+        const imagesResponse = response.body as ImagesResponse;
+
+        expect(imagesResponse).toHaveProperty('data');
+        expect(imagesResponse.data?.[0]).toHaveProperty('b64_json');
       },
       90000,
     );
 
     testIf(hasApiKey)('should reject invalid prompt (too long)', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(app.getHttpServer() as Server)
         .post('/api/images/generate')
         .send({
           prompt: 'A'.repeat(4001), // Exceeds 4000 char limit
         })
         .expect(400);
 
-      expect(response.body).toHaveProperty('message');
+      const error = response.body as { message: string };
+      expect(error).toHaveProperty('message');
     });
 
     testIf(hasApiKey)('should reject invalid model', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(app.getHttpServer() as Server)
         .post('/api/images/generate')
         .send({
           model: 'invalid-model',
@@ -320,11 +343,12 @@ describe('Images API (E2E)', () => {
         })
         .expect(400);
 
-      expect(response.body).toHaveProperty('message');
+      const error = response.body as { message: string };
+      expect(error).toHaveProperty('message');
     });
 
     testIf(hasApiKey)('should reject invalid n value', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(app.getHttpServer() as Server)
         .post('/api/images/generate')
         .send({
           prompt: 'Test',
@@ -332,7 +356,8 @@ describe('Images API (E2E)', () => {
         })
         .expect(400);
 
-      expect(response.body).toHaveProperty('message');
+      const error = response.body as { message: string };
+      expect(error).toHaveProperty('message');
     });
   });
 
@@ -340,16 +365,18 @@ describe('Images API (E2E)', () => {
     testIf(hasApiKey)(
       'should edit image without mask',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/images/edit')
           .field('prompt', 'Add a red door')
           .field('size', '256x256')
           .attach('image', testImagePath)
           .expect(200);
 
-        expect(response.body).toHaveProperty('data');
-        expect(Array.isArray(response.body.data)).toBe(true);
-        expect(response.body.data[0]).toHaveProperty('url');
+        const imagesResponse = response.body as ImagesResponse;
+
+        expect(imagesResponse).toHaveProperty('data');
+        expect(Array.isArray(imagesResponse.data)).toBe(true);
+        expect(imagesResponse.data?.[0]).toHaveProperty('url');
       },
       60000,
     );
@@ -357,7 +384,7 @@ describe('Images API (E2E)', () => {
     testIf(hasApiKey)(
       'should edit image with mask',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/images/edit')
           .field('prompt', 'Change the sky to sunset')
           .field('size', '256x256')
@@ -365,29 +392,33 @@ describe('Images API (E2E)', () => {
           .attach('mask', testMaskPath)
           .expect(200);
 
-        expect(response.body).toHaveProperty('data');
-        expect(response.body.data[0]).toHaveProperty('url');
+        const imagesResponse = response.body as ImagesResponse;
+
+        expect(imagesResponse).toHaveProperty('data');
+        expect(imagesResponse.data?.[0]).toHaveProperty('url');
       },
       60000,
     );
 
     testIf(hasApiKey)('should reject edit without image file', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(app.getHttpServer() as Server)
         .post('/api/images/edit')
         .field('prompt', 'Test')
         .expect(400);
 
-      expect(response.body).toHaveProperty('message');
-      expect(response.body.message).toContain('Image file is required');
+      const error = response.body as { message: string };
+      expect(error).toHaveProperty('message');
+      expect(error.message).toContain('Image file is required');
     });
 
     testIf(hasApiKey)('should reject edit without prompt', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(app.getHttpServer() as Server)
         .post('/api/images/edit')
         .attach('image', testImagePath)
         .expect(400);
 
-      expect(response.body).toHaveProperty('message');
+      const error = response.body as { message: string };
+      expect(error).toHaveProperty('message');
     });
   });
 
@@ -395,15 +426,17 @@ describe('Images API (E2E)', () => {
     testIf(hasApiKey)(
       'should create image variation',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/images/variations')
           .field('size', '256x256')
           .attach('image', testImagePath)
           .expect(200);
 
-        expect(response.body).toHaveProperty('data');
-        expect(Array.isArray(response.body.data)).toBe(true);
-        expect(response.body.data[0]).toHaveProperty('url');
+        const imagesResponse = response.body as ImagesResponse;
+
+        expect(imagesResponse).toHaveProperty('data');
+        expect(Array.isArray(imagesResponse.data)).toBe(true);
+        expect(imagesResponse.data?.[0]).toHaveProperty('url');
       },
       60000,
     );
@@ -411,15 +444,17 @@ describe('Images API (E2E)', () => {
     testIf(hasApiKey)(
       'should create multiple variations',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/images/variations')
           .field('n', '2')
           .field('size', '256x256')
           .attach('image', testImagePath)
           .expect(200);
 
-        expect(response.body.data).toHaveLength(2);
-        response.body.data.forEach((image: any) => {
+        const imagesResponse = response.body as ImagesResponse;
+
+        expect(imagesResponse.data).toHaveLength(2);
+        imagesResponse.data?.forEach((image) => {
           expect(image).toHaveProperty('url');
         });
       },
@@ -429,11 +464,12 @@ describe('Images API (E2E)', () => {
     testIf(hasApiKey)(
       'should reject variation without image file',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/images/variations')
           .expect(400);
 
-        expect(response.body).toHaveProperty('message');
+        const error = response.body as { message: string };
+        expect(error).toHaveProperty('message');
       },
     );
   });
@@ -442,7 +478,7 @@ describe('Images API (E2E)', () => {
     testIf(hasApiKey)(
       'should reject generation with invalid size for model',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/images/generate')
           .send({
             model: 'dall-e-3',
@@ -451,14 +487,15 @@ describe('Images API (E2E)', () => {
           })
           .expect(400);
 
-        expect(response.body).toHaveProperty('message');
+        const error = response.body as { message: string };
+        expect(error).toHaveProperty('message');
       },
     );
 
     testIf(hasApiKey)(
       'should reject generation with invalid size for gpt-image-1',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/images/generate')
           .send({
             model: 'gpt-image-1',
@@ -468,7 +505,8 @@ describe('Images API (E2E)', () => {
           })
           .expect(400);
 
-        expect(response.body).toHaveProperty('message');
+        const error = response.body as { message: string };
+        expect(error).toHaveProperty('message');
       },
     );
 
@@ -476,7 +514,7 @@ describe('Images API (E2E)', () => {
     // despite it being in the SDK types. The API returns "Unknown parameter: 'quality'."
     // This test is kept here for future reference if OpenAI adds support for this parameter.
     it.skip('should reject generation with invalid quality for model', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(app.getHttpServer() as Server)
         .post('/api/images/generate')
         .send({
           model: 'dall-e-2',
@@ -485,13 +523,14 @@ describe('Images API (E2E)', () => {
         })
         .expect(400);
 
-      expect(response.body).toHaveProperty('message');
+      const error = response.body as { message: string };
+      expect(error).toHaveProperty('message');
     });
 
     testIf(hasApiKey)(
       'should reject generation with invalid response format',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/images/generate')
           .send({
             prompt: 'Test',
@@ -499,7 +538,8 @@ describe('Images API (E2E)', () => {
           })
           .expect(400);
 
-        expect(response.body).toHaveProperty('message');
+        const error = response.body as { message: string };
+        expect(error).toHaveProperty('message');
       },
     );
   });

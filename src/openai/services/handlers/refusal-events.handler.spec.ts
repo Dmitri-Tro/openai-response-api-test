@@ -10,6 +10,12 @@ import {
   createMockStreamState,
 } from '../../../common/testing/test.factories';
 
+// Test data interfaces
+interface RefusalDoneData {
+  refusal: string;
+  sequence: number;
+}
+
 describe('RefusalEventsHandler', () => {
   let handler: RefusalEventsHandler;
   let mockLoggerService: jest.Mocked<LoggerService>;
@@ -75,7 +81,7 @@ describe('RefusalEventsHandler', () => {
       Array.from(handler.handleRefusalDelta(event, mockState, sequence));
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'refusal_delta',
@@ -130,7 +136,7 @@ describe('RefusalEventsHandler', () => {
       Array.from(handler.handleRefusalDone({}, mockState, sequence));
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'refusal_done',
@@ -146,7 +152,7 @@ describe('RefusalEventsHandler', () => {
       const generator = handler.handleRefusalDone({}, mockState, sequence);
       const results: SSEEvent[] = Array.from(generator);
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as RefusalDoneData;
       expect(data.refusal).toBe('');
     });
   });

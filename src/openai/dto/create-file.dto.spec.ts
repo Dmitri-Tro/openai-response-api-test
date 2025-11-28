@@ -1,6 +1,6 @@
 import { validate, ValidationError } from 'class-validator';
 import { plainToClass } from 'class-transformer';
-import { CreateFileDto, ExpiresAfterDto } from './create-file.dto';
+import { CreateFileDto } from './create-file.dto';
 
 /**
  * Utility function to validate DTO and return errors
@@ -158,7 +158,7 @@ describe('CreateFileDto', () => {
   describe('Invalid Purpose', () => {
     it('should fail when purpose is invalid string', async () => {
       const dto = createValidDto();
-      (dto as any).purpose = 'invalid-purpose';
+      (dto as unknown as Record<string, unknown>).purpose = 'invalid-purpose';
 
       const errors = await validateDto(dto);
 
@@ -170,7 +170,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when purpose is empty string', async () => {
       const dto = createValidDto();
-      (dto as any).purpose = '';
+      (dto as unknown as Record<string, unknown>).purpose = '';
 
       const errors = await validateDto(dto);
 
@@ -181,7 +181,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when purpose is not a string (number)', async () => {
       const dto = createValidDto();
-      (dto as any).purpose = 123;
+      (dto as unknown as Record<string, unknown>).purpose = 123;
 
       const errors = await validateDto(dto);
 
@@ -192,7 +192,9 @@ describe('CreateFileDto', () => {
 
     it('should fail when purpose is not a string (object)', async () => {
       const dto = createValidDto();
-      (dto as any).purpose = { value: 'assistants' };
+      (dto as unknown as Record<string, unknown>).purpose = {
+        value: 'assistants',
+      };
 
       const errors = await validateDto(dto);
 
@@ -203,7 +205,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when purpose is not a string (array)', async () => {
       const dto = createValidDto();
-      (dto as any).purpose = ['assistants'];
+      (dto as unknown as Record<string, unknown>).purpose = ['assistants'];
 
       const errors = await validateDto(dto);
 
@@ -214,7 +216,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when purpose is null', async () => {
       const dto = createValidDto();
-      (dto as any).purpose = null;
+      (dto as unknown as Record<string, unknown>).purpose = null;
 
       const errors = await validateDto(dto);
 
@@ -236,7 +238,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when purpose is boolean', async () => {
       const dto = createValidDto();
-      (dto as any).purpose = true;
+      (dto as unknown as Record<string, unknown>).purpose = true;
 
       const errors = await validateDto(dto);
 
@@ -249,7 +251,7 @@ describe('CreateFileDto', () => {
   describe('Invalid ExpiresAfter', () => {
     it('should fail when anchor is invalid', async () => {
       const dto = createValidDto();
-      (dto as any).expires_after = {
+      (dto as unknown as Record<string, unknown>).expires_after = {
         anchor: 'invalid_anchor',
         seconds: 86400,
       };
@@ -261,7 +263,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when anchor is missing', async () => {
       const dto = createValidDto();
-      (dto as any).expires_after = {
+      (dto as unknown as Record<string, unknown>).expires_after = {
         seconds: 86400,
       };
 
@@ -272,7 +274,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when anchor is not a string', async () => {
       const dto = createValidDto();
-      (dto as any).expires_after = {
+      (dto as unknown as Record<string, unknown>).expires_after = {
         anchor: 123,
         seconds: 86400,
       };
@@ -284,7 +286,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when seconds is below minimum (3599)', async () => {
       const dto = createValidDto();
-      (dto as any).expires_after = {
+      (dto as unknown as Record<string, unknown>).expires_after = {
         anchor: 'created_at',
         seconds: 3599,
       };
@@ -296,7 +298,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when seconds is above maximum (2592001)', async () => {
       const dto = createValidDto();
-      (dto as any).expires_after = {
+      (dto as unknown as Record<string, unknown>).expires_after = {
         anchor: 'created_at',
         seconds: 2592001,
       };
@@ -308,7 +310,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when seconds is zero', async () => {
       const dto = createValidDto();
-      (dto as any).expires_after = {
+      (dto as unknown as Record<string, unknown>).expires_after = {
         anchor: 'created_at',
         seconds: 0,
       };
@@ -320,7 +322,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when seconds is negative', async () => {
       const dto = createValidDto();
-      (dto as any).expires_after = {
+      (dto as unknown as Record<string, unknown>).expires_after = {
         anchor: 'created_at',
         seconds: -100,
       };
@@ -332,7 +334,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when seconds is not a number (string)', async () => {
       const dto = createValidDto();
-      (dto as any).expires_after = {
+      (dto as unknown as Record<string, unknown>).expires_after = {
         anchor: 'created_at',
         seconds: '86400',
       };
@@ -344,7 +346,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when seconds is missing', async () => {
       const dto = createValidDto();
-      (dto as any).expires_after = {
+      (dto as unknown as Record<string, unknown>).expires_after = {
         anchor: 'created_at',
       };
 
@@ -355,7 +357,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when seconds is null', async () => {
       const dto = createValidDto();
-      (dto as any).expires_after = {
+      (dto as unknown as Record<string, unknown>).expires_after = {
         anchor: 'created_at',
         seconds: null,
       };
@@ -367,7 +369,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when expires_after is empty object', async () => {
       const dto = createValidDto();
-      (dto as any).expires_after = {};
+      (dto as unknown as Record<string, unknown>).expires_after = {};
 
       const errors = await validateDto(dto);
 
@@ -376,7 +378,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when expires_after is not an object (string)', async () => {
       const dto = createValidDto();
-      (dto as any).expires_after = 'invalid';
+      (dto as unknown as Record<string, unknown>).expires_after = 'invalid';
 
       const errors = await validateDto(dto);
 
@@ -385,7 +387,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when expires_after is not an object (number)', async () => {
       const dto = createValidDto();
-      (dto as any).expires_after = 86400;
+      (dto as unknown as Record<string, unknown>).expires_after = 86400;
 
       const errors = await validateDto(dto);
 
@@ -394,7 +396,9 @@ describe('CreateFileDto', () => {
 
     it('should fail when expires_after is an array', async () => {
       const dto = createValidDto();
-      (dto as any).expires_after = [{ anchor: 'created_at', seconds: 86400 }];
+      (dto as unknown as Record<string, unknown>).expires_after = [
+        { anchor: 'created_at', seconds: 86400 },
+      ];
 
       const errors = await validateDto(dto);
 
@@ -403,7 +407,7 @@ describe('CreateFileDto', () => {
 
     it('should fail when seconds is a decimal (3600.5)', async () => {
       const dto = createValidDto();
-      (dto as any).expires_after = {
+      (dto as unknown as Record<string, unknown>).expires_after = {
         anchor: 'created_at',
         seconds: 3600.5,
       };
@@ -499,7 +503,7 @@ describe('CreateFileDto', () => {
 
     it('should reject expires_after with seconds just below minimum', async () => {
       const dto = createValidDto();
-      (dto as any).expires_after = {
+      (dto as unknown as Record<string, unknown>).expires_after = {
         anchor: 'created_at',
         seconds: 3599,
       };
@@ -511,7 +515,7 @@ describe('CreateFileDto', () => {
 
     it('should reject expires_after with seconds just above maximum', async () => {
       const dto = createValidDto();
-      (dto as any).expires_after = {
+      (dto as unknown as Record<string, unknown>).expires_after = {
         anchor: 'created_at',
         seconds: 2592001,
       };

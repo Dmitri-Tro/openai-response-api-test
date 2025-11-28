@@ -1,8 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
+import type { Server } from 'http';
+import type { FileObject } from 'openai/resources/files';
 import { AppModule } from '../src/app.module';
 import { OpenAIExceptionFilter } from '../src/common/filters/openai-exception.filter';
+import { LoggerService } from '../src/common/services/logger.service';
 
 /**
  * E2E Tests for Files API
@@ -42,7 +45,10 @@ describe('Files API (E2E)', () => {
     app.useGlobalPipes(
       new ValidationPipe({ transform: true, whitelist: true }),
     );
-    app.useGlobalFilters(new OpenAIExceptionFilter());
+
+    // Get LoggerService from the module for exception filter
+    const loggerService = app.get(LoggerService);
+    app.useGlobalFilters(new OpenAIExceptionFilter(loggerService));
     await app.init();
   });
 
@@ -52,11 +58,11 @@ describe('Files API (E2E)', () => {
       console.log(`🧹 Cleaning up ${uploadedFileIds.length} uploaded files...`);
       for (const fileId of uploadedFileIds) {
         try {
-          await request(app.getHttpServer())
+          await request(app.getHttpServer() as Server)
             .delete(`/api/files/${fileId}`)
             .expect(200);
           console.log(`  ✓ Deleted file: ${fileId}`);
-        } catch (error) {
+        } catch {
           console.log(`  ✗ Failed to delete file: ${fileId}`);
         }
       }
@@ -73,25 +79,27 @@ describe('Files API (E2E)', () => {
       async () => {
         const fileContent = Buffer.from('Test file for assistants purpose');
 
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/files')
           .field('purpose', 'assistants')
           .attach('file', fileContent, 'test-assistants.txt')
           .expect(201);
 
-        expect(response.body).toHaveProperty('id');
-        expect(response.body.id).toMatch(/^file-/);
-        expect(response.body).toHaveProperty('object', 'file');
-        expect(response.body).toHaveProperty('purpose', 'assistants');
-        expect(response.body).toHaveProperty('filename', 'test-assistants.txt');
-        expect(response.body).toHaveProperty('bytes');
-        expect(response.body.bytes).toBeGreaterThan(0);
-        expect(response.body).toHaveProperty('created_at');
-        expect(response.body).toHaveProperty('status');
+        const file = response.body as FileObject;
 
-        uploadedFileIds.push(response.body.id);
+        expect(file).toHaveProperty('id');
+        expect(file.id).toMatch(/^file-/);
+        expect(file).toHaveProperty('object', 'file');
+        expect(file).toHaveProperty('purpose', 'assistants');
+        expect(file).toHaveProperty('filename', 'test-assistants.txt');
+        expect(file).toHaveProperty('bytes');
+        expect(file.bytes).toBeGreaterThan(0);
+        expect(file).toHaveProperty('created_at');
+        expect(file).toHaveProperty('status');
+
+        uploadedFileIds.push(file.id);
         console.log(
-          `✅ File uploaded: ${response.body.id} (${response.body.bytes} bytes, status: ${response.body.status})`,
+          `✅ File uploaded: ${file.id} (${file.bytes} bytes, status: ${file.status})`,
         );
       },
       30000,
@@ -102,17 +110,19 @@ describe('Files API (E2E)', () => {
       async () => {
         const fileContent = Buffer.from('User data content');
 
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/files')
           .field('purpose', 'user_data')
           .attach('file', fileContent, 'test-user-data.txt')
           .expect(201);
 
-        expect(response.body.purpose).toBe('user_data');
-        expect(response.body.filename).toBe('test-user-data.txt');
+        const file = response.body as FileObject;
 
-        uploadedFileIds.push(response.body.id);
-        console.log(`✅ User data file uploaded: ${response.body.id}`);
+        expect(file.purpose).toBe('user_data');
+        expect(file.filename).toBe('test-user-data.txt');
+
+        uploadedFileIds.push(file.id);
+        console.log(`✅ User data file uploaded: ${file.id}`);
       },
       30000,
     );
@@ -130,17 +140,19 @@ describe('Files API (E2E)', () => {
           },
         });
 
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/files')
           .field('purpose', 'batch')
           .attach('file', Buffer.from(batchContent), 'test-batch.jsonl')
           .expect(201);
 
-        expect(response.body.purpose).toBe('batch');
-        expect(response.body.filename).toBe('test-batch.jsonl');
+        const file = response.body as FileObject;
 
-        uploadedFileIds.push(response.body.id);
-        console.log(`✅ Batch file uploaded: ${response.body.id}`);
+        expect(file.purpose).toBe('batch');
+        expect(file.filename).toBe('test-batch.jsonl');
+
+        uploadedFileIds.push(file.id);
+        console.log(`✅ Batch file uploaded: ${file.id}`);
       },
       30000,
     );
@@ -154,12 +166,13 @@ describe('Files API (E2E)', () => {
       async () => {
         const fileContent = Buffer.from('Test file without purpose');
 
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/files')
           .attach('file', fileContent, 'test-no-purpose.txt')
           .expect(400);
 
-        expect(response.body).toHaveProperty('message');
+        const error = response.body as { message: string };
+        expect(error).toHaveProperty('message');
         // Error message format may vary between validation and API
       },
       30000,
@@ -170,13 +183,14 @@ describe('Files API (E2E)', () => {
       async () => {
         const fileContent = Buffer.from('Test file with invalid purpose');
 
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/files')
           .field('purpose', 'invalid-purpose')
           .attach('file', fileContent, 'test-invalid-purpose.txt')
           .expect(400);
 
-        expect(response.body).toHaveProperty('message');
+        const error = response.body as { message: string };
+        expect(error).toHaveProperty('message');
       },
       30000,
     );
@@ -189,17 +203,19 @@ describe('Files API (E2E)', () => {
       async () => {
         const fileContent = Buffer.from('File with special characters');
 
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/files')
           .field('purpose', 'assistants')
           .attach('file', fileContent, 'test-file (with) [special] {chars}.txt')
           .expect(201);
 
-        expect(response.body).toHaveProperty('filename');
-        expect(response.body.filename).toContain('test-file');
+        const file = response.body as FileObject;
 
-        uploadedFileIds.push(response.body.id);
-        console.log(`✅ File with special chars uploaded: ${response.body.id}`);
+        expect(file).toHaveProperty('filename');
+        expect(file.filename).toContain('test-file');
+
+        uploadedFileIds.push(file.id);
+        console.log(`✅ File with special chars uploaded: ${file.id}`);
       },
       30000,
     );
@@ -209,21 +225,23 @@ describe('Files API (E2E)', () => {
     testIf(hasApiKey)(
       'should list all files',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .get('/api/files')
           .expect(200);
 
-        expect(Array.isArray(response.body)).toBe(true);
-        if (response.body.length > 0) {
-          expect(response.body[0]).toHaveProperty('id');
-          expect(response.body[0]).toHaveProperty('object', 'file');
-          expect(response.body[0]).toHaveProperty('purpose');
-          expect(response.body[0]).toHaveProperty('filename');
-          expect(response.body[0]).toHaveProperty('bytes');
-          expect(response.body[0]).toHaveProperty('created_at');
+        const files = response.body as FileObject[];
+
+        expect(Array.isArray(files)).toBe(true);
+        if (files.length > 0) {
+          expect(files[0]).toHaveProperty('id');
+          expect(files[0]).toHaveProperty('object', 'file');
+          expect(files[0]).toHaveProperty('purpose');
+          expect(files[0]).toHaveProperty('filename');
+          expect(files[0]).toHaveProperty('bytes');
+          expect(files[0]).toHaveProperty('created_at');
         }
 
-        console.log(`✅ Listed ${response.body.length} files`);
+        console.log(`✅ Listed ${files.length} files`);
       },
       30000,
     );
@@ -231,16 +249,18 @@ describe('Files API (E2E)', () => {
     testIf(hasApiKey)(
       'should list files with purpose filter',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .get('/api/files?purpose=assistants')
           .expect(200);
 
-        expect(Array.isArray(response.body)).toBe(true);
-        response.body.forEach((file: any) => {
+        const files = response.body as FileObject[];
+
+        expect(Array.isArray(files)).toBe(true);
+        files.forEach((file: FileObject) => {
           expect(file.purpose).toBe('assistants');
         });
 
-        console.log(`✅ Listed ${response.body.length} assistants files`);
+        console.log(`✅ Listed ${files.length} assistants files`);
       },
       30000,
     );
@@ -248,12 +268,14 @@ describe('Files API (E2E)', () => {
     testIf(hasApiKey)(
       'should list files with custom limit',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .get('/api/files?limit=5')
           .expect(200);
 
-        expect(Array.isArray(response.body)).toBe(true);
-        expect(response.body.length).toBeLessThanOrEqual(5);
+        const files = response.body as FileObject[];
+
+        expect(Array.isArray(files)).toBe(true);
+        expect(files.length).toBeLessThanOrEqual(5);
       },
       30000,
     );
@@ -261,16 +283,16 @@ describe('Files API (E2E)', () => {
     testIf(hasApiKey)(
       'should list files in ascending order',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .get('/api/files?order=asc')
           .expect(200);
 
-        expect(Array.isArray(response.body)).toBe(true);
+        const files = response.body as FileObject[];
+
+        expect(Array.isArray(files)).toBe(true);
         // Verify ascending order if multiple files exist
-        if (response.body.length > 1) {
-          expect(response.body[0].created_at).toBeLessThanOrEqual(
-            response.body[1].created_at,
-          );
+        if (files.length > 1) {
+          expect(files[0].created_at).toBeLessThanOrEqual(files[1].created_at);
         }
       },
       30000,
@@ -279,15 +301,17 @@ describe('Files API (E2E)', () => {
     testIf(hasApiKey)(
       'should list files in descending order (default)',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .get('/api/files?order=desc')
           .expect(200);
 
-        expect(Array.isArray(response.body)).toBe(true);
+        const files = response.body as FileObject[];
+
+        expect(Array.isArray(files)).toBe(true);
         // Verify descending order if multiple files exist
-        if (response.body.length > 1) {
-          expect(response.body[0].created_at).toBeGreaterThanOrEqual(
-            response.body[1].created_at,
+        if (files.length > 1) {
+          expect(files[0].created_at).toBeGreaterThanOrEqual(
+            files[1].created_at,
           );
         }
       },
@@ -297,13 +321,15 @@ describe('Files API (E2E)', () => {
     testIf(hasApiKey)(
       'should list files with combined filters',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .get('/api/files?purpose=assistants&order=asc&limit=3')
           .expect(200);
 
-        expect(Array.isArray(response.body)).toBe(true);
-        expect(response.body.length).toBeLessThanOrEqual(3);
-        response.body.forEach((file: any) => {
+        const files = response.body as FileObject[];
+
+        expect(Array.isArray(files)).toBe(true);
+        expect(files.length).toBeLessThanOrEqual(3);
+        files.forEach((file: FileObject) => {
           expect(file.purpose).toBe('assistants');
         });
       },
@@ -317,30 +343,33 @@ describe('Files API (E2E)', () => {
       async () => {
         // Upload file first
         const fileContent = Buffer.from('File for metadata test');
-        const uploadResponse = await request(app.getHttpServer())
+        const uploadResponse = await request(app.getHttpServer() as Server)
           .post('/api/files')
           .field('purpose', 'assistants')
           .attach('file', fileContent, 'metadata-test.txt')
           .expect(201);
 
-        const fileId = uploadResponse.body.id;
+        const uploadedFile = uploadResponse.body as FileObject;
+        const fileId = uploadedFile.id;
         uploadedFileIds.push(fileId);
 
         // Get metadata
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .get(`/api/files/${fileId}`)
           .expect(200);
 
-        expect(response.body).toHaveProperty('id', fileId);
-        expect(response.body).toHaveProperty('object', 'file');
-        expect(response.body).toHaveProperty('purpose', 'assistants');
-        expect(response.body).toHaveProperty('filename', 'metadata-test.txt');
-        expect(response.body).toHaveProperty('bytes');
-        expect(response.body).toHaveProperty('created_at');
-        expect(response.body).toHaveProperty('status');
+        const file = response.body as FileObject;
+
+        expect(file).toHaveProperty('id', fileId);
+        expect(file).toHaveProperty('object', 'file');
+        expect(file).toHaveProperty('purpose', 'assistants');
+        expect(file).toHaveProperty('filename', 'metadata-test.txt');
+        expect(file).toHaveProperty('bytes');
+        expect(file).toHaveProperty('created_at');
+        expect(file).toHaveProperty('status');
 
         console.log(
-          `✅ Retrieved metadata for file: ${fileId} (status: ${response.body.status})`,
+          `✅ Retrieved metadata for file: ${fileId} (status: ${file.status})`,
         );
       },
       30000,
@@ -349,11 +378,12 @@ describe('Files API (E2E)', () => {
     testIf(hasApiKey)(
       'should return 404 for invalid file ID',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .get('/api/files/file-invalid-id-12345')
           .expect(404);
 
-        expect(response.body).toHaveProperty('message');
+        const error = response.body as { message: string };
+        expect(error).toHaveProperty('message');
       },
       30000,
     );
@@ -374,22 +404,23 @@ describe('Files API (E2E)', () => {
       async () => {
         // Upload file with assistants purpose (not downloadable per OpenAI policy)
         const fileContent = Buffer.from('Assistants file - not downloadable');
-        const uploadResponse = await request(app.getHttpServer())
+        const uploadResponse = await request(app.getHttpServer() as Server)
           .post('/api/files')
           .field('purpose', 'assistants')
           .attach('file', fileContent, 'no-download.txt')
           .expect(201);
 
-        const fileId = uploadResponse.body.id;
+        const uploadedFile = uploadResponse.body as FileObject;
+        const fileId = uploadedFile.id;
         uploadedFileIds.push(fileId);
 
-        // Attempt download (OpenAI returns 403 for assistants files)
-        const response = await request(app.getHttpServer()).get(
+        // Attempt download (OpenAI returns 403/404 for assistants files)
+        const response = await request(app.getHttpServer() as Server).get(
           `/api/files/${fileId}/download`,
         );
 
-        // Accept either 403 (OpenAI restriction) or 500 (error from download failure)
-        expect([403, 500]).toContain(response.status);
+        // Accept 403 (forbidden), 404 (not found), or 500 (error from download failure)
+        expect([403, 404, 500]).toContain(response.status);
 
         console.log(
           `✅ Download restriction enforced for assistants file: ${fileId} (status: ${response.status})`,
@@ -401,7 +432,7 @@ describe('Files API (E2E)', () => {
     testIf(hasApiKey)(
       'should return error for invalid file ID',
       async () => {
-        const response = await request(app.getHttpServer()).get(
+        const response = await request(app.getHttpServer() as Server).get(
           '/api/files/file-invalid-id-12345/download',
         );
 
@@ -418,27 +449,34 @@ describe('Files API (E2E)', () => {
       async () => {
         // Upload file first
         const fileContent = Buffer.from('File to be deleted');
-        const uploadResponse = await request(app.getHttpServer())
+        const uploadResponse = await request(app.getHttpServer() as Server)
           .post('/api/files')
           .field('purpose', 'assistants')
           .attach('file', fileContent, 'delete-test.txt')
           .expect(201);
 
-        const fileId = uploadResponse.body.id;
+        const uploadedFile = uploadResponse.body as FileObject;
+        const fileId = uploadedFile.id;
 
         // Delete file
-        const deleteResponse = await request(app.getHttpServer())
+        const deleteResponse = await request(app.getHttpServer() as Server)
           .delete(`/api/files/${fileId}`)
           .expect(200);
 
-        expect(deleteResponse.body).toHaveProperty('id', fileId);
-        expect(deleteResponse.body).toHaveProperty('deleted', true);
-        expect(deleteResponse.body).toHaveProperty('object', 'file');
+        const deletedFile = deleteResponse.body as {
+          id: string;
+          deleted: boolean;
+          object: string;
+        };
+
+        expect(deletedFile).toHaveProperty('id', fileId);
+        expect(deletedFile).toHaveProperty('deleted', true);
+        expect(deletedFile).toHaveProperty('object', 'file');
 
         console.log(`✅ File deleted: ${fileId}`);
 
         // Verify file is deleted (should return 404)
-        await request(app.getHttpServer())
+        await request(app.getHttpServer() as Server)
           .get(`/api/files/${fileId}`)
           .expect(404);
 
@@ -450,11 +488,12 @@ describe('Files API (E2E)', () => {
     testIf(hasApiKey)(
       'should return 404 for invalid file ID',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .delete('/api/files/file-invalid-id-12345')
           .expect(404);
 
-        expect(response.body).toHaveProperty('message');
+        const error = response.body as { message: string };
+        expect(error).toHaveProperty('message');
       },
       30000,
     );
@@ -464,23 +503,24 @@ describe('Files API (E2E)', () => {
       async () => {
         // Upload file
         const fileContent = Buffer.from('File for double delete test');
-        const uploadResponse = await request(app.getHttpServer())
+        const uploadResponse = await request(app.getHttpServer() as Server)
           .post('/api/files')
           .field('purpose', 'assistants')
           .attach('file', fileContent, 'double-delete.txt')
           .expect(201);
 
-        const fileId = uploadResponse.body.id;
+        const uploadedFile = uploadResponse.body as FileObject;
+        const fileId = uploadedFile.id;
 
         // First delete
-        await request(app.getHttpServer())
+        await request(app.getHttpServer() as Server)
           .delete(`/api/files/${fileId}`)
           .expect(200);
 
         console.log(`✅ First delete successful: ${fileId}`);
 
         // Second delete (should fail with 404)
-        await request(app.getHttpServer())
+        await request(app.getHttpServer() as Server)
           .delete(`/api/files/${fileId}`)
           .expect(404);
 

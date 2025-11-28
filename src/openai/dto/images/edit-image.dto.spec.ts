@@ -99,7 +99,7 @@ describe('EditImageDto', () => {
 
     it('should reject dall-e-3 (not supported for edits)', async () => {
       const dto = createValidDto();
-      dto.model = 'dall-e-3' as any;
+      dto.model = 'dall-e-3' as unknown as typeof dto.model;
 
       const errors = await validateDto(dto);
 
@@ -109,7 +109,7 @@ describe('EditImageDto', () => {
 
     it('should reject invalid model', async () => {
       const dto = createValidDto();
-      dto.model = 'invalid-model' as any;
+      dto.model = 'invalid-model' as unknown as typeof dto.model;
 
       const errors = await validateDto(dto);
 
@@ -197,7 +197,7 @@ describe('EditImageDto', () => {
 
     it('should reject invalid size', async () => {
       const dto = createValidDto();
-      dto.size = '2048x2048' as any;
+      dto.size = '2048x2048' as unknown as typeof dto.size;
 
       const errors = await validateDto(dto);
 
@@ -227,7 +227,7 @@ describe('EditImageDto', () => {
 
     it('should reject invalid format', async () => {
       const dto = createValidDto();
-      dto.response_format = 'json' as any;
+      dto.response_format = 'json' as unknown as typeof dto.response_format;
 
       const errors = await validateDto(dto);
 

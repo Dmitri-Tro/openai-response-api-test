@@ -1,8 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
+import type { Server } from 'http';
+import type { VectorStores } from 'openai/resources/vector-stores';
+import type { FileObject } from 'openai/resources/files';
 import { AppModule } from '../src/app.module';
 import { OpenAIExceptionFilter } from '../src/common/filters/openai-exception.filter';
+import { LoggerService } from '../src/common/services/logger.service';
 
 /**
  * E2E Tests for Vector Stores API
@@ -55,7 +59,10 @@ describe('Vector Stores API (E2E)', () => {
     app.useGlobalPipes(
       new ValidationPipe({ transform: true, whitelist: true }),
     );
-    app.useGlobalFilters(new OpenAIExceptionFilter());
+
+    // Get LoggerService from the module for exception filter
+    const loggerService = app.get(LoggerService);
+    app.useGlobalFilters(new OpenAIExceptionFilter(loggerService));
     await app.init();
 
     // Upload test files for vector store operations
@@ -79,19 +86,20 @@ describe('Vector Stores API (E2E)', () => {
 
     for (const { content, filename } of testFiles) {
       try {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/files')
           .field('purpose', 'assistants')
           .attach('file', Buffer.from(content), filename)
           .expect(201);
 
-        uploadedFileIds.push(response.body.id);
-        console.log(`  ✓ Uploaded file: ${response.body.id} (${filename})`);
-      } catch (error) {
+        const file = response.body as FileObject;
+        uploadedFileIds.push(file.id);
+        console.log(`  ✓ Uploaded file: ${file.id} (${filename})`);
+      } catch {
         console.log(`  ✗ Failed to upload file: ${filename}`);
       }
     }
-  });
+  }, 30000); // 30 second timeout for file uploads
 
   afterAll(async () => {
     // Cleanup: delete all vector stores
@@ -101,11 +109,11 @@ describe('Vector Stores API (E2E)', () => {
       );
       for (const vectorStoreId of createdVectorStoreIds) {
         try {
-          await request(app.getHttpServer())
+          await request(app.getHttpServer() as Server)
             .delete(`/api/vector-stores/${vectorStoreId}`)
             .expect(200);
           console.log(`  ✓ Deleted vector store: ${vectorStoreId}`);
-        } catch (error) {
+        } catch {
           console.log(`  ✗ Failed to delete vector store: ${vectorStoreId}`);
         }
       }
@@ -116,11 +124,11 @@ describe('Vector Stores API (E2E)', () => {
       console.log(`🧹 Cleaning up ${uploadedFileIds.length} uploaded files...`);
       for (const fileId of uploadedFileIds) {
         try {
-          await request(app.getHttpServer())
+          await request(app.getHttpServer() as Server)
             .delete(`/api/files/${fileId}`)
             .expect(200);
           console.log(`  ✓ Deleted file: ${fileId}`);
-        } catch (error) {
+        } catch {
           console.log(`  ✗ Failed to delete file: ${fileId}`);
         }
       }
@@ -139,22 +147,24 @@ describe('Vector Stores API (E2E)', () => {
     testIf(hasApiKey)(
       'should create vector store with minimal parameters',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/vector-stores')
           .send({})
           .expect(201);
 
-        expect(response.body).toHaveProperty('id');
-        expect(response.body.id).toMatch(/^vs_/);
-        expect(response.body).toHaveProperty('object', 'vector_store');
-        expect(response.body).toHaveProperty('status');
-        expect(response.body).toHaveProperty('file_counts');
-        expect(response.body).toHaveProperty('usage_bytes');
-        expect(response.body).toHaveProperty('created_at');
+        const vectorStore = response.body as VectorStores.VectorStore;
 
-        createdVectorStoreIds.push(response.body.id);
+        expect(vectorStore).toHaveProperty('id');
+        expect(vectorStore.id).toMatch(/^vs_/);
+        expect(vectorStore).toHaveProperty('object', 'vector_store');
+        expect(vectorStore).toHaveProperty('status');
+        expect(vectorStore).toHaveProperty('file_counts');
+        expect(vectorStore).toHaveProperty('usage_bytes');
+        expect(vectorStore).toHaveProperty('created_at');
+
+        createdVectorStoreIds.push(vectorStore.id);
         console.log(
-          `✅ Vector store created: ${response.body.id} (status: ${response.body.status})`,
+          `✅ Vector store created: ${vectorStore.id} (status: ${vectorStore.status})`,
         );
       },
       60000,
@@ -163,7 +173,7 @@ describe('Vector Stores API (E2E)', () => {
     testIf(hasApiKey)(
       'should create vector store with name and metadata',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/vector-stores')
           .send({
             name: 'Test Vector Store',
@@ -174,14 +184,16 @@ describe('Vector Stores API (E2E)', () => {
           })
           .expect(201);
 
-        expect(response.body.name).toBe('Test Vector Store');
-        expect(response.body.metadata).toEqual({
+        const vectorStore = response.body as VectorStores.VectorStore;
+
+        expect(vectorStore.name).toBe('Test Vector Store');
+        expect(vectorStore.metadata).toEqual({
           category: 'e2e-test',
           environment: 'testing',
         });
 
-        createdVectorStoreIds.push(response.body.id);
-        console.log(`✅ Named vector store created: ${response.body.id}`);
+        createdVectorStoreIds.push(vectorStore.id);
+        console.log(`✅ Named vector store created: ${vectorStore.id}`);
       },
       60000,
     );
@@ -194,7 +206,7 @@ describe('Vector Stores API (E2E)', () => {
           return;
         }
 
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/vector-stores')
           .send({
             name: 'Vector Store with Files',
@@ -203,12 +215,14 @@ describe('Vector Stores API (E2E)', () => {
           })
           .expect(201);
 
-        expect(response.body).toHaveProperty('id');
-        expect(response.body.name).toBe('Vector Store with Files');
+        const vectorStore = response.body as VectorStores.VectorStore;
 
-        createdVectorStoreIds.push(response.body.id);
+        expect(vectorStore).toHaveProperty('id');
+        expect(vectorStore.name).toBe('Vector Store with Files');
+
+        createdVectorStoreIds.push(vectorStore.id);
         console.log(
-          `✅ Vector store with files created: ${response.body.id} (files: ${uploadedFileIds[0]})`,
+          `✅ Vector store with files created: ${vectorStore.id} (files: ${uploadedFileIds[0]})`,
         );
       },
       60000,
@@ -222,12 +236,13 @@ describe('Vector Stores API (E2E)', () => {
           metadata[`key${i}`] = `value${i}`;
         }
 
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post('/api/vector-stores')
           .send({ metadata })
           .expect(400);
 
-        expect(response.body).toHaveProperty('message');
+        const error = response.body as { message: string };
+        expect(error).toHaveProperty('message');
       },
       60000,
     );
@@ -243,13 +258,15 @@ describe('Vector Stores API (E2E)', () => {
         }
 
         const vectorStoreId = createdVectorStoreIds[0];
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .get(`/api/vector-stores/${vectorStoreId}`)
           .expect(200);
 
-        expect(response.body.id).toBe(vectorStoreId);
-        expect(response.body).toHaveProperty('status');
-        expect(response.body).toHaveProperty('file_counts');
+        const vectorStore = response.body as VectorStores.VectorStore;
+
+        expect(vectorStore.id).toBe(vectorStoreId);
+        expect(vectorStore).toHaveProperty('status');
+        expect(vectorStore).toHaveProperty('file_counts');
 
         console.log(`✅ Retrieved vector store: ${vectorStoreId}`);
       },
@@ -259,7 +276,7 @@ describe('Vector Stores API (E2E)', () => {
     testIf(hasApiKey)(
       'should return 404 for non-existent vector store',
       async () => {
-        await request(app.getHttpServer())
+        await request(app.getHttpServer() as Server)
           .get('/api/vector-stores/vs_nonexistent')
           .expect(404);
       },
@@ -277,7 +294,7 @@ describe('Vector Stores API (E2E)', () => {
         }
 
         const vectorStoreId = createdVectorStoreIds[0];
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .patch(`/api/vector-stores/${vectorStoreId}`)
           .send({
             name: 'Updated Name',
@@ -285,8 +302,10 @@ describe('Vector Stores API (E2E)', () => {
           })
           .expect(200);
 
-        expect(response.body.name).toBe('Updated Name');
-        expect(response.body.metadata.updated).toBe('true');
+        const vectorStore = response.body as VectorStores.VectorStore;
+
+        expect(vectorStore.name).toBe('Updated Name');
+        expect(vectorStore.metadata?.updated).toBe('true');
 
         console.log(`✅ Updated vector store: ${vectorStoreId}`);
       },
@@ -298,17 +317,19 @@ describe('Vector Stores API (E2E)', () => {
     testIf(hasApiKey)(
       'should list vector stores',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .get('/api/vector-stores')
           .expect(200);
 
-        expect(Array.isArray(response.body)).toBe(true);
-        if (response.body.length > 0) {
-          expect(response.body[0]).toHaveProperty('id');
-          expect(response.body[0]).toHaveProperty('object', 'vector_store');
+        const vectorStores = response.body as VectorStores.VectorStore[];
+
+        expect(Array.isArray(vectorStores)).toBe(true);
+        if (vectorStores.length > 0) {
+          expect(vectorStores[0]).toHaveProperty('id');
+          expect(vectorStores[0]).toHaveProperty('object', 'vector_store');
         }
 
-        console.log(`✅ Listed ${response.body.length} vector stores`);
+        console.log(`✅ Listed ${vectorStores.length} vector stores`);
       },
       60000,
     );
@@ -316,16 +337,16 @@ describe('Vector Stores API (E2E)', () => {
     testIf(hasApiKey)(
       'should list vector stores with pagination',
       async () => {
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .get('/api/vector-stores?limit=2&order=desc')
           .expect(200);
 
-        expect(Array.isArray(response.body)).toBe(true);
-        expect(response.body.length).toBeLessThanOrEqual(2);
+        const vectorStores = response.body as VectorStores.VectorStore[];
 
-        console.log(
-          `✅ Listed ${response.body.length} vector stores (limit=2)`,
-        );
+        expect(Array.isArray(vectorStores)).toBe(true);
+        expect(vectorStores.length).toBeLessThanOrEqual(2);
+
+        console.log(`✅ Listed ${vectorStores.length} vector stores (limit=2)`);
       },
       60000,
     );
@@ -336,23 +357,23 @@ describe('Vector Stores API (E2E)', () => {
       'should delete vector store',
       async () => {
         // Create a new vector store specifically for deletion
-        const createResponse = await request(app.getHttpServer())
+        const createResponse = await request(app.getHttpServer() as Server)
           .post('/api/vector-stores')
           .send({ name: 'To be deleted' })
           .expect(201);
 
-        const vectorStoreId = createResponse.body.id;
+        const created = createResponse.body as VectorStores.VectorStore;
+        const vectorStoreId = created.id;
 
-        const deleteResponse = await request(app.getHttpServer())
+        const deleteResponse = await request(app.getHttpServer() as Server)
           .delete(`/api/vector-stores/${vectorStoreId}`)
           .expect(200);
 
-        expect(deleteResponse.body).toHaveProperty('id', vectorStoreId);
-        expect(deleteResponse.body).toHaveProperty('deleted', true);
-        expect(deleteResponse.body).toHaveProperty(
-          'object',
-          'vector_store.deleted',
-        );
+        const deleted = deleteResponse.body as VectorStores.VectorStoreDeleted;
+
+        expect(deleted).toHaveProperty('id', vectorStoreId);
+        expect(deleted).toHaveProperty('deleted', true);
+        expect(deleted).toHaveProperty('object', 'vector_store.deleted');
 
         console.log(`✅ Deleted vector store: ${vectorStoreId}`);
       },
@@ -374,22 +395,27 @@ describe('Vector Stores API (E2E)', () => {
 
         // Poll until indexing completes
         console.log(`⏳ Waiting for file indexing to complete...`);
-        await request(app.getHttpServer())
+        await request(app.getHttpServer() as Server)
           .post(`/api/vector-stores/${vectorStoreId}/poll`)
           .expect(200);
 
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post(`/api/vector-stores/${vectorStoreId}/search`)
           .send({ query: 'machine learning' })
           .expect(200);
 
-        expect(Array.isArray(response.body)).toBe(true);
-        if (response.body.length > 0) {
-          expect(response.body[0]).toHaveProperty('score');
-          expect(response.body[0]).toHaveProperty('content');
+        const results = response.body as Array<{
+          score: number;
+          content: string;
+        }>;
+
+        expect(Array.isArray(results)).toBe(true);
+        if (results.length > 0) {
+          expect(results[0]).toHaveProperty('score');
+          expect(results[0]).toHaveProperty('content');
         }
 
-        console.log(`✅ Search returned ${response.body.length} results`);
+        console.log(`✅ Search returned ${results.length} results`);
       },
       120000,
     );
@@ -414,17 +440,22 @@ describe('Vector Stores API (E2E)', () => {
         const vectorStoreId = createdVectorStoreIds[0];
         const fileId = uploadedFileIds[1];
 
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post(`/api/vector-stores/${vectorStoreId}/files`)
           .send({ file_id: fileId })
           .expect(201);
 
-        expect(response.body).toHaveProperty('id', fileId);
-        expect(response.body).toHaveProperty('vector_store_id', vectorStoreId);
-        expect(response.body).toHaveProperty('status');
+        const vectorStoreFile = response.body as VectorStores.VectorStoreFile;
+
+        expect(vectorStoreFile).toHaveProperty('id', fileId);
+        expect(vectorStoreFile).toHaveProperty(
+          'vector_store_id',
+          vectorStoreId,
+        );
+        expect(vectorStoreFile).toHaveProperty('status');
 
         console.log(
-          `✅ Added file ${fileId} to vector store ${vectorStoreId} (status: ${response.body.status})`,
+          `✅ Added file ${fileId} to vector store ${vectorStoreId} (status: ${vectorStoreFile.status})`,
         );
       },
       60000,
@@ -441,7 +472,7 @@ describe('Vector Stores API (E2E)', () => {
         const vectorStoreId = createdVectorStoreIds[0];
         const fileId = uploadedFileIds[2];
 
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post(`/api/vector-stores/${vectorStoreId}/files`)
           .send({
             file_id: fileId,
@@ -455,8 +486,10 @@ describe('Vector Stores API (E2E)', () => {
           })
           .expect(201);
 
-        expect(response.body).toHaveProperty('id', fileId);
-        expect(response.body.chunking_strategy).toHaveProperty(
+        const vectorStoreFile = response.body as VectorStores.VectorStoreFile;
+
+        expect(vectorStoreFile).toHaveProperty('id', fileId);
+        expect(vectorStoreFile.chunking_strategy).toHaveProperty(
           'type',
           'static',
         );
@@ -479,19 +512,21 @@ describe('Vector Stores API (E2E)', () => {
         }
 
         const vectorStoreId = createdVectorStoreIds[0];
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .get(`/api/vector-stores/${vectorStoreId}/files`)
           .expect(200);
 
-        expect(Array.isArray(response.body)).toBe(true);
-        if (response.body.length > 0) {
-          expect(response.body[0]).toHaveProperty('id');
-          expect(response.body[0]).toHaveProperty('vector_store_id');
-          expect(response.body[0]).toHaveProperty('status');
+        const files = response.body as VectorStores.VectorStoreFile[];
+
+        expect(Array.isArray(files)).toBe(true);
+        if (files.length > 0) {
+          expect(files[0]).toHaveProperty('id');
+          expect(files[0]).toHaveProperty('vector_store_id');
+          expect(files[0]).toHaveProperty('status');
         }
 
         console.log(
-          `✅ Listed ${response.body.length} files in vector store ${vectorStoreId}`,
+          `✅ Listed ${files.length} files in vector store ${vectorStoreId}`,
         );
       },
       60000,
@@ -506,18 +541,20 @@ describe('Vector Stores API (E2E)', () => {
         }
 
         const vectorStoreId = createdVectorStoreIds[0];
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .get(
             `/api/vector-stores/${vectorStoreId}/files?filter=completed&limit=10`,
           )
           .expect(200);
 
-        expect(Array.isArray(response.body)).toBe(true);
-        response.body.forEach((file: any) => {
+        const files = response.body as VectorStores.VectorStoreFile[];
+
+        expect(Array.isArray(files)).toBe(true);
+        files.forEach((file: VectorStores.VectorStoreFile) => {
           expect(file.status).toBe('completed');
         });
 
-        console.log(`✅ Listed ${response.body.length} completed files`);
+        console.log(`✅ Listed ${files.length} completed files`);
       },
       60000,
     );
@@ -538,12 +575,14 @@ describe('Vector Stores API (E2E)', () => {
         const vectorStoreId = createdVectorStoreIds[0];
         const fileId = uploadedFileIds[1];
 
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .get(`/api/vector-stores/${vectorStoreId}/files/${fileId}`)
           .expect(200);
 
-        expect(response.body.id).toBe(fileId);
-        expect(response.body.vector_store_id).toBe(vectorStoreId);
+        const vectorStoreFile = response.body as VectorStores.VectorStoreFile;
+
+        expect(vectorStoreFile.id).toBe(fileId);
+        expect(vectorStoreFile.vector_store_id).toBe(vectorStoreId);
 
         console.log(`✅ Retrieved file ${fileId} from ${vectorStoreId}`);
       },
@@ -566,16 +605,15 @@ describe('Vector Stores API (E2E)', () => {
         const vectorStoreId = createdVectorStoreIds[0];
         const fileId = uploadedFileIds[1];
 
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .delete(`/api/vector-stores/${vectorStoreId}/files/${fileId}`)
           .expect(200);
 
-        expect(response.body).toHaveProperty('id', fileId);
-        expect(response.body).toHaveProperty('deleted', true);
-        expect(response.body).toHaveProperty(
-          'object',
-          'vector_store.file.deleted',
-        );
+        const deleted = response.body as VectorStores.VectorStoreFileDeleted;
+
+        expect(deleted).toHaveProperty('id', fileId);
+        expect(deleted).toHaveProperty('deleted', true);
+        expect(deleted).toHaveProperty('object', 'vector_store.file.deleted');
 
         console.log(
           `✅ Removed file ${fileId} from vector store ${vectorStoreId}`,
@@ -594,12 +632,13 @@ describe('Vector Stores API (E2E)', () => {
       'should create file batch with file_ids',
       async () => {
         // Create a new vector store for batch operations
-        const createResponse = await request(app.getHttpServer())
+        const createResponse = await request(app.getHttpServer() as Server)
           .post('/api/vector-stores')
           .send({ name: 'Batch Test Vector Store' })
           .expect(201);
 
-        const vectorStoreId = createResponse.body.id;
+        const created = createResponse.body as VectorStores.VectorStore;
+        const vectorStoreId = created.id;
         createdVectorStoreIds.push(vectorStoreId);
 
         if (uploadedFileIds.length < 2) {
@@ -607,21 +646,23 @@ describe('Vector Stores API (E2E)', () => {
           return;
         }
 
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post(`/api/vector-stores/${vectorStoreId}/file-batches`)
           .send({
             file_ids: [uploadedFileIds[0], uploadedFileIds[1]],
           })
           .expect(201);
 
-        expect(response.body).toHaveProperty('id');
-        expect(response.body.id).toMatch(/^vsfb_/);
-        expect(response.body).toHaveProperty('vector_store_id', vectorStoreId);
-        expect(response.body).toHaveProperty('status');
-        expect(response.body).toHaveProperty('file_counts');
+        const fileBatch = response.body as VectorStores.VectorStoreFileBatch;
+
+        expect(fileBatch).toHaveProperty('id');
+        expect(fileBatch.id).toMatch(/^vsfb_/);
+        expect(fileBatch).toHaveProperty('vector_store_id', vectorStoreId);
+        expect(fileBatch).toHaveProperty('status');
+        expect(fileBatch).toHaveProperty('file_counts');
 
         console.log(
-          `✅ Created file batch: ${response.body.id} (status: ${response.body.status})`,
+          `✅ Created file batch: ${fileBatch.id} (status: ${fileBatch.status})`,
         );
       },
       60000,
@@ -642,19 +683,21 @@ describe('Vector Stores API (E2E)', () => {
         }
 
         const vectorStoreId = createdVectorStoreIds[0];
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post(`/api/vector-stores/${vectorStoreId}/poll`)
           .query({ max_wait_ms: 30000 })
           .expect(200);
 
-        expect(response.body).toHaveProperty('id', vectorStoreId);
-        expect(response.body).toHaveProperty('status');
-        expect(['completed', 'expired'].includes(response.body.status)).toBe(
+        const vectorStore = response.body as VectorStores.VectorStore;
+
+        expect(vectorStore).toHaveProperty('id', vectorStoreId);
+        expect(vectorStore).toHaveProperty('status');
+        expect(['completed', 'expired'].includes(vectorStore.status)).toBe(
           true,
         );
 
         console.log(
-          `✅ Polled vector store ${vectorStoreId}: ${response.body.status}`,
+          `✅ Polled vector store ${vectorStoreId}: ${vectorStore.status}`,
         );
       },
       60000,
@@ -676,18 +719,20 @@ describe('Vector Stores API (E2E)', () => {
         const vectorStoreId = createdVectorStoreIds[0];
         const fileId = uploadedFileIds[2];
 
-        const response = await request(app.getHttpServer())
+        const response = await request(app.getHttpServer() as Server)
           .post(`/api/vector-stores/${vectorStoreId}/files/${fileId}/poll`)
           .query({ max_wait_ms: 30000 })
           .expect(200);
 
-        expect(response.body).toHaveProperty('id', fileId);
-        expect(response.body).toHaveProperty('status');
+        const vectorStoreFile = response.body as VectorStores.VectorStoreFile;
+
+        expect(vectorStoreFile).toHaveProperty('id', fileId);
+        expect(vectorStoreFile).toHaveProperty('status');
         expect(
-          ['completed', 'failed', 'cancelled'].includes(response.body.status),
+          ['completed', 'failed', 'cancelled'].includes(vectorStoreFile.status),
         ).toBe(true);
 
-        console.log(`✅ Polled file ${fileId}: ${response.body.status}`);
+        console.log(`✅ Polled file ${fileId}: ${vectorStoreFile.status}`);
       },
       60000,
     );

@@ -1,8 +1,5 @@
 import { validate, ValidationError } from 'class-validator';
-import {
-  CreateVectorStoreDto,
-  ExpiresAfterDto,
-} from './create-vector-store.dto';
+import { CreateVectorStoreDto } from './create-vector-store.dto';
 
 async function validateDto(
   dto: CreateVectorStoreDto,
@@ -91,7 +88,9 @@ describe('CreateVectorStoreDto', () => {
 
     it('should reject invalid chunking strategy (delegates to validator)', async () => {
       const dto = createValidDto();
-      dto.chunking_strategy = { type: 'invalid' } as any;
+      dto.chunking_strategy = {
+        type: 'invalid',
+      } as unknown as typeof dto.chunking_strategy;
       const errors = await validateDto(dto);
       expect(errors.length).toBeGreaterThan(0);
     });

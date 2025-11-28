@@ -20,9 +20,17 @@ describe('Interceptors - Edge Cases', () => {
   let mockPricingService: jest.Mocked<PricingService>;
   let mockExecutionContext: jest.Mocked<ExecutionContext>;
   let mockCallHandler: jest.Mocked<CallHandler>;
+  let handleSpy: jest.Mock;
+  let logOpenAIInteractionSpy: jest.Mock;
 
   beforeEach(() => {
+    // Create spies first
+    logOpenAIInteractionSpy = jest.fn();
+    handleSpy = jest.fn();
+
+    // Create mock logger and override with our spy
     mockLoggerService = createMockLoggerService();
+    mockLoggerService.logOpenAIInteraction = logOpenAIInteractionSpy;
 
     // Mock PricingService
     mockPricingService = {
@@ -31,7 +39,7 @@ describe('Interceptors - Edge Cases', () => {
       getModelPricing: jest.fn(),
       getSupportedModels: jest.fn(),
       isModelSupported: jest.fn(),
-    } as any;
+    } as unknown as jest.Mocked<PricingService>;
 
     mockExecutionContext = {
       switchToHttp: jest.fn().mockReturnValue({
@@ -49,7 +57,7 @@ describe('Interceptors - Edge Cases', () => {
     } as unknown as jest.Mocked<ExecutionContext>;
 
     mockCallHandler = {
-      handle: jest.fn(),
+      handle: handleSpy,
     } as unknown as jest.Mocked<CallHandler>;
   });
 
@@ -75,7 +83,7 @@ describe('Interceptors - Edge Cases', () => {
         );
         let attemptCount = 0;
 
-        mockCallHandler.handle.mockImplementation(() => {
+        handleSpy.mockImplementation(() => {
           attemptCount++;
           return throwError(() => error);
         });
@@ -88,7 +96,9 @@ describe('Interceptors - Edge Cases', () => {
               expect(attemptCount).toBe(4);
               done();
             },
-            next: () => done(new Error('Should not succeed')),
+            next: () => {
+              done(new Error('Should not succeed'));
+            },
           });
       }, 5000);
 
@@ -99,7 +109,7 @@ describe('Interceptors - Edge Cases', () => {
         );
         let attemptCount = 0;
 
-        mockCallHandler.handle.mockImplementation(() => {
+        handleSpy.mockImplementation(() => {
           attemptCount++;
           if (attemptCount < 4) {
             return throwError(() => error);
@@ -115,7 +125,9 @@ describe('Interceptors - Edge Cases', () => {
               expect(attemptCount).toBe(4);
               done();
             },
-            error: (err) => done(err),
+            error: (err) => {
+              done(err);
+            },
           });
       }, 5000);
 
@@ -123,7 +135,7 @@ describe('Interceptors - Edge Cases', () => {
         const error = new HttpException('Rate limit', 429);
         let retried = false;
 
-        mockCallHandler.handle.mockImplementation(() => {
+        handleSpy.mockImplementation(() => {
           if (!retried) {
             retried = true;
             return throwError(() => error);
@@ -139,7 +151,9 @@ describe('Interceptors - Edge Cases', () => {
               expect(retried).toBe(true);
               done();
             },
-            error: (err) => done(err),
+            error: (err) => {
+              done(err);
+            },
           });
       }, 5000);
 
@@ -147,7 +161,7 @@ describe('Interceptors - Edge Cases', () => {
         const error = new HttpException('Server error', 500);
         let retried = false;
 
-        mockCallHandler.handle.mockImplementation(() => {
+        handleSpy.mockImplementation(() => {
           if (!retried) {
             retried = true;
             return throwError(() => error);
@@ -162,13 +176,15 @@ describe('Interceptors - Edge Cases', () => {
               expect(result).toEqual({ success: true });
               done();
             },
-            error: (err) => done(err),
+            error: (err) => {
+              done(err);
+            },
           });
       }, 5000);
 
       it('should NOT retry status code just below 5xx (499)', async () => {
         const error = new HttpException('Client error', 499);
-        mockCallHandler.handle.mockReturnValue(throwError(() => error));
+        handleSpy.mockReturnValue(throwError(() => error));
 
         const result$ = retryInterceptor.intercept(
           mockExecutionContext,
@@ -176,14 +192,14 @@ describe('Interceptors - Edge Cases', () => {
         );
 
         await expect(lastValueFrom(result$)).rejects.toBe(error);
-        expect(mockCallHandler.handle).toHaveBeenCalledTimes(1);
+        expect(handleSpy).toHaveBeenCalledTimes(1);
       });
 
       it('should handle status code at upper 5xx boundary (599)', (done) => {
         const error = new HttpException('Server error', 599);
         let retried = false;
 
-        mockCallHandler.handle.mockImplementation(() => {
+        handleSpy.mockImplementation(() => {
           if (!retried) {
             retried = true;
             return throwError(() => error);
@@ -198,7 +214,9 @@ describe('Interceptors - Edge Cases', () => {
               expect(retried).toBe(true);
               done();
             },
-            error: (err) => done(err),
+            error: (err) => {
+              done(err);
+            },
           });
       }, 5000);
     });
@@ -208,7 +226,7 @@ describe('Interceptors - Edge Cases', () => {
         const error = { status: 503, message: 'Service unavailable' };
         let retried = false;
 
-        mockCallHandler.handle.mockImplementation(() => {
+        handleSpy.mockImplementation(() => {
           if (!retried) {
             retried = true;
             return throwError(() => error);
@@ -223,7 +241,9 @@ describe('Interceptors - Edge Cases', () => {
               expect(retried).toBe(true);
               done();
             },
-            error: (err) => done(err),
+            error: (err) => {
+              done(err);
+            },
           });
       }, 5000);
 
@@ -231,7 +251,7 @@ describe('Interceptors - Edge Cases', () => {
         const error = { code: 'ETIMEDOUT', message: 'Connection timeout' };
         let retried = false;
 
-        mockCallHandler.handle.mockImplementation(() => {
+        handleSpy.mockImplementation(() => {
           if (!retried) {
             retried = true;
             return throwError(() => error);
@@ -246,7 +266,9 @@ describe('Interceptors - Edge Cases', () => {
               expect(retried).toBe(true);
               done();
             },
-            error: (err) => done(err),
+            error: (err) => {
+              done(err);
+            },
           });
       }, 5000);
 
@@ -254,7 +276,7 @@ describe('Interceptors - Edge Cases', () => {
         const error = new Error('Request failed: ECONNRESET');
         let retried = false;
 
-        mockCallHandler.handle.mockImplementation(() => {
+        handleSpy.mockImplementation(() => {
           if (!retried) {
             retried = true;
             return throwError(() => error);
@@ -269,12 +291,14 @@ describe('Interceptors - Edge Cases', () => {
               expect(retried).toBe(true);
               done();
             },
-            error: (err) => done(err),
+            error: (err) => {
+              done(err);
+            },
           });
       }, 5000);
 
       it('should handle null error', async () => {
-        mockCallHandler.handle.mockReturnValue(throwError(() => null));
+        handleSpy.mockReturnValue(throwError(() => null));
 
         const result$ = retryInterceptor.intercept(
           mockExecutionContext,
@@ -282,11 +306,11 @@ describe('Interceptors - Edge Cases', () => {
         );
 
         await expect(lastValueFrom(result$)).rejects.toBe(null);
-        expect(mockCallHandler.handle).toHaveBeenCalledTimes(1);
+        expect(handleSpy).toHaveBeenCalledTimes(1);
       });
 
       it('should handle undefined error', async () => {
-        mockCallHandler.handle.mockReturnValue(throwError(() => undefined));
+        handleSpy.mockReturnValue(throwError(() => undefined));
 
         const result$ = retryInterceptor.intercept(
           mockExecutionContext,
@@ -294,13 +318,11 @@ describe('Interceptors - Edge Cases', () => {
         );
 
         await expect(lastValueFrom(result$)).rejects.toBe(undefined);
-        expect(mockCallHandler.handle).toHaveBeenCalledTimes(1);
+        expect(handleSpy).toHaveBeenCalledTimes(1);
       });
 
       it('should handle string error', async () => {
-        mockCallHandler.handle.mockReturnValue(
-          throwError(() => 'String error'),
-        );
+        handleSpy.mockReturnValue(throwError(() => 'String error'));
 
         const result$ = retryInterceptor.intercept(
           mockExecutionContext,
@@ -308,11 +330,11 @@ describe('Interceptors - Edge Cases', () => {
         );
 
         await expect(lastValueFrom(result$)).rejects.toBe('String error');
-        expect(mockCallHandler.handle).toHaveBeenCalledTimes(1);
+        expect(handleSpy).toHaveBeenCalledTimes(1);
       });
 
       it('should handle number error', async () => {
-        mockCallHandler.handle.mockReturnValue(throwError(() => 404));
+        handleSpy.mockReturnValue(throwError(() => 404));
 
         const result$ = retryInterceptor.intercept(
           mockExecutionContext,
@@ -320,7 +342,7 @@ describe('Interceptors - Edge Cases', () => {
         );
 
         await expect(lastValueFrom(result$)).rejects.toBe(404);
-        expect(mockCallHandler.handle).toHaveBeenCalledTimes(1);
+        expect(handleSpy).toHaveBeenCalledTimes(1);
       });
     });
 
@@ -338,7 +360,7 @@ describe('Interceptors - Edge Cases', () => {
           const error = { code, message: `Network error: ${code}` };
           let retried = false;
 
-          mockCallHandler.handle.mockImplementation(() => {
+          handleSpy.mockImplementation(() => {
             if (!retried) {
               retried = true;
               return throwError(() => error);
@@ -353,7 +375,9 @@ describe('Interceptors - Edge Cases', () => {
                 expect(retried).toBe(true);
                 done();
               },
-              error: (err) => done(err),
+              error: (err) => {
+                done(err);
+              },
             });
         }, 5000);
       });
@@ -372,7 +396,7 @@ describe('Interceptors - Edge Cases', () => {
 
     describe('Response Body Variations', () => {
       it('should handle null response body', async () => {
-        mockCallHandler.handle.mockReturnValue(of(null));
+        handleSpy.mockReturnValue(of(null));
 
         const result$ = loggingInterceptor.intercept(
           mockExecutionContext,
@@ -381,11 +405,11 @@ describe('Interceptors - Edge Cases', () => {
         const result = await lastValueFrom(result$);
 
         expect(result).toBe(null);
-        expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalled();
+        expect(logOpenAIInteractionSpy).toHaveBeenCalled();
       });
 
       it('should handle undefined response body', async () => {
-        mockCallHandler.handle.mockReturnValue(of(undefined));
+        handleSpy.mockReturnValue(of(undefined));
 
         const result$ = loggingInterceptor.intercept(
           mockExecutionContext,
@@ -394,11 +418,11 @@ describe('Interceptors - Edge Cases', () => {
         const result = await lastValueFrom(result$);
 
         expect(result).toBe(undefined);
-        expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalled();
+        expect(logOpenAIInteractionSpy).toHaveBeenCalled();
       });
 
       it('should handle empty object response', async () => {
-        mockCallHandler.handle.mockReturnValue(of({}));
+        handleSpy.mockReturnValue(of({}));
 
         const result$ = loggingInterceptor.intercept(
           mockExecutionContext,
@@ -407,7 +431,7 @@ describe('Interceptors - Edge Cases', () => {
         const result = await lastValueFrom(result$);
 
         expect(result).toEqual({});
-        expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalled();
+        expect(logOpenAIInteractionSpy).toHaveBeenCalled();
       });
 
       it('should handle very large response body', async () => {
@@ -417,7 +441,7 @@ describe('Interceptors - Edge Cases', () => {
           usage: { total_tokens: 50000 },
         };
 
-        mockCallHandler.handle.mockReturnValue(of(largeResponse));
+        handleSpy.mockReturnValue(of(largeResponse));
 
         const result$ = loggingInterceptor.intercept(
           mockExecutionContext,
@@ -426,7 +450,7 @@ describe('Interceptors - Edge Cases', () => {
         const result = await lastValueFrom(result$);
 
         expect(result).toEqual(largeResponse);
-        expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalled();
+        expect(logOpenAIInteractionSpy).toHaveBeenCalled();
       });
 
       it('should handle response with special characters', async () => {
@@ -435,7 +459,7 @@ describe('Interceptors - Edge Cases', () => {
           output_text: '🔥 Unicode: 你好世界 \n\t Special: <>&"\'',
         };
 
-        mockCallHandler.handle.mockReturnValue(of(specialResponse));
+        handleSpy.mockReturnValue(of(specialResponse));
 
         const result$ = loggingInterceptor.intercept(
           mockExecutionContext,
@@ -444,7 +468,7 @@ describe('Interceptors - Edge Cases', () => {
         const result = await lastValueFrom(result$);
 
         expect(result).toEqual(specialResponse);
-        expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalled();
+        expect(logOpenAIInteractionSpy).toHaveBeenCalled();
       });
     });
 
@@ -457,7 +481,7 @@ describe('Interceptors - Edge Cases', () => {
             body: {},
           });
 
-        mockCallHandler.handle.mockReturnValue(of({ id: 'resp_123' }));
+        handleSpy.mockReturnValue(of({ id: 'resp_123' }));
 
         const result$ = loggingInterceptor.intercept(
           mockExecutionContext,
@@ -466,7 +490,7 @@ describe('Interceptors - Edge Cases', () => {
         const result = await lastValueFrom(result$);
 
         expect(result).toEqual({ id: 'resp_123' });
-        expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalled();
+        expect(logOpenAIInteractionSpy).toHaveBeenCalled();
       });
 
       it('should handle request with missing body', async () => {
@@ -477,7 +501,7 @@ describe('Interceptors - Edge Cases', () => {
             method: 'POST',
           });
 
-        mockCallHandler.handle.mockReturnValue(of({ id: 'resp_123' }));
+        handleSpy.mockReturnValue(of({ id: 'resp_123' }));
 
         const result$ = loggingInterceptor.intercept(
           mockExecutionContext,
@@ -486,7 +510,7 @@ describe('Interceptors - Edge Cases', () => {
         const result = await lastValueFrom(result$);
 
         expect(result).toEqual({ id: 'resp_123' });
-        expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalled();
+        expect(logOpenAIInteractionSpy).toHaveBeenCalled();
       });
 
       it('should handle very long URL', async () => {
@@ -500,7 +524,7 @@ describe('Interceptors - Edge Cases', () => {
             body: {},
           });
 
-        mockCallHandler.handle.mockReturnValue(of({ id: 'resp_123' }));
+        handleSpy.mockReturnValue(of({ id: 'resp_123' }));
 
         const result$ = loggingInterceptor.intercept(
           mockExecutionContext,
@@ -509,7 +533,7 @@ describe('Interceptors - Edge Cases', () => {
         const result = await lastValueFrom(result$);
 
         expect(result).toEqual({ id: 'resp_123' });
-        expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalled();
+        expect(logOpenAIInteractionSpy).toHaveBeenCalled();
       });
     });
 
@@ -518,7 +542,7 @@ describe('Interceptors - Edge Cases', () => {
         const error = new Error('Test error');
         error.stack = 'Error: Test error\n  at test.ts:123:45';
 
-        mockCallHandler.handle.mockReturnValue(throwError(() => error));
+        handleSpy.mockReturnValue(throwError(() => error));
 
         const result$ = loggingInterceptor.intercept(
           mockExecutionContext,
@@ -526,12 +550,12 @@ describe('Interceptors - Edge Cases', () => {
         );
 
         await expect(lastValueFrom(result$)).rejects.toThrow('Test error');
-        expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+        expect(logOpenAIInteractionSpy).toHaveBeenCalledWith(
           expect.objectContaining({
             error: expect.objectContaining({
               message: 'Test error',
-              stack: expect.stringContaining('test.ts:123:45'),
-            }),
+              stack: expect.stringContaining('test.ts:123:45') as string,
+            }) as { message: string; stack: string },
           }),
         );
       });
@@ -540,7 +564,7 @@ describe('Interceptors - Edge Cases', () => {
         const error = new Error('Test error');
         delete error.stack;
 
-        mockCallHandler.handle.mockReturnValue(throwError(() => error));
+        handleSpy.mockReturnValue(throwError(() => error));
 
         const result$ = loggingInterceptor.intercept(
           mockExecutionContext,
@@ -548,7 +572,7 @@ describe('Interceptors - Edge Cases', () => {
         );
 
         await expect(lastValueFrom(result$)).rejects.toThrow('Test error');
-        expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalled();
+        expect(logOpenAIInteractionSpy).toHaveBeenCalled();
       });
     });
   });

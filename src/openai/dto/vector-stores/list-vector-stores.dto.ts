@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsInt, Min, Max, IsEnum, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
 
 /**
  * Data Transfer Object for listing vector stores with pagination
@@ -56,6 +57,7 @@ export class ListVectorStoresDto {
     example: 20,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(100)

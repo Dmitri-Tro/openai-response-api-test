@@ -5,11 +5,17 @@ import { CreateVideoDto } from '../dto/create-video.dto';
 import { LoggerService } from '../../common/services/logger.service';
 import { PricingService } from '../../common/services/pricing.service';
 import type { Videos } from 'openai/resources/videos';
-import type { Response } from 'express';
+import type { Response as ExpressResponse } from 'express';
 
 describe('VideosController', () => {
   let controller: VideosController;
-  let service: OpenAIVideosService;
+  let createVideoSpy: jest.Mock;
+  let getVideoStatusSpy: jest.Mock;
+  let pollUntilCompleteSpy: jest.Mock;
+  let downloadVideoSpy: jest.Mock;
+  let listVideosSpy: jest.Mock;
+  let deleteVideoSpy: jest.Mock;
+  let remixVideoSpy: jest.Mock;
 
   const mockVideo: Videos.Video = {
     id: 'vid_abc123',
@@ -37,21 +43,31 @@ describe('VideosController', () => {
 
   const mockDeleteResponse: Videos.VideoDeleteResponse = {
     id: 'vid_abc123',
-    object: 'video',
+    object: 'video.deleted',
     deleted: true,
   };
 
-  const mockVideoService = {
-    createVideo: jest.fn(),
-    getVideoStatus: jest.fn(),
-    pollUntilComplete: jest.fn(),
-    downloadVideo: jest.fn(),
-    listVideos: jest.fn(),
-    deleteVideo: jest.fn(),
-    remixVideo: jest.fn(),
-  };
+  let mockVideoService: jest.Mocked<OpenAIVideosService>;
 
   beforeEach(async () => {
+    createVideoSpy = jest.fn();
+    getVideoStatusSpy = jest.fn();
+    pollUntilCompleteSpy = jest.fn();
+    downloadVideoSpy = jest.fn();
+    listVideosSpy = jest.fn();
+    deleteVideoSpy = jest.fn();
+    remixVideoSpy = jest.fn();
+
+    mockVideoService = {
+      createVideo: createVideoSpy,
+      getVideoStatus: getVideoStatusSpy,
+      pollUntilComplete: pollUntilCompleteSpy,
+      downloadVideo: downloadVideoSpy,
+      listVideos: listVideosSpy,
+      deleteVideo: deleteVideoSpy,
+      remixVideo: remixVideoSpy,
+    } as unknown as jest.Mocked<OpenAIVideosService>;
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [VideosController],
       providers: [
@@ -76,7 +92,6 @@ describe('VideosController', () => {
     }).compile();
 
     controller = module.get<VideosController>(VideosController);
-    service = module.get<OpenAIVideosService>(OpenAIVideosService);
 
     jest.clearAllMocks();
   });
@@ -98,7 +113,7 @@ describe('VideosController', () => {
 
       const result = await controller.createVideo(dto);
 
-      expect(service.createVideo).toHaveBeenCalledWith(dto);
+      expect(createVideoSpy).toHaveBeenCalledWith(dto);
       expect(result).toEqual(mockVideo);
     });
 
@@ -111,7 +126,7 @@ describe('VideosController', () => {
 
       const result = await controller.createVideo(dto);
 
-      expect(service.createVideo).toHaveBeenCalledWith(dto);
+      expect(createVideoSpy).toHaveBeenCalledWith(dto);
       expect(result).toEqual(mockVideo);
     });
 
@@ -149,7 +164,7 @@ describe('VideosController', () => {
 
       const result = await controller.getVideoStatus('vid_abc123');
 
-      expect(service.getVideoStatus).toHaveBeenCalledWith('vid_abc123');
+      expect(getVideoStatusSpy).toHaveBeenCalledWith('vid_abc123');
       expect(result).toEqual(mockVideo);
     });
 
@@ -172,7 +187,7 @@ describe('VideosController', () => {
     });
 
     it('should handle in_progress status', async () => {
-      const inProgressVideo = {
+      const inProgressVideo: Videos.Video = {
         ...mockVideo,
         status: 'in_progress',
         progress: 50,
@@ -195,7 +210,7 @@ describe('VideosController', () => {
         undefined,
       );
 
-      expect(service.pollUntilComplete).toHaveBeenCalledWith(
+      expect(pollUntilCompleteSpy).toHaveBeenCalledWith(
         'vid_abc123',
         undefined,
       );
@@ -207,10 +222,7 @@ describe('VideosController', () => {
 
       const result = await controller.pollUntilComplete('vid_abc123', 300000);
 
-      expect(service.pollUntilComplete).toHaveBeenCalledWith(
-        'vid_abc123',
-        300000,
-      );
+      expect(pollUntilCompleteSpy).toHaveBeenCalledWith('vid_abc123', 300000);
       expect(result).toEqual(mockCompletedVideo);
     });
 
@@ -224,7 +236,7 @@ describe('VideosController', () => {
     });
 
     it('should return failed video', async () => {
-      const failedVideo = {
+      const failedVideo: Videos.Video = {
         ...mockVideo,
         status: 'failed',
         error: { code: 'error', message: 'Failed' },
@@ -248,7 +260,7 @@ describe('VideosController', () => {
   });
 
   describe('downloadVideo', () => {
-    let mockResponse: Partial<Response>;
+    let mockResponse: Partial<ExpressResponse>;
     let mockOpenAIResponse: Response;
 
     beforeEach(() => {
@@ -279,10 +291,10 @@ describe('VideosController', () => {
       await controller.downloadVideo(
         'vid_abc123',
         'video',
-        mockResponse as Response,
+        mockResponse as unknown as ExpressResponse,
       );
 
-      expect(service.downloadVideo).toHaveBeenCalledWith('vid_abc123', 'video');
+      expect(downloadVideoSpy).toHaveBeenCalledWith('vid_abc123', 'video');
       expect(mockResponse.setHeader).toHaveBeenCalledWith(
         'Content-Type',
         'video/mp4',
@@ -301,13 +313,10 @@ describe('VideosController', () => {
       await controller.downloadVideo(
         'vid_abc123',
         'thumbnail',
-        mockResponse as Response,
+        mockResponse as unknown as ExpressResponse,
       );
 
-      expect(service.downloadVideo).toHaveBeenCalledWith(
-        'vid_abc123',
-        'thumbnail',
-      );
+      expect(downloadVideoSpy).toHaveBeenCalledWith('vid_abc123', 'thumbnail');
       expect(mockResponse.setHeader).toHaveBeenCalledWith(
         'Content-Type',
         'image/jpeg',
@@ -324,10 +333,10 @@ describe('VideosController', () => {
       await controller.downloadVideo(
         'vid_abc123',
         'spritesheet',
-        mockResponse as Response,
+        mockResponse as unknown as ExpressResponse,
       );
 
-      expect(service.downloadVideo).toHaveBeenCalledWith(
+      expect(downloadVideoSpy).toHaveBeenCalledWith(
         'vid_abc123',
         'spritesheet',
       );
@@ -348,7 +357,7 @@ describe('VideosController', () => {
       await controller.downloadVideo(
         'vid_abc123',
         'video',
-        mockResponse as Response,
+        mockResponse as unknown as ExpressResponse,
       );
 
       expect(mockResponse.end).toHaveBeenCalled();
@@ -362,7 +371,7 @@ describe('VideosController', () => {
         controller.downloadVideo(
           'vid_abc123',
           'video',
-          mockResponse as Response,
+          mockResponse as unknown as ExpressResponse,
         ),
       ).rejects.toThrow('Video not ready');
     });
@@ -375,7 +384,7 @@ describe('VideosController', () => {
         controller.downloadVideo(
           'vid_abc123',
           'video',
-          mockResponse as Response,
+          mockResponse as unknown as ExpressResponse,
         ),
       ).rejects.toThrow('Video expired');
     });
@@ -390,7 +399,7 @@ describe('VideosController', () => {
 
       const result = await controller.listVideos(undefined, undefined);
 
-      expect(service.listVideos).toHaveBeenCalledWith(undefined, undefined);
+      expect(listVideosSpy).toHaveBeenCalledWith(undefined, undefined);
       expect(result).toEqual([mockVideo, mockCompletedVideo]);
       expect(result).toHaveLength(2);
     });
@@ -400,7 +409,7 @@ describe('VideosController', () => {
 
       const result = await controller.listVideos(1, undefined);
 
-      expect(service.listVideos).toHaveBeenCalledWith(1, undefined);
+      expect(listVideosSpy).toHaveBeenCalledWith(1, undefined);
       expect(result).toHaveLength(1);
     });
 
@@ -412,7 +421,7 @@ describe('VideosController', () => {
 
       const result = await controller.listVideos(10, 'asc');
 
-      expect(service.listVideos).toHaveBeenCalledWith(10, 'asc');
+      expect(listVideosSpy).toHaveBeenCalledWith(10, 'asc');
       expect(result).toEqual([mockVideo, mockCompletedVideo]);
     });
 
@@ -424,7 +433,7 @@ describe('VideosController', () => {
 
       const result = await controller.listVideos(10, 'desc');
 
-      expect(service.listVideos).toHaveBeenCalledWith(10, 'desc');
+      expect(listVideosSpy).toHaveBeenCalledWith(10, 'desc');
       expect(result).toEqual([mockCompletedVideo, mockVideo]);
     });
 
@@ -453,7 +462,7 @@ describe('VideosController', () => {
 
       const result = await controller.deleteVideo('vid_abc123');
 
-      expect(service.deleteVideo).toHaveBeenCalledWith('vid_abc123');
+      expect(deleteVideoSpy).toHaveBeenCalledWith('vid_abc123');
       expect(result).toEqual(mockDeleteResponse);
       expect(result.deleted).toBe(true);
     });
@@ -482,7 +491,7 @@ describe('VideosController', () => {
       const result = await controller.deleteVideo('vid_abc123');
 
       expect(result.id).toBe('vid_abc123');
-      expect(result.object).toBe('video');
+      expect(result.object).toBe('video.deleted');
       expect(result.deleted).toBe(true);
     });
   });
@@ -502,7 +511,7 @@ describe('VideosController', () => {
         prompt: 'A serene lakeside at sunrise',
       });
 
-      expect(service.remixVideo).toHaveBeenCalledWith(
+      expect(remixVideoSpy).toHaveBeenCalledWith(
         'vid_abc123',
         'A serene lakeside at sunrise',
       );

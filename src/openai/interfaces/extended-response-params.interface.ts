@@ -52,4 +52,13 @@ export interface ExtendedResponseCreateParamsStreaming
    * @example ['text', 'audio']
    */
   modalities?: Array<'text' | 'audio'>;
+
+  /**
+   * Options for streaming responses
+   *
+   * @example { include_obfuscation: true }
+   */
+  stream_options?: {
+    include_obfuscation?: boolean;
+  };
 }

@@ -22,7 +22,7 @@ describe('CreateImageResponseDto', () => {
 
     it('should fail validation with non-string input', async () => {
       const dto = new CreateImageResponseDto();
-      (dto as any).input = { prompt: 'test' };
+      (dto as unknown as Record<string, unknown>).input = { prompt: 'test' };
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -48,7 +48,7 @@ describe('CreateImageResponseDto', () => {
     it('should fail with non-string model', async () => {
       const dto = new CreateImageResponseDto();
       dto.input = 'A sunset';
-      (dto as any).model = 123;
+      (dto as unknown as Record<string, unknown>).model = 123;
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -105,7 +105,7 @@ describe('CreateImageResponseDto', () => {
     it('should fail with invalid modality value', async () => {
       const dto = new CreateImageResponseDto();
       dto.input = 'A sunset';
-      (dto as any).modalities = ['video'];
+      (dto as unknown as Record<string, unknown>).modalities = ['video'];
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -115,7 +115,7 @@ describe('CreateImageResponseDto', () => {
     it('should fail with non-array modalities', async () => {
       const dto = new CreateImageResponseDto();
       dto.input = 'A sunset';
-      (dto as any).modalities = 'text';
+      (dto as unknown as Record<string, unknown>).modalities = 'text';
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -145,7 +145,7 @@ describe('CreateImageResponseDto', () => {
     it('should fail with invalid image_model', async () => {
       const dto = new CreateImageResponseDto();
       dto.input = 'A sunset';
-      (dto as any).image_model = 'dall-e-3';
+      (dto as unknown as Record<string, unknown>).image_model = 'dall-e-3';
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -194,7 +194,7 @@ describe('CreateImageResponseDto', () => {
     it('should fail with invalid quality', async () => {
       const dto = new CreateImageResponseDto();
       dto.input = 'A sunset';
-      (dto as any).image_quality = 'ultra';
+      (dto as unknown as Record<string, unknown>).image_quality = 'ultra';
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -234,7 +234,7 @@ describe('CreateImageResponseDto', () => {
     it('should fail with invalid format', async () => {
       const dto = new CreateImageResponseDto();
       dto.input = 'A sunset';
-      (dto as any).image_format = 'gif';
+      (dto as unknown as Record<string, unknown>).image_format = 'gif';
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -283,7 +283,7 @@ describe('CreateImageResponseDto', () => {
     it('should fail with invalid size', async () => {
       const dto = new CreateImageResponseDto();
       dto.input = 'A sunset';
-      (dto as any).image_size = '512x512';
+      (dto as unknown as Record<string, unknown>).image_size = '512x512';
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -314,7 +314,7 @@ describe('CreateImageResponseDto', () => {
     it('should fail with invalid moderation', async () => {
       const dto = new CreateImageResponseDto();
       dto.input = 'A sunset';
-      (dto as any).image_moderation = 'strict';
+      (dto as unknown as Record<string, unknown>).image_moderation = 'strict';
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -354,7 +354,7 @@ describe('CreateImageResponseDto', () => {
     it('should fail with invalid background', async () => {
       const dto = new CreateImageResponseDto();
       dto.input = 'A logo';
-      (dto as any).image_background = 'gradient';
+      (dto as unknown as Record<string, unknown>).image_background = 'gradient';
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -385,7 +385,7 @@ describe('CreateImageResponseDto', () => {
     it('should fail with invalid fidelity', async () => {
       const dto = new CreateImageResponseDto();
       dto.input = 'A sunset';
-      (dto as any).input_fidelity = 'medium';
+      (dto as unknown as Record<string, unknown>).input_fidelity = 'medium';
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -616,7 +616,7 @@ describe('CreateImageResponseDto', () => {
     it('should fail with non-object metadata', async () => {
       const dto = new CreateImageResponseDto();
       dto.input = 'A sunset';
-      (dto as any).metadata = 'not an object';
+      (dto as unknown as Record<string, unknown>).metadata = 'not an object';
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -727,7 +727,7 @@ describe('CreateImageResponseDto', () => {
     it('should fail with non-object prompt', async () => {
       const dto = new CreateImageResponseDto();
       dto.input = 'Test image';
-      (dto as any).prompt = 'not-an-object';
+      (dto as unknown as Record<string, unknown>).prompt = 'not-an-object';
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -803,7 +803,7 @@ describe('CreateImageResponseDto', () => {
     it('should fail with non-array include', async () => {
       const dto = new CreateImageResponseDto();
       dto.input = 'Test image';
-      (dto as any).include = 'not-an-array';
+      (dto as unknown as Record<string, unknown>).include = 'not-an-array';
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -847,7 +847,9 @@ describe('CreateImageResponseDto', () => {
 
     it('should not include reasoning parameter for images', () => {
       const dto = new CreateImageResponseDto();
-      expect((dto as any).reasoning).toBeUndefined();
+      expect(
+        (dto as unknown as Record<string, unknown>).reasoning,
+      ).toBeUndefined();
     });
   });
 });

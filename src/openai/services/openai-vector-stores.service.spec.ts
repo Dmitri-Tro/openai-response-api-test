@@ -1,45 +1,41 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
 import { OpenAIVectorStoresService } from './openai-vector-stores.service';
+import { OPENAI_CLIENT } from '../providers/openai-client.provider';
 import { LoggerService } from '../../common/services/logger.service';
 import type { VectorStores } from 'openai/resources/vector-stores';
 
-// Mock OpenAI client
-const mockOpenAIClient = {
-  vectorStores: {
-    create: jest.fn(),
-    retrieve: jest.fn(),
-    update: jest.fn(),
-    list: jest.fn(),
-    delete: jest.fn(),
-    search: jest.fn(),
-    files: {
-      create: jest.fn(),
-      list: jest.fn(),
-      retrieve: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
-      content: jest.fn(),
-    },
-    fileBatches: {
-      create: jest.fn(),
-      retrieve: jest.fn(),
-      cancel: jest.fn(),
-      listFiles: jest.fn(),
-    },
-  },
-};
-
-jest.mock('openai', () => {
-  return jest.fn().mockImplementation(() => mockOpenAIClient);
-});
-
 describe('OpenAIVectorStoresService', () => {
   let service: OpenAIVectorStoresService;
-  let configService: ConfigService;
   let loggerService: LoggerService;
+  let logOpenAIInteractionSpy: jest.SpyInstance;
 
-  const mockFileCounts: VectorStores.FileCounts = {
+  // Mock OpenAI client (singleton provider pattern)
+  const mockOpenAIClient = {
+    vectorStores: {
+      create: jest.fn(),
+      retrieve: jest.fn(),
+      update: jest.fn(),
+      list: jest.fn(),
+      delete: jest.fn(),
+      search: jest.fn(),
+      files: {
+        create: jest.fn(),
+        list: jest.fn(),
+        retrieve: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+        content: jest.fn(),
+      },
+      fileBatches: {
+        create: jest.fn(),
+        retrieve: jest.fn(),
+        cancel: jest.fn(),
+        listFiles: jest.fn(),
+      },
+    },
+  };
+
+  const mockFileCounts: VectorStores.VectorStore.FileCounts = {
     in_progress: 0,
     completed: 2,
     failed: 0,
@@ -55,8 +51,6 @@ describe('OpenAIVectorStoresService', () => {
     usage_bytes: 1024,
     file_counts: mockFileCounts,
     status: 'completed',
-    expires_after: null,
-    expires_at: null,
     last_active_at: 1234567990,
     metadata: {},
   };
@@ -118,18 +112,21 @@ describe('OpenAIVectorStoresService', () => {
   };
 
   const mockSearchResult: VectorStores.VectorStoreSearchResponse = {
-    object: 'vector_store.search.result',
-    id: 'result_abc123',
+    file_id: 'file-abc123',
+    filename: 'test-document.txt',
     score: 0.95,
-    content: 'Sample search result content',
-    metadata: {},
+    content: [
+      {
+        text: 'Sample search result content',
+        type: 'text',
+      },
+    ],
+    attributes: {},
   };
 
   const mockFileContentResponse: VectorStores.FileContentResponse = {
-    id: 'chunk_abc123',
-    object: 'vector_store.file.chunk',
-    content: 'Sample file content chunk',
-    metadata: {},
+    text: 'Sample file content chunk',
+    type: 'text',
   };
 
   beforeEach(async () => {
@@ -137,18 +134,8 @@ describe('OpenAIVectorStoresService', () => {
       providers: [
         OpenAIVectorStoresService,
         {
-          provide: ConfigService,
-          useValue: {
-            get: jest.fn((key: string) => {
-              const config: Record<string, unknown> = {
-                'openai.apiKey': 'test-api-key',
-                'openai.baseUrl': 'https://api.openai.com/v1',
-                'openai.timeout': 60000,
-                'openai.maxRetries': 3,
-              };
-              return config[key];
-            }),
-          },
+          provide: OPENAI_CLIENT,
+          useValue: mockOpenAIClient,
         },
         {
           provide: LoggerService,
@@ -160,8 +147,10 @@ describe('OpenAIVectorStoresService', () => {
     }).compile();
 
     service = module.get<OpenAIVectorStoresService>(OpenAIVectorStoresService);
-    configService = module.get<ConfigService>(ConfigService);
     loggerService = module.get<LoggerService>(LoggerService);
+
+    // Create spy for logOpenAIInteraction
+    logOpenAIInteractionSpy = jest.spyOn(loggerService, 'logOpenAIInteraction');
 
     // Reset all mocks before each test
     jest.clearAllMocks();
@@ -169,25 +158,6 @@ describe('OpenAIVectorStoresService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
-  });
-
-  describe('constructor', () => {
-    it('should throw error if API key is not configured', () => {
-      jest.spyOn(configService, 'get').mockReturnValue(undefined);
-      expect(() => {
-        new OpenAIVectorStoresService(configService, loggerService);
-      }).toThrow('OpenAI API key is not configured');
-    });
-
-    it('should initialize OpenAI client with correct config', () => {
-      const getSpy = jest.spyOn(configService, 'get');
-      new OpenAIVectorStoresService(configService, loggerService);
-
-      expect(getSpy).toHaveBeenCalledWith('openai.apiKey');
-      expect(getSpy).toHaveBeenCalledWith('openai.baseUrl');
-      expect(getSpy).toHaveBeenCalledWith('openai.timeout');
-      expect(getSpy).toHaveBeenCalledWith('openai.maxRetries');
-    });
   });
 
   // ============================================================
@@ -225,13 +195,16 @@ describe('OpenAIVectorStoresService', () => {
         expires_after: { anchor: 'last_active_at', days: 7 },
       });
       expect(result).toEqual(mockVectorStore);
-      expect(loggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+      expect(logOpenAIInteractionSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           api: 'vector_stores',
           endpoint: '/v1/vector_stores',
-          request: expect.objectContaining({ name: dto.name }),
+          request: expect.objectContaining({ name: dto.name }) as Record<
+            string,
+            unknown
+          >,
           response: mockVectorStore,
-        }),
+        }) as Record<string, unknown>,
       );
     });
 
@@ -261,14 +234,14 @@ describe('OpenAIVectorStoresService', () => {
 
       await service.createVectorStore({ name: 'Test' });
 
-      expect(loggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+      expect(logOpenAIInteractionSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           metadata: expect.objectContaining({
-            latency_ms: expect.any(Number),
+            latency_ms: expect.any(Number) as number,
             vector_store_id: 'vs_abc123',
             status: 'completed',
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -326,7 +299,7 @@ describe('OpenAIVectorStoresService', () => {
         },
       );
       expect(result).toEqual(mockVectorStore);
-      expect(loggerService.logOpenAIInteraction).toHaveBeenCalled();
+      expect(logOpenAIInteractionSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should update only name', async () => {
@@ -410,7 +383,7 @@ describe('OpenAIVectorStoresService', () => {
       );
       expect(result).toEqual(mockVectorStoreDeleted);
       expect(result.deleted).toBe(true);
-      expect(loggerService.logOpenAIInteraction).toHaveBeenCalled();
+      expect(logOpenAIInteractionSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should throw error for invalid vector store ID', async () => {
@@ -496,7 +469,7 @@ describe('OpenAIVectorStoresService', () => {
         { file_id: 'file-abc123' },
       );
       expect(result).toEqual(mockVectorStoreFile);
-      expect(loggerService.logOpenAIInteraction).toHaveBeenCalled();
+      expect(logOpenAIInteractionSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should add file with chunking strategy', async () => {
@@ -611,7 +584,7 @@ describe('OpenAIVectorStoresService', () => {
         },
       );
       expect(result).toEqual(mockVectorStoreFile);
-      expect(loggerService.logOpenAIInteraction).toHaveBeenCalled();
+      expect(logOpenAIInteractionSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should update file attributes to null', async () => {
@@ -645,7 +618,7 @@ describe('OpenAIVectorStoresService', () => {
       );
       expect(result).toEqual(mockVectorStoreFileDeleted);
       expect(result.deleted).toBe(true);
-      expect(loggerService.logOpenAIInteraction).toHaveBeenCalled();
+      expect(logOpenAIInteractionSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should throw error for file not in vector store', async () => {
@@ -706,7 +679,7 @@ describe('OpenAIVectorStoresService', () => {
         file_ids: ['file-abc123', 'file-def456'],
       });
       expect(result).toEqual(mockVectorStoreFileBatch);
-      expect(loggerService.logOpenAIInteraction).toHaveBeenCalled();
+      expect(logOpenAIInteractionSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should create file batch with files array', async () => {
@@ -795,7 +768,7 @@ describe('OpenAIVectorStoresService', () => {
         mockOpenAIClient.vectorStores.fileBatches.cancel,
       ).toHaveBeenCalledWith('vsfb_abc123', { vector_store_id: 'vs_abc123' });
       expect(result.status).toBe('cancelled');
-      expect(loggerService.logOpenAIInteraction).toHaveBeenCalled();
+      expect(logOpenAIInteractionSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should throw error for already completed batch', async () => {

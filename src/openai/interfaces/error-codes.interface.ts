@@ -145,6 +145,26 @@ export type VideoErrorCode =
   | 'video_expired';
 
 /**
+ * Audio API-specific error codes
+ * Phase 6: Audio API (Speech, Transcription, Translation)
+ */
+export type AudioErrorCode =
+  // Speech/TTS Errors
+  | 'invalid_tts_input_length'
+  | 'invalid_voice_option'
+  | 'invalid_speed_value'
+  // Transcription Errors
+  | 'audio_file_too_large'
+  | 'unsupported_audio_format'
+  | 'invalid_language_code'
+  | 'transcription_failed'
+  // Translation Errors
+  | 'translation_failed'
+  | 'translation_model_unsupported'
+  // General Audio Processing
+  | 'audio_processing_error';
+
+/**
  * Network error codes (Node.js)
  */
 export type NetworkErrorCode =
@@ -176,6 +196,7 @@ export type ErrorCode =
   | VectorStoreErrorCode
   | ImagesAPIErrorCode
   | VideoErrorCode
+  | AudioErrorCode
   | NetworkErrorCode
   | OpenAIAPIErrorCode;
 
@@ -767,5 +788,76 @@ export const VIDEO_ERROR_CODE_MAPPINGS: Record<
     status: 410,
     message: 'Video file has expired',
     hint: 'The video file is no longer available (expired after retention period). Generate a new video.',
+  },
+};
+
+/**
+ * Mapping of Audio API error codes to HTTP status codes and user-friendly messages
+ * Phase 6: Audio API (Speech, Transcription, Translation)
+ */
+export const AUDIO_ERROR_CODE_MAPPINGS: Record<
+  AudioErrorCode,
+  {
+    status: number;
+    message: string;
+    hint: string;
+  }
+> = {
+  // Speech/TTS Errors
+  invalid_tts_input_length: {
+    status: 400,
+    message: 'TTS input exceeds maximum character limit',
+    hint: 'Input text must be between 1 and 4096 characters. Shorten your text or split into multiple requests.',
+  },
+  invalid_voice_option: {
+    status: 400,
+    message: 'Invalid voice selection',
+    hint: 'Valid voices: alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, shimmer, verse, marin, cedar. Choose one of these options.',
+  },
+  invalid_speed_value: {
+    status: 400,
+    message: 'Invalid speed value',
+    hint: 'Speed must be between 0.25 (slowest) and 4.0 (fastest). Use 1.0 for normal speed.',
+  },
+
+  // Transcription Errors
+  audio_file_too_large: {
+    status: 413,
+    message: 'Audio file exceeds maximum size limit',
+    hint: 'Audio files must be 25 MB or smaller. Compress the file or split into smaller segments for transcription.',
+  },
+  unsupported_audio_format: {
+    status: 400,
+    message: 'Unsupported audio file format',
+    hint: 'Supported formats: flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, webm. Note: opus is not supported via API. Convert your file to a supported format.',
+  },
+  invalid_language_code: {
+    status: 400,
+    message: 'Invalid language code',
+    hint: 'Use ISO-639-1 language codes (e.g., en, es, fr, de, ja, zh, ar). See OpenAI documentation for full list of supported languages.',
+  },
+  transcription_failed: {
+    status: 500,
+    message: 'Audio transcription failed',
+    hint: 'Internal error during transcription. Verify audio quality, format, and clarity. Retry the request or contact support if the issue persists.',
+  },
+
+  // Translation Errors
+  translation_failed: {
+    status: 500,
+    message: 'Audio translation failed',
+    hint: 'Internal error during translation to English. Verify audio quality, format, and clarity. Retry the request or contact support if the issue persists.',
+  },
+  translation_model_unsupported: {
+    status: 400,
+    message: 'Model not supported for translation',
+    hint: 'Audio translation only supports "whisper-1" model. Update your request to use whisper-1 for translation to English.',
+  },
+
+  // General Audio Processing
+  audio_processing_error: {
+    status: 500,
+    message: 'Audio processing error',
+    hint: 'An error occurred while processing the audio file. Verify the file is valid, not corrupted, and retry. Contact support if the issue persists.',
   },
 };

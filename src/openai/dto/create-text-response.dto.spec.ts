@@ -22,7 +22,7 @@ describe('CreateTextResponseDto', () => {
 
     it('should fail validation with non-string input', async () => {
       const dto = new CreateTextResponseDto();
-      (dto as any).input = 123;
+      Object.assign(dto, { input: 123 });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -48,7 +48,7 @@ describe('CreateTextResponseDto', () => {
     it('should fail with non-string model', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      (dto as any).model = 123;
+      Object.assign(dto, { model: 123 });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -76,7 +76,7 @@ describe('CreateTextResponseDto', () => {
     it('should fail with non-string instructions', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      (dto as any).instructions = { text: 'invalid' };
+      Object.assign(dto, { instructions: { text: 'invalid' } });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -133,7 +133,7 @@ describe('CreateTextResponseDto', () => {
     it('should fail with invalid modality value', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      (dto as any).modalities = ['video'];
+      Object.assign(dto, { modalities: ['video'] });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -143,7 +143,7 @@ describe('CreateTextResponseDto', () => {
     it('should fail with mixed valid and invalid modalities', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      (dto as any).modalities = ['text', 'video'];
+      Object.assign(dto, { modalities: ['text', 'video'] });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -153,7 +153,7 @@ describe('CreateTextResponseDto', () => {
     it('should fail with non-array modalities', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      (dto as any).modalities = 'text';
+      Object.assign(dto, { modalities: 'text' });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -163,7 +163,7 @@ describe('CreateTextResponseDto', () => {
     it('should fail with array of non-strings', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      (dto as any).modalities = [1, 2];
+      Object.assign(dto, { modalities: [1, 2] });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -224,7 +224,7 @@ describe('CreateTextResponseDto', () => {
     it('should fail with non-number temperature', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      (dto as any).temperature = 'hot';
+      Object.assign(dto, { temperature: 'hot' });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -364,7 +364,7 @@ describe('CreateTextResponseDto', () => {
     it('should fail with non-boolean stream', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      (dto as any).stream = 'true';
+      Object.assign(dto, { stream: 'true' });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -402,7 +402,7 @@ describe('CreateTextResponseDto', () => {
     it('should fail with non-string previous_response_id', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      (dto as any).previous_response_id = 123;
+      Object.assign(dto, { previous_response_id: 123 });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -440,7 +440,7 @@ describe('CreateTextResponseDto', () => {
     it('should fail with non-object text', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      (dto as any).text = 'not an object';
+      Object.assign(dto, { text: 'not an object' });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -449,7 +449,7 @@ describe('CreateTextResponseDto', () => {
     it('should fail with non-object metadata', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      (dto as any).metadata = 'not an object';
+      Object.assign(dto, { metadata: 'not an object' });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -463,11 +463,14 @@ describe('CreateTextResponseDto', () => {
       dto.tools = [
         {
           type: 'function',
-          function: {
-            name: 'get_weather',
-            description: 'Get weather',
-            parameters: {},
-          },
+
+          name: 'get_weather',
+
+          description: 'Get weather',
+
+          parameters: {},
+
+          strict: null,
         },
       ];
 
@@ -487,7 +490,7 @@ describe('CreateTextResponseDto', () => {
     it('should fail with non-array tools', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      (dto as any).tools = { type: 'function' };
+      Object.assign(dto, { tools: { type: 'function' } });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -563,12 +566,14 @@ describe('CreateTextResponseDto', () => {
     it('should reject file_search with invalid vector_store_ids', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'file_search',
-          vector_store_ids: ['invalid_id'],
-        },
-      ] as any;
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'file_search',
+            vector_store_ids: ['invalid_id'],
+          },
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -580,12 +585,14 @@ describe('CreateTextResponseDto', () => {
     it('should reject file_search with empty vector_store_ids', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'file_search',
-          vector_store_ids: [],
-        },
-      ] as any;
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'file_search',
+            vector_store_ids: [],
+          },
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -597,13 +604,15 @@ describe('CreateTextResponseDto', () => {
     it('should reject file_search with max_num_results out of range', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'file_search',
-          vector_store_ids: ['vs_abc123'],
-          max_num_results: 100,
-        },
-      ] as any;
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'file_search',
+            vector_store_ids: ['vs_abc123'],
+            max_num_results: 100,
+          },
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -615,15 +624,17 @@ describe('CreateTextResponseDto', () => {
     it('should reject file_search with invalid score_threshold', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'file_search',
-          vector_store_ids: ['vs_abc123'],
-          ranking_options: {
-            score_threshold: 1.5,
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'file_search',
+            vector_store_ids: ['vs_abc123'],
+            ranking_options: {
+              score_threshold: 1.5,
+            },
           },
-        },
-      ] as any;
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -635,15 +646,17 @@ describe('CreateTextResponseDto', () => {
     it('should reject file_search with invalid ranker', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'file_search',
-          vector_store_ids: ['vs_abc123'],
-          ranking_options: {
-            ranker: 'custom',
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'file_search',
+            vector_store_ids: ['vs_abc123'],
+            ranking_options: {
+              ranker: 'custom',
+            },
           },
-        },
-      ] as any;
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -658,11 +671,14 @@ describe('CreateTextResponseDto', () => {
       dto.tools = [
         {
           type: 'function',
-          function: {
-            name: 'get_weather',
-            description: 'Get weather',
-            parameters: {},
-          },
+
+          name: 'get_weather',
+
+          description: 'Get weather',
+
+          parameters: {},
+
+          strict: null,
         },
         {
           type: 'file_search',
@@ -734,11 +750,13 @@ describe('CreateTextResponseDto', () => {
     it('should accept basic code_interpreter tool without container', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Calculate factorial of 5';
-      dto.tools = [
-        {
-          type: 'code_interpreter',
-        },
-      ];
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'code_interpreter',
+          },
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBe(0);
@@ -829,12 +847,14 @@ describe('CreateTextResponseDto', () => {
     it('should reject code_interpreter with empty string container', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'code_interpreter',
-          container: '',
-        },
-      ] as any;
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'code_interpreter',
+            container: '',
+          },
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -846,12 +866,14 @@ describe('CreateTextResponseDto', () => {
     it('should reject code_interpreter with null container', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'code_interpreter',
-          container: null,
-        },
-      ] as any;
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'code_interpreter',
+            container: null,
+          },
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -863,12 +885,14 @@ describe('CreateTextResponseDto', () => {
     it('should reject code_interpreter with array container', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'code_interpreter',
-          container: ['auto'],
-        },
-      ] as any;
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'code_interpreter',
+            container: ['auto'],
+          },
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -880,14 +904,16 @@ describe('CreateTextResponseDto', () => {
     it('should reject code_interpreter with invalid container.type', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'code_interpreter',
-          container: {
-            type: 'manual',
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'code_interpreter',
+            container: {
+              type: 'manual',
+            },
           },
-        },
-      ] as any;
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -899,14 +925,16 @@ describe('CreateTextResponseDto', () => {
     it('should reject code_interpreter with missing container.type', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'code_interpreter',
-          container: {
-            file_ids: ['file-abc123xyz789012345678901'],
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'code_interpreter',
+            container: {
+              file_ids: ['file-abc123xyz789012345678901'],
+            },
           },
-        },
-      ] as any;
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -918,15 +946,17 @@ describe('CreateTextResponseDto', () => {
     it('should reject code_interpreter with empty file_ids array', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'code_interpreter',
-          container: {
-            type: 'auto',
-            file_ids: [],
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'code_interpreter',
+            container: {
+              type: 'auto',
+              file_ids: [],
+            },
           },
-        },
-      ] as any;
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -938,15 +968,17 @@ describe('CreateTextResponseDto', () => {
     it('should reject code_interpreter with invalid file_id format', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'code_interpreter',
-          container: {
-            type: 'auto',
-            file_ids: ['invalid-file-id'],
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'code_interpreter',
+            container: {
+              type: 'auto',
+              file_ids: ['invalid-file-id'],
+            },
           },
-        },
-      ] as any;
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -958,15 +990,17 @@ describe('CreateTextResponseDto', () => {
     it('should reject code_interpreter with file_id not starting with "file-"', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'code_interpreter',
-          container: {
-            type: 'auto',
-            file_ids: ['doc-abc123xyz789012345678901'],
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'code_interpreter',
+            container: {
+              type: 'auto',
+              file_ids: ['doc-abc123xyz789012345678901'],
+            },
           },
-        },
-      ] as any;
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -978,15 +1012,17 @@ describe('CreateTextResponseDto', () => {
     it('should reject code_interpreter with non-string file_id', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'code_interpreter',
-          container: {
-            type: 'auto',
-            file_ids: [123456],
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'code_interpreter',
+            container: {
+              type: 'auto',
+              file_ids: [123456],
+            },
           },
-        },
-      ] as any;
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -998,15 +1034,17 @@ describe('CreateTextResponseDto', () => {
     it('should reject code_interpreter with non-array file_ids', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'code_interpreter',
-          container: {
-            type: 'auto',
-            file_ids: 'file-abc123xyz789012345678901',
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'code_interpreter',
+            container: {
+              type: 'auto',
+              file_ids: 'file-abc123xyz789012345678901',
+            },
           },
-        },
-      ] as any;
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -1018,15 +1056,17 @@ describe('CreateTextResponseDto', () => {
     it('should reject code_interpreter with mixed valid/invalid file_ids', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'code_interpreter',
-          container: {
-            type: 'auto',
-            file_ids: ['file-abc123xyz789012345678901', 'invalid-id'],
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'code_interpreter',
+            container: {
+              type: 'auto',
+              file_ids: ['file-abc123xyz789012345678901', 'invalid-id'],
+            },
           },
-        },
-      ] as any;
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -1041,11 +1081,14 @@ describe('CreateTextResponseDto', () => {
       dto.tools = [
         {
           type: 'function',
-          function: {
-            name: 'get_weather',
-            description: 'Get weather',
-            parameters: {},
-          },
+
+          name: 'get_weather',
+
+          description: 'Get weather',
+
+          parameters: {},
+
+          strict: null,
         },
         {
           type: 'code_interpreter',
@@ -1124,11 +1167,14 @@ describe('CreateTextResponseDto', () => {
       dto.tools = [
         {
           type: 'function',
-          function: {
-            name: 'api_call',
-            description: 'Call external API',
-            parameters: {},
-          },
+
+          name: 'api_call',
+
+          description: 'Call external API',
+
+          parameters: {},
+
+          strict: null,
         },
         {
           type: 'file_search',
@@ -1202,15 +1248,17 @@ describe('CreateTextResponseDto', () => {
     it('should reject code_interpreter with only "file-" prefix', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'code_interpreter',
-          container: {
-            type: 'auto',
-            file_ids: ['file-'],
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'code_interpreter',
+            container: {
+              type: 'auto',
+              file_ids: ['file-'],
+            },
           },
-        },
-      ] as any;
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -1222,12 +1270,14 @@ describe('CreateTextResponseDto', () => {
     it('should reject code_interpreter with number container type', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      dto.tools = [
-        {
-          type: 'code_interpreter',
-          container: 123,
-        },
-      ] as any;
+      Object.assign(dto, {
+        tools: [
+          {
+            type: 'code_interpreter',
+            container: 123,
+          },
+        ],
+      });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -1354,7 +1404,7 @@ describe('CreateTextResponseDto', () => {
     it('should fail with non-object prompt', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      (dto as any).prompt = 'not-an-object';
+      Object.assign(dto, { prompt: 'not-an-object' });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -1431,7 +1481,7 @@ describe('CreateTextResponseDto', () => {
     it('should fail with non-array include', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      (dto as any).include = 'not-an-array';
+      Object.assign(dto, { include: 'not-an-array' });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);
@@ -1522,7 +1572,7 @@ describe('CreateTextResponseDto', () => {
     it('should fail with non-object reasoning', async () => {
       const dto = new CreateTextResponseDto();
       dto.input = 'Test';
-      (dto as any).reasoning = 'not-an-object';
+      Object.assign(dto, { reasoning: 'not-an-object' });
 
       const errors = await validate(dto);
       expect(errors.length).toBeGreaterThan(0);

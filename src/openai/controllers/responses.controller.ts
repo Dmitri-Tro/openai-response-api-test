@@ -5,8 +5,6 @@ import {
   Get,
   Delete,
   Param,
-  UseFilters,
-  UseInterceptors,
   Res,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
@@ -14,14 +12,9 @@ import type { Response } from 'express';
 import { OpenAIResponsesService } from '../services/openai-responses.service';
 import { CreateTextResponseDto } from '../dto/create-text-response.dto';
 import { CreateImageResponseDto } from '../dto/create-image-response.dto';
-import { LoggingInterceptor } from '../../common/interceptors/logging.interceptor';
-import { RetryInterceptor } from '../../common/interceptors/retry.interceptor';
-import { OpenAIExceptionFilter } from '../../common/filters/openai-exception.filter';
 
 @ApiTags('Responses API')
 @Controller('api/responses')
-@UseInterceptors(RetryInterceptor, LoggingInterceptor)
-@UseFilters(OpenAIExceptionFilter)
 export class ResponsesController {
   constructor(private readonly responsesService: OpenAIResponsesService) {}
 

@@ -5,6 +5,7 @@ import configuration from '../../../src/config/configuration';
 import { OpenAIResponsesService } from '../../../src/openai/services/openai-responses.service';
 import { ResponsesController } from '../../../src/openai/controllers/responses.controller';
 import { LoggerService } from '../../../src/common/services/logger.service';
+import { PricingService } from '../../../src/common/services/pricing.service';
 import { OpenAIExceptionFilter } from '../../../src/common/filters/openai-exception.filter';
 import { CreateTextResponseDto } from '../../../src/openai/dto/create-text-response.dto';
 import { CreateImageResponseDto } from '../../../src/openai/dto/create-image-response.dto';
@@ -23,6 +24,21 @@ import { AudioEventsHandler } from '../../../src/openai/services/handlers/audio-
 import { MCPEventsHandler } from '../../../src/openai/services/handlers/mcp-events.handler';
 import { RefusalEventsHandler } from '../../../src/openai/services/handlers/refusal-events.handler';
 import { StructuralEventsHandler } from '../../../src/openai/services/handlers/structural-events.handler';
+import { ComputerUseEventsHandler } from '../../../src/openai/services/handlers/computer-use-events.handler';
+import { OPENAI_CLIENT } from '../../../src/openai/providers/openai-client.provider';
+
+/**
+ * Type-safe helper to access private client property for testing
+ * This is intentional for testing purposes only
+ */
+type ServiceWithClient = { client: OpenAI };
+function getPrivateClient(
+  service: OpenAIResponsesService,
+): jest.Mocked<OpenAI> {
+  return (service as unknown as ServiceWithClient)[
+    'client'
+  ] as jest.Mocked<OpenAI>;
+}
 
 describe('Data Size Edge Cases Integration', () => {
   let module: TestingModule;
@@ -40,6 +56,15 @@ describe('Data Size Edge Cases Integration', () => {
 
     mockLoggerService = createMockLoggerService();
 
+    const mockOpenAIClient = {
+      responses: {
+        create: jest.fn(),
+        retrieve: jest.fn(),
+        cancel: jest.fn(),
+        delete: jest.fn(),
+      },
+    } as unknown as jest.Mocked<OpenAI>;
+
     module = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({
@@ -51,6 +76,7 @@ describe('Data Size Edge Cases Integration', () => {
       providers: [
         OpenAIResponsesService,
         LoggerService,
+        PricingService,
         OpenAIExceptionFilter,
         LifecycleEventsHandler,
         TextEventsHandler,
@@ -61,6 +87,11 @@ describe('Data Size Edge Cases Integration', () => {
         MCPEventsHandler,
         RefusalEventsHandler,
         StructuralEventsHandler,
+        ComputerUseEventsHandler,
+        {
+          provide: OPENAI_CLIENT,
+          useValue: mockOpenAIClient,
+        },
       ],
     })
       .overrideProvider(LoggerService)
@@ -69,7 +100,9 @@ describe('Data Size Edge Cases Integration', () => {
 
     service = module.get<OpenAIResponsesService>(OpenAIResponsesService);
     controller = module.get<ResponsesController>(ResponsesController);
-    mockClient = (service as any).client as jest.Mocked<OpenAI>;
+
+    // Access private client property using type-safe helper
+    mockClient = getPrivateClient(service);
   });
 
   afterAll(async () => {
@@ -103,6 +136,8 @@ describe('Data Size Edge Cases Integration', () => {
           input_tokens: 10240,
           output_tokens: 50,
           total_tokens: 10290,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
       });
 
@@ -114,8 +149,10 @@ describe('Data Size Edge Cases Integration', () => {
 
       expect(result).toBeDefined();
       expect(result.output_text).toBe('Response to very long input');
-      expect(result.usage.input_tokens).toBeGreaterThan(10000);
-      expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalled();
+      expect(result.usage?.input_tokens).toBeGreaterThan(10000);
+      expect(
+        mockLoggerService.logOpenAIInteraction.mock.calls.length,
+      ).toBeGreaterThan(0);
     });
 
     it('should handle maximum context length input (128k tokens)', async () => {
@@ -133,6 +170,8 @@ describe('Data Size Edge Cases Integration', () => {
           input_tokens: 127500,
           output_tokens: 100,
           total_tokens: 127600,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
       });
 
@@ -142,14 +181,16 @@ describe('Data Size Edge Cases Integration', () => {
 
       const result = await service.createTextResponse(dto);
 
-      expect(result.usage.input_tokens).toBeGreaterThan(100000);
-      expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metadata: expect.objectContaining({
-            tokens_used: 127600,
-          }),
-        }),
-      );
+      expect(result.usage?.input_tokens).toBeGreaterThan(100000);
+      expect(
+        mockLoggerService.logOpenAIInteraction.mock.calls.length,
+      ).toBeGreaterThan(0);
+      const logCallArg = mockLoggerService.logOpenAIInteraction.mock
+        .calls[0][0] as unknown as Record<string, unknown>;
+      const logMetadata = logCallArg.metadata as Record<string, unknown>;
+      expect(logMetadata).toMatchObject({
+        tokens_used: 127600,
+      });
     });
 
     it('should handle input with very long single line (no newlines)', async () => {
@@ -165,6 +206,8 @@ describe('Data Size Edge Cases Integration', () => {
           input_tokens: 25000,
           output_tokens: 50,
           total_tokens: 25050,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
       });
 
@@ -175,7 +218,7 @@ describe('Data Size Edge Cases Integration', () => {
       const result = await controller.createTextResponse(dto);
 
       expect(result.output_text).toBe('Processed long single line');
-      expect(result.usage.input_tokens).toBe(25000);
+      expect(result.usage?.input_tokens).toBe(25000);
     });
 
     it('should handle input with many repeated patterns', async () => {
@@ -191,6 +234,8 @@ describe('Data Size Edge Cases Integration', () => {
           input_tokens: 20000,
           output_tokens: 50,
           total_tokens: 20050,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
       });
 
@@ -201,7 +246,9 @@ describe('Data Size Edge Cases Integration', () => {
       const result = await service.createTextResponse(dto);
 
       expect(result.output_text).toBe('Analyzed repeated patterns');
-      expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalled();
+      expect(
+        mockLoggerService.logOpenAIInteraction.mock.calls.length,
+      ).toBeGreaterThan(0);
     });
   });
 
@@ -221,6 +268,8 @@ describe('Data Size Edge Cases Integration', () => {
           input_tokens: 100,
           output_tokens: 16000,
           total_tokens: 16100,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
       });
 
@@ -231,14 +280,16 @@ describe('Data Size Edge Cases Integration', () => {
       const result = await controller.createTextResponse(dto);
 
       expect(result.output_text.length).toBeGreaterThan(100000);
-      expect(result.usage.output_tokens).toBe(16000);
-      expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
-        expect.objectContaining({
-          response: expect.objectContaining({
-            output_text: longOutput,
-          }),
-        }),
-      );
+      expect(result.usage?.output_tokens).toBe(16000);
+      expect(
+        mockLoggerService.logOpenAIInteraction.mock.calls.length,
+      ).toBeGreaterThan(0);
+      const logCallArg = mockLoggerService.logOpenAIInteraction.mock
+        .calls[0][0] as unknown as Record<string, unknown>;
+      const response = logCallArg.response as Record<string, unknown>;
+      expect(response).toMatchObject({
+        output_text: longOutput,
+      });
     });
 
     it('should handle output with many lines (10k+ lines)', async () => {
@@ -258,6 +309,8 @@ describe('Data Size Edge Cases Integration', () => {
           input_tokens: 50,
           output_tokens: 15000,
           total_tokens: 15050,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
       });
 
@@ -269,7 +322,7 @@ describe('Data Size Edge Cases Integration', () => {
 
       const lineCount = result.output_text.split('\n').length;
       expect(lineCount).toBeGreaterThan(10000);
-      expect(result.usage.output_tokens).toBe(15000);
+      expect(result.usage?.output_tokens).toBe(15000);
     });
 
     it('should handle output with complex nested structure', async () => {
@@ -293,6 +346,8 @@ describe('Data Size Edge Cases Integration', () => {
           input_tokens: 50,
           output_tokens: 500,
           total_tokens: 550,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
       });
 
@@ -325,21 +380,22 @@ describe('Data Size Edge Cases Integration', () => {
           input_tokens: 100,
           output_tokens: 50,
           total_tokens: 150,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
       });
 
-      jest
+      const createSpy = jest
         .spyOn(mockClient.responses, 'create')
         .mockResolvedValueOnce(mockResponse);
 
       const result = await controller.createTextResponse(dto);
 
       expect(result.output_text).toBe('Response with max metadata');
-      expect(mockClient.responses.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metadata: maxMetadata,
-        }),
-      );
+      expect(createSpy.mock.calls.length).toBeGreaterThan(0);
+      expect(createSpy.mock.calls[0][0]).toMatchObject({
+        metadata: maxMetadata,
+      });
     });
 
     it('should handle metadata with very long values (512 chars each)', async () => {
@@ -360,21 +416,22 @@ describe('Data Size Edge Cases Integration', () => {
           input_tokens: 150,
           output_tokens: 50,
           total_tokens: 200,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
       });
 
-      jest
+      const createSpy = jest
         .spyOn(mockClient.responses, 'create')
         .mockResolvedValueOnce(mockResponse);
 
       const result = await service.createTextResponse(dto);
 
       expect(result.output_text).toBe('Response with long metadata');
-      expect(mockClient.responses.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metadata: longValueMetadata,
-        }),
-      );
+      expect(createSpy.mock.calls.length).toBeGreaterThan(0);
+      expect(createSpy.mock.calls[0][0]).toMatchObject({
+        metadata: longValueMetadata,
+      });
     });
 
     it('should handle metadata with special characters and unicode', async () => {
@@ -396,6 +453,8 @@ describe('Data Size Edge Cases Integration', () => {
           input_tokens: 100,
           output_tokens: 50,
           total_tokens: 150,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
       });
 
@@ -427,6 +486,8 @@ describe('Data Size Edge Cases Integration', () => {
           input_tokens: 100,
           output_tokens: 0,
           total_tokens: 100,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
       });
 
@@ -437,13 +498,15 @@ describe('Data Size Edge Cases Integration', () => {
       const result = await service.createImageResponse(dto);
 
       expect(result.output_text.length).toBeGreaterThan(10000000);
-      expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalled();
+      expect(
+        mockLoggerService.logOpenAIInteraction.mock.calls.length,
+      ).toBeGreaterThan(0);
     });
 
     it('should handle multiple large base64 images in single response', async () => {
       const dto: CreateImageResponseDto = {
         input: 'Generate multiple images',
-        image_quality: 'standard',
+        image_quality: 'medium',
       };
 
       // Multiple 5MB images
@@ -457,6 +520,8 @@ describe('Data Size Edge Cases Integration', () => {
           input_tokens: 100,
           output_tokens: 0,
           total_tokens: 100,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
       });
 
@@ -493,21 +558,24 @@ describe('Data Size Edge Cases Integration', () => {
           input_tokens: 150,
           output_tokens: 0,
           total_tokens: 150,
+
+          input_tokens_details: { cached_tokens: 0 },
+
+          output_tokens_details: { reasoning_tokens: 0 },
         },
       });
 
-      jest
+      const createSpy = jest
         .spyOn(mockClient.responses, 'create')
         .mockResolvedValueOnce(mockResponse);
 
       const result = await service.createImageResponse(dto);
 
       expect(result.output_text.length).toBeGreaterThan(8000000);
-      expect(mockClient.responses.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metadata: largeMetadata,
-        }),
-      );
+      expect(createSpy.mock.calls.length).toBeGreaterThan(0);
+      expect(createSpy.mock.calls[0][0]).toMatchObject({
+        metadata: largeMetadata,
+      });
     });
   });
 
@@ -533,6 +601,8 @@ describe('Data Size Edge Cases Integration', () => {
           input_tokens: 12500,
           output_tokens: 8000,
           total_tokens: 20500,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
       });
 
@@ -543,14 +613,16 @@ describe('Data Size Edge Cases Integration', () => {
       const result = await controller.createTextResponse(dto);
 
       expect(result.output_text.length).toBeGreaterThan(50000);
-      expect(result.usage.total_tokens).toBeGreaterThan(20000);
-      expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metadata: expect.objectContaining({
-            tokens_used: 20500,
-          }),
-        }),
-      );
+      expect(result.usage?.total_tokens).toBeGreaterThan(20000);
+      expect(
+        mockLoggerService.logOpenAIInteraction.mock.calls.length,
+      ).toBeGreaterThan(0);
+      const logCallArg2 = mockLoggerService.logOpenAIInteraction.mock
+        .calls[0][0] as unknown as Record<string, unknown>;
+      const logMetadata2 = logCallArg2.metadata as Record<string, unknown>;
+      expect(logMetadata2).toMatchObject({
+        tokens_used: 20500,
+      });
     });
 
     it('should handle reasoning model with long reasoning content', async () => {
@@ -566,8 +638,9 @@ describe('Data Size Edge Cases Integration', () => {
         usage: {
           input_tokens: 100,
           output_tokens: 5000,
-          reasoning_tokens: 20000,
           total_tokens: 25100,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 20000 },
         },
       });
 
@@ -578,8 +651,8 @@ describe('Data Size Edge Cases Integration', () => {
       const result = await service.createTextResponse(dto);
 
       expect(result.output_text.length).toBeGreaterThan(100000);
-      expect(result.usage.reasoning_tokens).toBe(20000);
-      expect(result.usage.total_tokens).toBe(25100);
+      expect(result.usage?.output_tokens_details?.reasoning_tokens).toBe(20000);
+      expect(result.usage?.total_tokens).toBe(25100);
     });
 
     it('should handle cached input with very long prompt', async () => {
@@ -595,8 +668,9 @@ describe('Data Size Edge Cases Integration', () => {
         usage: {
           input_tokens: 25000,
           output_tokens: 100,
-          cached_tokens: 24000,
           total_tokens: 25100,
+          input_tokens_details: { cached_tokens: 24000 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
       });
 
@@ -606,9 +680,11 @@ describe('Data Size Edge Cases Integration', () => {
 
       const result = await controller.createTextResponse(dto);
 
-      expect(result.usage.cached_tokens).toBe(24000);
-      expect(result.usage.input_tokens).toBe(25000);
-      expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalled();
+      expect(result.usage?.input_tokens_details?.cached_tokens).toBe(24000);
+      expect(result.usage?.input_tokens).toBe(25000);
+      expect(
+        mockLoggerService.logOpenAIInteraction.mock.calls.length,
+      ).toBeGreaterThan(0);
     });
   });
 
@@ -623,9 +699,9 @@ describe('Data Size Edge Cases Integration', () => {
         usage: {
           input_tokens: 128000,
           output_tokens: 16000,
-          reasoning_tokens: 50000,
-          cached_tokens: 100000,
           total_tokens: 194000,
+          input_tokens_details: { cached_tokens: 100000 },
+          output_tokens_details: { reasoning_tokens: 50000 },
         },
       });
 
@@ -635,9 +711,9 @@ describe('Data Size Edge Cases Integration', () => {
 
       const result = await service.createTextResponse(dto);
 
-      expect(result.usage.total_tokens).toBeGreaterThan(150000);
-      expect(result.usage.reasoning_tokens).toBe(50000);
-      expect(result.usage.cached_tokens).toBe(100000);
+      expect(result.usage?.total_tokens).toBeGreaterThan(150000);
+      expect(result.usage?.output_tokens_details?.reasoning_tokens).toBe(50000);
+      expect(result.usage?.input_tokens_details?.cached_tokens).toBe(100000);
     });
 
     it('should log large responses without truncation', async () => {
@@ -653,6 +729,8 @@ describe('Data Size Edge Cases Integration', () => {
           input_tokens: 100,
           output_tokens: 12000,
           total_tokens: 12100,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
       });
 
@@ -663,13 +741,15 @@ describe('Data Size Edge Cases Integration', () => {
       const result = await controller.createTextResponse(dto);
 
       expect(result.output_text).toBe(largeReport);
-      expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
-        expect.objectContaining({
-          response: expect.objectContaining({
-            output_text: largeReport,
-          }),
-        }),
-      );
+      expect(
+        mockLoggerService.logOpenAIInteraction.mock.calls.length,
+      ).toBeGreaterThan(0);
+      const logCallArg3 = mockLoggerService.logOpenAIInteraction.mock
+        .calls[0][0] as unknown as Record<string, unknown>;
+      const logResponse = logCallArg3.response as Record<string, unknown>;
+      expect(logResponse).toMatchObject({
+        output_text: largeReport,
+      });
     });
   });
 });

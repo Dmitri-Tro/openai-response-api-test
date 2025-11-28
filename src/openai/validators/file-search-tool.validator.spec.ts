@@ -15,7 +15,7 @@ describe('IsFileSearchToolConstraint', () => {
           vector_store_ids: ['vs_abc123', 'vs_def456'],
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should accept single vector store ID', () => {
@@ -25,7 +25,7 @@ describe('IsFileSearchToolConstraint', () => {
           vector_store_ids: ['vs_abc123'],
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should reject non-array vector_store_ids', () => {
@@ -35,7 +35,7 @@ describe('IsFileSearchToolConstraint', () => {
           vector_store_ids: 'vs_abc123',
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject empty vector_store_ids array', () => {
@@ -45,7 +45,7 @@ describe('IsFileSearchToolConstraint', () => {
           vector_store_ids: [],
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject IDs not starting with "vs_"', () => {
@@ -55,7 +55,7 @@ describe('IsFileSearchToolConstraint', () => {
           vector_store_ids: ['abc123'],
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject IDs with wrong prefix', () => {
@@ -65,7 +65,7 @@ describe('IsFileSearchToolConstraint', () => {
           vector_store_ids: ['file_abc123'],
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject non-string IDs', () => {
@@ -75,7 +75,7 @@ describe('IsFileSearchToolConstraint', () => {
           vector_store_ids: [123, 456],
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject mixed valid and invalid IDs', () => {
@@ -85,7 +85,7 @@ describe('IsFileSearchToolConstraint', () => {
           vector_store_ids: ['vs_abc123', 'invalid'],
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject null vector_store_ids', () => {
@@ -95,7 +95,7 @@ describe('IsFileSearchToolConstraint', () => {
           vector_store_ids: null,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject undefined vector_store_ids', () => {
@@ -105,7 +105,7 @@ describe('IsFileSearchToolConstraint', () => {
           vector_store_ids: undefined,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
   });
 
@@ -118,7 +118,7 @@ describe('IsFileSearchToolConstraint', () => {
           max_num_results: 1,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should accept valid maximum value (50)', () => {
@@ -129,7 +129,7 @@ describe('IsFileSearchToolConstraint', () => {
           max_num_results: 50,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should accept valid mid-range value', () => {
@@ -140,7 +140,7 @@ describe('IsFileSearchToolConstraint', () => {
           max_num_results: 25,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should reject value below minimum (0)', () => {
@@ -151,7 +151,7 @@ describe('IsFileSearchToolConstraint', () => {
           max_num_results: 0,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject negative values', () => {
@@ -162,7 +162,7 @@ describe('IsFileSearchToolConstraint', () => {
           max_num_results: -5,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject value above maximum (51)', () => {
@@ -173,7 +173,7 @@ describe('IsFileSearchToolConstraint', () => {
           max_num_results: 51,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject very large values (100)', () => {
@@ -184,7 +184,7 @@ describe('IsFileSearchToolConstraint', () => {
           max_num_results: 100,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject non-numeric string values', () => {
@@ -195,7 +195,7 @@ describe('IsFileSearchToolConstraint', () => {
           max_num_results: '10',
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject null', () => {
@@ -206,7 +206,7 @@ describe('IsFileSearchToolConstraint', () => {
           max_num_results: null,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject float values', () => {
@@ -217,7 +217,7 @@ describe('IsFileSearchToolConstraint', () => {
           max_num_results: 10.5,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should accept undefined (optional parameter)', () => {
@@ -228,7 +228,7 @@ describe('IsFileSearchToolConstraint', () => {
           max_num_results: undefined,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should accept when parameter is omitted', () => {
@@ -238,7 +238,7 @@ describe('IsFileSearchToolConstraint', () => {
           vector_store_ids: ['vs_abc123'],
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
   });
 
@@ -254,7 +254,7 @@ describe('IsFileSearchToolConstraint', () => {
             },
           },
         ];
-        expect(constraint.validate(tools, {} as any)).toBe(true);
+        expect(constraint.validate(tools)).toBe(true);
       });
 
       it('should accept "default-2024-11-15"', () => {
@@ -267,7 +267,7 @@ describe('IsFileSearchToolConstraint', () => {
             },
           },
         ];
-        expect(constraint.validate(tools, {} as any)).toBe(true);
+        expect(constraint.validate(tools)).toBe(true);
       });
 
       it('should reject invalid ranker value', () => {
@@ -280,7 +280,7 @@ describe('IsFileSearchToolConstraint', () => {
             },
           },
         ];
-        expect(constraint.validate(tools, {} as any)).toBe(false);
+        expect(constraint.validate(tools)).toBe(false);
       });
 
       it('should reject non-string ranker', () => {
@@ -293,7 +293,7 @@ describe('IsFileSearchToolConstraint', () => {
             },
           },
         ];
-        expect(constraint.validate(tools, {} as any)).toBe(false);
+        expect(constraint.validate(tools)).toBe(false);
       });
 
       it('should accept undefined ranker (optional)', () => {
@@ -306,7 +306,7 @@ describe('IsFileSearchToolConstraint', () => {
             },
           },
         ];
-        expect(constraint.validate(tools, {} as any)).toBe(true);
+        expect(constraint.validate(tools)).toBe(true);
       });
     });
 
@@ -321,7 +321,7 @@ describe('IsFileSearchToolConstraint', () => {
             },
           },
         ];
-        expect(constraint.validate(tools, {} as any)).toBe(true);
+        expect(constraint.validate(tools)).toBe(true);
       });
 
       it('should accept maximum value (1)', () => {
@@ -334,7 +334,7 @@ describe('IsFileSearchToolConstraint', () => {
             },
           },
         ];
-        expect(constraint.validate(tools, {} as any)).toBe(true);
+        expect(constraint.validate(tools)).toBe(true);
       });
 
       it('should accept mid-range value (0.7)', () => {
@@ -347,7 +347,7 @@ describe('IsFileSearchToolConstraint', () => {
             },
           },
         ];
-        expect(constraint.validate(tools, {} as any)).toBe(true);
+        expect(constraint.validate(tools)).toBe(true);
       });
 
       it('should reject negative value', () => {
@@ -360,7 +360,7 @@ describe('IsFileSearchToolConstraint', () => {
             },
           },
         ];
-        expect(constraint.validate(tools, {} as any)).toBe(false);
+        expect(constraint.validate(tools)).toBe(false);
       });
 
       it('should reject value above 1', () => {
@@ -373,7 +373,7 @@ describe('IsFileSearchToolConstraint', () => {
             },
           },
         ];
-        expect(constraint.validate(tools, {} as any)).toBe(false);
+        expect(constraint.validate(tools)).toBe(false);
       });
 
       it('should reject non-numeric value', () => {
@@ -386,7 +386,7 @@ describe('IsFileSearchToolConstraint', () => {
             },
           },
         ];
-        expect(constraint.validate(tools, {} as any)).toBe(false);
+        expect(constraint.validate(tools)).toBe(false);
       });
 
       it('should accept undefined (optional)', () => {
@@ -399,7 +399,7 @@ describe('IsFileSearchToolConstraint', () => {
             },
           },
         ];
-        expect(constraint.validate(tools, {} as any)).toBe(true);
+        expect(constraint.validate(tools)).toBe(true);
       });
     });
 
@@ -414,7 +414,7 @@ describe('IsFileSearchToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should reject non-object ranking_options', () => {
@@ -425,7 +425,7 @@ describe('IsFileSearchToolConstraint', () => {
           ranking_options: 'invalid',
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should reject null ranking_options', () => {
@@ -436,7 +436,7 @@ describe('IsFileSearchToolConstraint', () => {
           ranking_options: null,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should accept undefined ranking_options (optional)', () => {
@@ -447,7 +447,7 @@ describe('IsFileSearchToolConstraint', () => {
           ranking_options: undefined,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should accept when ranking_options is omitted', () => {
@@ -457,7 +457,7 @@ describe('IsFileSearchToolConstraint', () => {
           vector_store_ids: ['vs_abc123'],
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
   });
 
@@ -478,7 +478,7 @@ describe('IsFileSearchToolConstraint', () => {
           max_num_results: 10,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should validate only file_search tools', () => {
@@ -495,7 +495,7 @@ describe('IsFileSearchToolConstraint', () => {
           vector_store_ids: ['vs_abc123'],
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should accept multiple file_search tools', () => {
@@ -511,7 +511,7 @@ describe('IsFileSearchToolConstraint', () => {
           max_num_results: 5,
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should reject if any file_search tool is invalid', () => {
@@ -525,7 +525,7 @@ describe('IsFileSearchToolConstraint', () => {
           vector_store_ids: [], // Invalid: empty array
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(false);
+      expect(constraint.validate(tools)).toBe(false);
     });
 
     it('should ignore non-file_search tools in validation', () => {
@@ -538,29 +538,29 @@ describe('IsFileSearchToolConstraint', () => {
           type: 'code_interpreter',
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
   });
 
   describe('edge cases', () => {
     it('should return true for non-array (handled by @IsArray)', () => {
       const tools = 'not an array';
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should accept empty tools array', () => {
-      const tools = [];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      const tools: unknown[] = [];
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should handle null tools', () => {
       const tools = null;
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should handle undefined tools', () => {
       const tools = undefined;
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should handle tools without type property', () => {
@@ -569,7 +569,7 @@ describe('IsFileSearchToolConstraint', () => {
           some_field: 'value',
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
 
     it('should accept complete valid configuration', () => {
@@ -584,13 +584,13 @@ describe('IsFileSearchToolConstraint', () => {
           },
         },
       ];
-      expect(constraint.validate(tools, {} as any)).toBe(true);
+      expect(constraint.validate(tools)).toBe(true);
     });
   });
 
   describe('defaultMessage', () => {
     it('should return detailed error message', () => {
-      const message = constraint.defaultMessage({} as any);
+      const message = constraint.defaultMessage();
       expect(message).toContain('Invalid file_search tool configuration');
       expect(message).toContain('vector_store_ids');
       expect(message).toContain('max_num_results');

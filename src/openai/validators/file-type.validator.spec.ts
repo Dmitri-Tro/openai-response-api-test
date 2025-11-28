@@ -1,5 +1,4 @@
-import { validate } from 'class-validator';
-import { IsString } from 'class-validator';
+import { validate, IsString, ValidationArguments } from 'class-validator';
 import {
   IsFileTypeValidConstraint,
   IsFileTypeValid,
@@ -29,14 +28,14 @@ describe('IsFileTypeValidConstraint', () => {
     it('should accept PDF for assistants', () => {
       const result = validator.validate('application/pdf', {
         object: { purpose: 'assistants' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
 
     it('should accept TXT for assistants', () => {
       const result = validator.validate('text/plain', {
         object: { purpose: 'assistants' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
 
@@ -45,7 +44,7 @@ describe('IsFileTypeValidConstraint', () => {
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         {
           object: { purpose: 'assistants' },
-        } as any,
+        } as ValidationArguments,
       );
       expect(result).toBe(true);
     });
@@ -53,21 +52,21 @@ describe('IsFileTypeValidConstraint', () => {
     it('should accept JSON for assistants', () => {
       const result = validator.validate('application/json', {
         object: { purpose: 'assistants' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
 
     it('should accept CSV for assistants', () => {
       const result = validator.validate('text/csv', {
         object: { purpose: 'assistants' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
 
     it('should accept Python file for assistants', () => {
       const result = validator.validate('text/x-python', {
         object: { purpose: 'assistants' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
   });
@@ -76,28 +75,28 @@ describe('IsFileTypeValidConstraint', () => {
     it('should accept PNG for vision', () => {
       const result = validator.validate('image/png', {
         object: { purpose: 'vision' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
 
     it('should accept JPEG for vision', () => {
       const result = validator.validate('image/jpeg', {
         object: { purpose: 'vision' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
 
     it('should accept GIF for vision', () => {
       const result = validator.validate('image/gif', {
         object: { purpose: 'vision' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
 
     it('should accept WEBP for vision', () => {
       const result = validator.validate('image/webp', {
         object: { purpose: 'vision' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
   });
@@ -106,21 +105,21 @@ describe('IsFileTypeValidConstraint', () => {
     it('should accept JSONL for batch', () => {
       const result = validator.validate('application/jsonl', {
         object: { purpose: 'batch' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
 
     it('should accept JSONL for fine-tune', () => {
       const result = validator.validate('application/jsonl', {
         object: { purpose: 'fine-tune' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
 
     it('should accept JSONL for evals', () => {
       const result = validator.validate('application/jsonl', {
         object: { purpose: 'evals' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
   });
@@ -129,7 +128,7 @@ describe('IsFileTypeValidConstraint', () => {
     it('should accept PDF for user_data', () => {
       const result = validator.validate('application/pdf', {
         object: { purpose: 'user_data' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
 
@@ -138,7 +137,7 @@ describe('IsFileTypeValidConstraint', () => {
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         {
           object: { purpose: 'user_data' },
-        } as any,
+        } as ValidationArguments,
       );
       expect(result).toBe(true);
     });
@@ -146,7 +145,7 @@ describe('IsFileTypeValidConstraint', () => {
     it('should accept octet-stream for user_data', () => {
       const result = validator.validate('application/octet-stream', {
         object: { purpose: 'user_data' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
   });
@@ -155,42 +154,42 @@ describe('IsFileTypeValidConstraint', () => {
     it('should reject number file type', () => {
       const result = validator.validate(123, {
         object: { purpose: 'vision' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
 
     it('should reject object file type', () => {
       const result = validator.validate({ type: 'image/png' }, {
         object: { purpose: 'vision' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
 
     it('should reject array file type', () => {
       const result = validator.validate(['image/png'], {
         object: { purpose: 'vision' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
 
     it('should reject null file type', () => {
       const result = validator.validate(null, {
         object: { purpose: 'vision' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
 
     it('should reject undefined file type', () => {
       const result = validator.validate(undefined, {
         object: { purpose: 'vision' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
 
     it('should reject boolean file type', () => {
       const result = validator.validate(true, {
         object: { purpose: 'vision' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
   });
@@ -199,35 +198,35 @@ describe('IsFileTypeValidConstraint', () => {
     it('should reject image for batch purpose', () => {
       const result = validator.validate('image/png', {
         object: { purpose: 'batch' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
 
     it('should reject PDF for vision purpose', () => {
       const result = validator.validate('application/pdf', {
         object: { purpose: 'vision' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
 
     it('should reject JSON for batch purpose (must be JSONL)', () => {
       const result = validator.validate('application/json', {
         object: { purpose: 'batch' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
 
     it('should reject JSON for fine-tune purpose (must be JSONL)', () => {
       const result = validator.validate('application/json', {
         object: { purpose: 'fine-tune' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
 
     it('should reject image for assistants purpose', () => {
       const result = validator.validate('image/png', {
         object: { purpose: 'assistants' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
 
@@ -236,7 +235,7 @@ describe('IsFileTypeValidConstraint', () => {
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         {
           object: { purpose: 'vision' },
-        } as any,
+        } as ValidationArguments,
       );
       expect(result).toBe(false);
     });
@@ -244,14 +243,14 @@ describe('IsFileTypeValidConstraint', () => {
     it('should reject video for any purpose', () => {
       const result = validator.validate('video/mp4', {
         object: { purpose: 'user_data' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
 
     it('should reject audio for any purpose', () => {
       const result = validator.validate('audio/mp3', {
         object: { purpose: 'user_data' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
   });
@@ -260,42 +259,42 @@ describe('IsFileTypeValidConstraint', () => {
     it('should accept filename with .pdf extension for assistants', () => {
       const result = validator.validate('document.pdf', {
         object: { purpose: 'assistants' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
 
     it('should accept filename with .png extension for vision', () => {
       const result = validator.validate('image.png', {
         object: { purpose: 'vision' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
 
     it('should accept filename with .jsonl extension for batch', () => {
       const result = validator.validate('data.jsonl', {
         object: { purpose: 'batch' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
 
     it('should reject filename with .json extension for batch', () => {
       const result = validator.validate('data.json', {
         object: { purpose: 'batch' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
 
     it('should handle uppercase extensions', () => {
       const result = validator.validate('IMAGE.PNG', {
         object: { purpose: 'vision' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
 
     it('should handle mixed case extensions', () => {
       const result = validator.validate('Document.PdF', {
         object: { purpose: 'assistants' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(true);
     });
   });
@@ -304,28 +303,28 @@ describe('IsFileTypeValidConstraint', () => {
     it('should reject file type when purpose is missing', () => {
       const result = validator.validate('image/png', {
         object: {},
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
 
     it('should reject file type when purpose is null', () => {
       const result = validator.validate('image/png', {
         object: { purpose: null },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
 
     it('should reject file type when purpose is invalid', () => {
       const result = validator.validate('image/png', {
         object: { purpose: 'invalid-purpose' },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
 
     it('should reject file type when purpose is number', () => {
       const result = validator.validate('image/png', {
         object: { purpose: 123 },
-      } as any);
+      } as ValidationArguments);
       expect(result).toBe(false);
     });
   });
@@ -335,7 +334,7 @@ describe('IsFileTypeValidConstraint', () => {
       const message = validator.defaultMessage({
         value: 123,
         object: { purpose: 'vision' },
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('must be a string');
       expect(message).toContain('number');
@@ -345,7 +344,7 @@ describe('IsFileTypeValidConstraint', () => {
       const message = validator.defaultMessage({
         value: 'image/png',
         object: {},
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('Cannot validate file type');
       expect(message).toContain('without a valid purpose');
@@ -355,7 +354,7 @@ describe('IsFileTypeValidConstraint', () => {
       const message = validator.defaultMessage({
         value: 'image/png',
         object: { purpose: 'invalid-purpose' },
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('Unknown file purpose');
       expect(message).toContain('invalid-purpose');
@@ -365,7 +364,7 @@ describe('IsFileTypeValidConstraint', () => {
       const message = validator.defaultMessage({
         value: 'image/png',
         object: { purpose: 'batch' },
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('not allowed');
       expect(message).toContain('batch');
@@ -376,7 +375,7 @@ describe('IsFileTypeValidConstraint', () => {
       const message = validator.defaultMessage({
         value: 'application/pdf',
         object: { purpose: 'vision' },
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('not allowed');
       expect(message).toContain('vision');
@@ -387,7 +386,7 @@ describe('IsFileTypeValidConstraint', () => {
       const message = validator.defaultMessage({
         value: 'application/json',
         object: { purpose: 'batch' },
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('JSONL format instead of JSON');
       expect(message).toContain('.jsonl');
@@ -397,7 +396,7 @@ describe('IsFileTypeValidConstraint', () => {
       const message = validator.defaultMessage({
         value: 'image/png',
         object: { purpose: 'assistants' },
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('Change purpose to "vision"');
     });
@@ -406,7 +405,7 @@ describe('IsFileTypeValidConstraint', () => {
       const message = validator.defaultMessage({
         value: 'application/pdf',
         object: { purpose: 'vision' },
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('Change purpose to "assistants"');
     });
@@ -430,7 +429,7 @@ describe('IsFileTypeValidConstraint', () => {
     });
 
     it('should return false for non-string file type', () => {
-      expect(validateFileType(123 as any, 'vision')).toBe(false);
+      expect(validateFileType(123 as unknown as string, 'vision')).toBe(false);
     });
 
     it('should handle case insensitivity', () => {
@@ -451,7 +450,10 @@ describe('IsFileTypeValidConstraint', () => {
     });
 
     it('should return error message for non-string type', () => {
-      const message = getFileTypeErrorMessage(123 as any, 'vision');
+      const message = getFileTypeErrorMessage(
+        123 as unknown as string,
+        'vision',
+      );
 
       expect(message).toContain('must be a string');
     });
@@ -521,9 +523,7 @@ describe('IsFileTypeValidConstraint', () => {
 
     it('should have vision MIME types as image types', () => {
       const visionTypes = ALLOWED_MIME_TYPES['vision'];
-      expect(visionTypes.every((type) => type.startsWith('image/'))).toBe(
-        true,
-      );
+      expect(visionTypes.every((type) => type.startsWith('image/'))).toBe(true);
     });
 
     it('should have batch/fine-tune/evals with only JSONL', () => {

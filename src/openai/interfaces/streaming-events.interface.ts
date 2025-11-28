@@ -60,7 +60,7 @@ export enum EventCategory {
 }
 
 /**
- * Comprehensive list of all 51 streaming event types
+ * Comprehensive list of all 57 streaming event types (+6 for computer_use)
  */
 export const STREAMING_EVENT_TYPES = {
   // Lifecycle Events (7)
@@ -85,7 +85,7 @@ export const STREAMING_EVENT_TYPES = {
   REASONING_SUMMARY_TEXT_DELTA: 'response.reasoning_summary_text.delta',
   REASONING_SUMMARY_TEXT_DONE: 'response.reasoning_summary_text.done',
 
-  // Tool Calling Events (15)
+  // Tool Calling Events (21 = 15 existing + 6 computer_use)
   // Function Calls
   FUNCTION_CALL_ARGUMENTS_DELTA: 'response.function_call_arguments.delta',
   FUNCTION_CALL_ARGUMENTS_DONE: 'response.function_call_arguments.done',
@@ -106,6 +106,15 @@ export const STREAMING_EVENT_TYPES = {
   WEB_SEARCH_IN_PROGRESS: 'response.web_search_call.in_progress',
   WEB_SEARCH_SEARCHING: 'response.web_search_call.searching',
   WEB_SEARCH_COMPLETED: 'response.web_search_call.completed',
+
+  // Computer Use (6)
+  COMPUTER_USE_IN_PROGRESS: 'response.computer_use_call.in_progress',
+  COMPUTER_USE_ACTION_DELTA: 'response.computer_use_call.action.delta',
+  COMPUTER_USE_ACTION_DONE: 'response.computer_use_call.action.done',
+  COMPUTER_USE_OUTPUT_ITEM_ADDED:
+    'response.computer_use_call_output_item.added',
+  COMPUTER_USE_OUTPUT_ITEM_DONE: 'response.computer_use_call_output_item.done',
+  COMPUTER_USE_COMPLETED: 'response.computer_use_call.completed',
 
   // Custom Tools
   CUSTOM_TOOL_INPUT_DELTA: 'response.custom_tool_call_input.delta',
@@ -159,6 +168,7 @@ export function getEventCategory(eventType: string): EventCategory {
     eventType.includes('code_interpreter') ||
     eventType.includes('file_search') ||
     eventType.includes('web_search') ||
+    eventType.includes('computer_use') ||
     eventType.includes('custom_tool')
   ) {
     return EventCategory.TOOL_CALLING;

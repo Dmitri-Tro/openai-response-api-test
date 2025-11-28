@@ -21,7 +21,14 @@ interface MulterFile {
 
 describe('FilesController', () => {
   let controller: FilesController;
-  let service: OpenAIFilesService;
+
+  // Spy variables for proper type checking
+  let uploadFileSpy: jest.Mock;
+  let retrieveFileSpy: jest.Mock;
+  let listFilesSpy: jest.Mock;
+  let deleteFileSpy: jest.Mock;
+  let downloadFileContentSpy: jest.Mock;
+  let pollUntilCompleteSpy: jest.Mock;
 
   const mockFile: Files.FileObject = {
     id: 'file-abc123xyz789',
@@ -31,8 +38,6 @@ describe('FilesController', () => {
     filename: 'test-document.pdf',
     purpose: 'assistants',
     status: 'uploaded',
-    status_details: null,
-    expires_at: null,
   };
 
   const mockProcessedFile: Files.FileObject = {
@@ -51,16 +56,33 @@ describe('FilesController', () => {
     deleted: true,
   };
 
-  const mockFilesService = {
-    uploadFile: jest.fn(),
-    retrieveFile: jest.fn(),
-    listFiles: jest.fn(),
-    deleteFile: jest.fn(),
-    downloadFileContent: jest.fn(),
-    pollUntilComplete: jest.fn(),
+  let mockFilesService: {
+    uploadFile: jest.Mock;
+    retrieveFile: jest.Mock;
+    listFiles: jest.Mock;
+    deleteFile: jest.Mock;
+    downloadFileContent: jest.Mock;
+    pollUntilComplete: jest.Mock;
   };
 
   beforeEach(async () => {
+    // Create spy functions
+    uploadFileSpy = jest.fn();
+    retrieveFileSpy = jest.fn();
+    listFilesSpy = jest.fn();
+    deleteFileSpy = jest.fn();
+    downloadFileContentSpy = jest.fn();
+    pollUntilCompleteSpy = jest.fn();
+
+    mockFilesService = {
+      uploadFile: uploadFileSpy,
+      retrieveFile: retrieveFileSpy,
+      listFiles: listFilesSpy,
+      deleteFile: deleteFileSpy,
+      downloadFileContent: downloadFileContentSpy,
+      pollUntilComplete: pollUntilCompleteSpy,
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [FilesController],
       providers: [
@@ -84,7 +106,6 @@ describe('FilesController', () => {
     }).compile();
 
     controller = module.get<FilesController>(FilesController);
-    service = module.get<OpenAIFilesService>(OpenAIFilesService);
 
     jest.clearAllMocks();
   });
@@ -113,9 +134,12 @@ describe('FilesController', () => {
         },
       };
 
-      const result = await controller.uploadFile(multerFile, dto);
+      const result = await controller.uploadFile(
+        multerFile as Express.Multer.File,
+        dto,
+      );
 
-      expect(service.uploadFile).toHaveBeenCalledWith(
+      expect(uploadFileSpy).toHaveBeenCalledWith(
         fileBuffer,
         'test-document.pdf',
         'assistants',
@@ -131,9 +155,12 @@ describe('FilesController', () => {
         purpose: 'assistants',
       };
 
-      const result = await controller.uploadFile(multerFile, dto);
+      const result = await controller.uploadFile(
+        multerFile as Express.Multer.File,
+        dto,
+      );
 
-      expect(service.uploadFile).toHaveBeenCalledWith(
+      expect(uploadFileSpy).toHaveBeenCalledWith(
         fileBuffer,
         'test-document.pdf',
         'assistants',
@@ -150,9 +177,9 @@ describe('FilesController', () => {
         purpose: 'vision',
       };
 
-      await controller.uploadFile(multerFile, dto);
+      await controller.uploadFile(multerFile as Express.Multer.File, dto);
 
-      expect(service.uploadFile).toHaveBeenCalledWith(
+      expect(uploadFileSpy).toHaveBeenCalledWith(
         fileBuffer,
         'test-document.pdf',
         'vision',
@@ -168,9 +195,9 @@ describe('FilesController', () => {
         purpose: 'batch',
       };
 
-      await controller.uploadFile(multerFile, dto);
+      await controller.uploadFile(multerFile as Express.Multer.File, dto);
 
-      expect(service.uploadFile).toHaveBeenCalledWith(
+      expect(uploadFileSpy).toHaveBeenCalledWith(
         fileBuffer,
         'test-document.pdf',
         'batch',
@@ -186,9 +213,9 @@ describe('FilesController', () => {
         purpose: 'fine-tune',
       };
 
-      await controller.uploadFile(multerFile, dto);
+      await controller.uploadFile(multerFile as Express.Multer.File, dto);
 
-      expect(service.uploadFile).toHaveBeenCalledWith(
+      expect(uploadFileSpy).toHaveBeenCalledWith(
         fileBuffer,
         'test-document.pdf',
         'fine-tune',
@@ -199,9 +226,12 @@ describe('FilesController', () => {
     it('should return file with uploaded status', async () => {
       mockFilesService.uploadFile.mockResolvedValue(mockFile);
 
-      const result = await controller.uploadFile(multerFile, {
-        purpose: 'assistants',
-      });
+      const result = await controller.uploadFile(
+        multerFile as Express.Multer.File,
+        {
+          purpose: 'assistants',
+        },
+      );
 
       expect(result.status).toBe('uploaded');
       expect(result.id).toBe('file-abc123xyz789');
@@ -212,7 +242,9 @@ describe('FilesController', () => {
       mockFilesService.uploadFile.mockRejectedValue(error);
 
       await expect(
-        controller.uploadFile(multerFile, { purpose: 'assistants' }),
+        controller.uploadFile(multerFile as Express.Multer.File, {
+          purpose: 'assistants',
+        }),
       ).rejects.toThrow('File upload failed');
     });
 
@@ -227,9 +259,12 @@ describe('FilesController', () => {
       const largeFile = { ...mockFile, bytes: 100 * 1024 * 1024 };
       mockFilesService.uploadFile.mockResolvedValue(largeFile);
 
-      const result = await controller.uploadFile(largeMulterFile, {
-        purpose: 'assistants',
-      });
+      const result = await controller.uploadFile(
+        largeMulterFile as Express.Multer.File,
+        {
+          purpose: 'assistants',
+        },
+      );
 
       expect(result.bytes).toBe(100 * 1024 * 1024);
     });
@@ -245,11 +280,11 @@ describe('FilesController', () => {
         filename: 'file (1) [copy].pdf',
       });
 
-      const result = await controller.uploadFile(specialMulterFile, {
+      await controller.uploadFile(specialMulterFile as Express.Multer.File, {
         purpose: 'assistants',
       });
 
-      expect(service.uploadFile).toHaveBeenCalledWith(
+      expect(uploadFileSpy).toHaveBeenCalledWith(
         expect.any(Buffer),
         'file (1) [copy].pdf',
         'assistants',
@@ -262,7 +297,9 @@ describe('FilesController', () => {
       mockFilesService.uploadFile.mockRejectedValue(error);
 
       await expect(
-        controller.uploadFile(multerFile, { purpose: 'assistants' }),
+        controller.uploadFile(multerFile as Express.Multer.File, {
+          purpose: 'assistants',
+        }),
       ).rejects.toThrow('File exceeds maximum size limit');
     });
 
@@ -271,7 +308,9 @@ describe('FilesController', () => {
       mockFilesService.uploadFile.mockRejectedValue(error);
 
       await expect(
-        controller.uploadFile(multerFile, { purpose: 'assistants' }),
+        controller.uploadFile(multerFile as Express.Multer.File, {
+          purpose: 'assistants',
+        }),
       ).rejects.toThrow('Unsupported file format');
     });
   });
@@ -286,7 +325,7 @@ describe('FilesController', () => {
       const query: ListFilesDto = {};
       const result = await controller.listFiles(query);
 
-      expect(service.listFiles).toHaveBeenCalledWith(
+      expect(listFilesSpy).toHaveBeenCalledWith(
         undefined,
         undefined,
         undefined,
@@ -301,7 +340,7 @@ describe('FilesController', () => {
       const query: ListFilesDto = { purpose: 'assistants' };
       const result = await controller.listFiles(query);
 
-      expect(service.listFiles).toHaveBeenCalledWith(
+      expect(listFilesSpy).toHaveBeenCalledWith(
         'assistants',
         undefined,
         undefined,
@@ -318,11 +357,7 @@ describe('FilesController', () => {
       const query: ListFilesDto = { order: 'asc' };
       const result = await controller.listFiles(query);
 
-      expect(service.listFiles).toHaveBeenCalledWith(
-        undefined,
-        'asc',
-        undefined,
-      );
+      expect(listFilesSpy).toHaveBeenCalledWith(undefined, 'asc', undefined);
       expect(result).toEqual([mockFile, mockProcessedFile]);
     });
 
@@ -335,11 +370,7 @@ describe('FilesController', () => {
       const query: ListFilesDto = { order: 'desc' };
       const result = await controller.listFiles(query);
 
-      expect(service.listFiles).toHaveBeenCalledWith(
-        undefined,
-        'desc',
-        undefined,
-      );
+      expect(listFilesSpy).toHaveBeenCalledWith(undefined, 'desc', undefined);
       expect(result).toEqual([mockProcessedFile, mockFile]);
     });
 
@@ -349,7 +380,7 @@ describe('FilesController', () => {
       const query: ListFilesDto = { limit: 1 };
       const result = await controller.listFiles(query);
 
-      expect(service.listFiles).toHaveBeenCalledWith(undefined, undefined, 1);
+      expect(listFilesSpy).toHaveBeenCalledWith(undefined, undefined, 1);
       expect(result).toHaveLength(1);
     });
 
@@ -364,7 +395,7 @@ describe('FilesController', () => {
 
       const result = await controller.listFiles(query);
 
-      expect(service.listFiles).toHaveBeenCalledWith('vision', 'asc', 50);
+      expect(listFilesSpy).toHaveBeenCalledWith('vision', 'asc', 50);
       expect(result).toHaveLength(1);
     });
 
@@ -411,7 +442,7 @@ describe('FilesController', () => {
 
       const result = await controller.getFile('file-abc123xyz789');
 
-      expect(service.retrieveFile).toHaveBeenCalledWith('file-abc123xyz789');
+      expect(retrieveFileSpy).toHaveBeenCalledWith('file-abc123xyz789');
       expect(result).toEqual(mockFile);
     });
 
@@ -495,10 +526,8 @@ describe('FilesController', () => {
         mockResponse as Response,
       );
 
-      expect(service.retrieveFile).toHaveBeenCalledWith('file-abc123xyz789');
-      expect(service.downloadFileContent).toHaveBeenCalledWith(
-        'file-abc123xyz789',
-      );
+      expect(retrieveFileSpy).toHaveBeenCalledWith('file-abc123xyz789');
+      expect(downloadFileContentSpy).toHaveBeenCalledWith('file-abc123xyz789');
       expect(mockResponse.setHeader).toHaveBeenCalledWith(
         'Content-Type',
         'application/pdf',
@@ -692,7 +721,7 @@ describe('FilesController', () => {
 
       const result = await controller.deleteFile('file-abc123xyz789');
 
-      expect(service.deleteFile).toHaveBeenCalledWith('file-abc123xyz789');
+      expect(deleteFileSpy).toHaveBeenCalledWith('file-abc123xyz789');
       expect(result).toEqual(mockDeleteResponse);
       expect(result.deleted).toBe(true);
     });

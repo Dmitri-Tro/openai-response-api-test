@@ -10,6 +10,18 @@ import {
   createMockStreamState,
 } from '../../../common/testing/test.factories';
 
+// Type definitions for parsed event data
+interface ImageProgressData {
+  call_id?: string;
+  sequence?: number;
+}
+
+interface ImageDataEvent {
+  call_id?: string;
+  image_data?: string;
+  sequence?: number;
+}
+
 describe('ImageEventsHandler', () => {
   let handler: ImageEventsHandler;
   let mockLoggerService: jest.Mocked<LoggerService>;
@@ -113,13 +125,16 @@ describe('ImageEventsHandler', () => {
       );
       Array.from(generator);
 
-      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
-        api: 'responses',
-        endpoint: '/v1/responses (stream)',
-        event_type: 'response.image_generation_call.generating',
-        sequence: 5,
-      });
+      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          api: 'responses',
+          endpoint: '/v1/responses (stream)',
+          event_type: 'response.image_generation_call.generating',
+          sequence: 5,
+        }),
+      );
+      const call = mockLoggerService.logStreamingEvent.mock.calls[0][0];
+      expect(typeof call.timestamp).toBe('string');
     });
 
     it('should handle event without call_id', () => {
@@ -136,7 +151,7 @@ describe('ImageEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as ImageProgressData;
       expect(data.call_id).toBeUndefined();
     });
   });
@@ -184,9 +199,9 @@ describe('ImageEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as ImageDataEvent;
       expect(data.image_data).toBe(largeBase64);
-      expect(data.image_data.length).toBe(10000);
+      expect(data.image_data?.length).toBe(10000);
     });
 
     it('should log image_gen_partial event', () => {
@@ -203,13 +218,16 @@ describe('ImageEventsHandler', () => {
       );
       Array.from(generator);
 
-      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
-        api: 'responses',
-        endpoint: '/v1/responses (stream)',
-        event_type: 'image_gen_partial',
-        sequence: 8,
-      });
+      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          api: 'responses',
+          endpoint: '/v1/responses (stream)',
+          event_type: 'image_gen_partial',
+          sequence: 8,
+        }),
+      );
+      const call = mockLoggerService.logStreamingEvent.mock.calls[0][0];
+      expect(typeof call.timestamp).toBe('string');
     });
 
     it('should handle event without image_data', () => {
@@ -226,7 +244,7 @@ describe('ImageEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as ImageDataEvent;
       expect(data.image_data).toBeUndefined();
       expect(data.call_id).toBe('img_no_data');
     });
@@ -245,7 +263,7 @@ describe('ImageEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as ImageDataEvent;
       expect(data.call_id).toBeUndefined();
       expect(data.image_data).toBe('some_data');
     });
@@ -294,7 +312,7 @@ describe('ImageEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as ImageDataEvent;
       expect(data.image_data).toBe(highQualityBase64);
     });
 
@@ -312,13 +330,16 @@ describe('ImageEventsHandler', () => {
       );
       Array.from(generator);
 
-      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
-        api: 'responses',
-        endpoint: '/v1/responses (stream)',
-        event_type: 'image_gen_completed',
-        sequence: 25,
-      });
+      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          api: 'responses',
+          endpoint: '/v1/responses (stream)',
+          event_type: 'image_gen_completed',
+          sequence: 25,
+        }),
+      );
+      const call = mockLoggerService.logStreamingEvent.mock.calls[0][0];
+      expect(typeof call.timestamp).toBe('string');
     });
 
     it('should handle completed event without image_data (error case)', () => {
@@ -335,7 +356,7 @@ describe('ImageEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as ImageDataEvent;
       expect(data.image_data).toBeUndefined();
     });
 
@@ -353,7 +374,7 @@ describe('ImageEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as ImageDataEvent;
       expect(data.call_id).toBeUndefined();
       expect(data.image_data).toBe('final_data');
     });

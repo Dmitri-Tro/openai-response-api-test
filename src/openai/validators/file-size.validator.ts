@@ -76,9 +76,7 @@ export const FILE_SIZE_LIMITS_BYTES: Record<string, number> = {
  * ```
  */
 @ValidatorConstraint({ async: false })
-export class IsFileSizeValidConstraint
-  implements ValidatorConstraintInterface
-{
+export class IsFileSizeValidConstraint implements ValidatorConstraintInterface {
   validate(value: unknown, args: ValidationArguments): boolean {
     // Value must be a number (file size in bytes)
     if (typeof value !== 'number' || isNaN(value)) {
@@ -91,8 +89,8 @@ export class IsFileSizeValidConstraint
     }
 
     // Get purpose from validation context
-    const object = args.object as any;
-    const purpose = object.purpose;
+    const object = args.object as { purpose?: unknown };
+    const purpose = object.purpose as string;
 
     // If no purpose, cannot validate size
     if (!purpose || typeof purpose !== 'string') {
@@ -110,9 +108,9 @@ export class IsFileSizeValidConstraint
   }
 
   defaultMessage(args: ValidationArguments): string {
-    const fileSize = args.value;
-    const object = args.object as any;
-    const purpose = object.purpose;
+    const fileSize = args.value as number;
+    const object = args.object as { purpose?: unknown };
+    const purpose = object.purpose as string;
 
     // Handle invalid file size type
     if (typeof fileSize !== 'number' || isNaN(fileSize)) {

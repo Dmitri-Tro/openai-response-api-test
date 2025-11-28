@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Post,
-  UseFilters,
   UseInterceptors,
   UploadedFile,
   UploadedFiles,
@@ -28,9 +27,6 @@ import {
   EditImageDto,
   ImageVariationDto,
 } from '../dto/images';
-import { LoggingInterceptor } from '../../common/interceptors/logging.interceptor';
-import { RetryInterceptor } from '../../common/interceptors/retry.interceptor';
-import { OpenAIExceptionFilter } from '../../common/filters/openai-exception.filter';
 
 /**
  * Controller for OpenAI Images API
@@ -51,8 +47,6 @@ import { OpenAIExceptionFilter } from '../../common/filters/openai-exception.fil
  */
 @ApiTags('Images API')
 @Controller('api/images')
-@UseInterceptors(RetryInterceptor, LoggingInterceptor)
-@UseFilters(OpenAIExceptionFilter)
 export class ImagesController {
   constructor(private readonly imagesService: OpenAIImagesService) {}
 

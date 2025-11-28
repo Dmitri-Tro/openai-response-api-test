@@ -224,8 +224,18 @@ describe('Shared Validator Utils', () => {
     });
 
     it('should reject non-string values', () => {
-      expect(isValidMetadata({ key: 123 as any })).toBe(false);
-      expect(isValidMetadata({ key: null as any })).toBe(false);
+      expect(
+        isValidMetadata({ key: 123 as unknown as string } as Record<
+          string,
+          string
+        >),
+      ).toBe(false);
+      expect(
+        isValidMetadata({ key: null as unknown as string } as Record<
+          string,
+          string
+        >),
+      ).toBe(false);
     });
 
     it('should reject non-object types', () => {

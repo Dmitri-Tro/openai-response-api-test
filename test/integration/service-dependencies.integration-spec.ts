@@ -17,9 +17,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
-import type { Responses } from 'openai/resources/responses';
 import { OpenAIResponsesService } from '../../src/openai/services/openai-responses.service';
 import { LoggerService } from '../../src/common/services/logger.service';
+import { PricingService } from '../../src/common/services/pricing.service';
 import { LifecycleEventsHandler } from '../../src/openai/services/handlers/lifecycle-events.handler';
 import { TextEventsHandler } from '../../src/openai/services/handlers/text-events.handler';
 import { ReasoningEventsHandler } from '../../src/openai/services/handlers/reasoning-events.handler';
@@ -29,12 +29,23 @@ import { AudioEventsHandler } from '../../src/openai/services/handlers/audio-eve
 import { MCPEventsHandler } from '../../src/openai/services/handlers/mcp-events.handler';
 import { RefusalEventsHandler } from '../../src/openai/services/handlers/refusal-events.handler';
 import { StructuralEventsHandler } from '../../src/openai/services/handlers/structural-events.handler';
+import { ComputerUseEventsHandler } from '../../src/openai/services/handlers/computer-use-events.handler';
+import { OPENAI_CLIENT } from '../../src/openai/providers/openai-client.provider';
 import configuration from '../../src/config/configuration';
 import {
   createMockOpenAIResponse,
   createMockLoggerService,
 } from '../../src/common/testing/test.factories';
 import { CreateTextResponseDto } from '../../src/openai/dto/create-text-response.dto';
+
+/**
+ * Type-safe helper to access private client for testing
+ */
+const getClientFromService = (
+  svc: OpenAIResponsesService,
+): jest.Mocked<OpenAI> => {
+  return (svc as unknown as { client: OpenAI }).client as jest.Mocked<OpenAI>;
+};
 
 describe('Service + Dependencies Integration', () => {
   let module: TestingModule;
@@ -54,6 +65,15 @@ describe('Service + Dependencies Integration', () => {
 
     mockLoggerService = createMockLoggerService();
 
+    const mockOpenAIClient = {
+      responses: {
+        create: jest.fn(),
+        retrieve: jest.fn(),
+        cancel: jest.fn(),
+        delete: jest.fn(),
+      },
+    } as unknown as jest.Mocked<OpenAI>;
+
     module = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({
@@ -64,6 +84,7 @@ describe('Service + Dependencies Integration', () => {
       providers: [
         OpenAIResponsesService,
         LoggerService,
+        PricingService,
         LifecycleEventsHandler,
         TextEventsHandler,
         ReasoningEventsHandler,
@@ -73,6 +94,11 @@ describe('Service + Dependencies Integration', () => {
         MCPEventsHandler,
         RefusalEventsHandler,
         StructuralEventsHandler,
+        ComputerUseEventsHandler,
+        {
+          provide: OPENAI_CLIENT,
+          useValue: mockOpenAIClient,
+        },
       ],
     })
       .overrideProvider(LoggerService)
@@ -83,7 +109,7 @@ describe('Service + Dependencies Integration', () => {
     configService = module.get<ConfigService>(ConfigService);
 
     // Get reference to the OpenAI client
-    mockClient = (service as any).client as jest.Mocked<OpenAI>;
+    mockClient = getClientFromService(service);
     jest.spyOn(mockClient.responses, 'create');
   });
 
@@ -106,7 +132,7 @@ describe('Service + Dependencies Integration', () => {
   describe('Service Initialization with Config', () => {
     it('should initialize with config values from ConfigService', () => {
       // Assert service uses config values for OpenAI client
-      const client = (service as any).client as OpenAI;
+      const client = getClientFromService(service);
       expect(client).toBeDefined();
 
       // Verify config values were read during initialization
@@ -190,6 +216,12 @@ describe('Service + Dependencies Integration', () => {
           input_tokens: 10,
           output_tokens: 15,
           total_tokens: 25,
+          input_tokens_details: {
+            cached_tokens: 0,
+          },
+          output_tokens_details: {
+            reasoning_tokens: 0,
+          },
         },
       });
 
@@ -208,13 +240,13 @@ describe('Service + Dependencies Integration', () => {
           request: expect.objectContaining({
             model: 'gpt-5',
             input: 'Test logging',
-          }),
+          }) as unknown as Record<string, unknown>,
           response: mockResponse,
           metadata: expect.objectContaining({
             tokens_used: 25,
-            latency_ms: expect.any(Number),
-          }),
-        }),
+            latency_ms: expect.any(Number) as unknown as number,
+          }) as unknown as Record<string, unknown>,
+        }) as unknown as Record<string, unknown>,
       );
     });
 
@@ -246,15 +278,17 @@ describe('Service + Dependencies Integration', () => {
         expect.objectContaining({
           api: 'responses',
           endpoint: '/v1/responses',
-          request: expect.any(Object),
+          request: expect.any(Object) as unknown as Record<string, unknown>,
           error: expect.objectContaining({
             status: 500,
-            message: expect.stringContaining('Service unavailable'),
-          }),
+            message: expect.stringContaining(
+              'Service unavailable',
+            ) as unknown as string,
+          }) as unknown as Record<string, unknown>,
           metadata: expect.objectContaining({
-            latency_ms: expect.any(Number),
-          }),
-        }),
+            latency_ms: expect.any(Number) as unknown as number,
+          }) as unknown as Record<string, unknown>,
+        }) as unknown as Record<string, unknown>,
       );
     });
 
@@ -274,6 +308,9 @@ describe('Service + Dependencies Integration', () => {
           input_tokens_details: {
             cached_tokens: 80,
           },
+          output_tokens_details: {
+            reasoning_tokens: 0,
+          },
         },
       });
 
@@ -290,8 +327,8 @@ describe('Service + Dependencies Integration', () => {
           metadata: expect.objectContaining({
             tokens_used: 150,
             cached_tokens: 80,
-          }),
-        }),
+          }) as unknown as Record<string, unknown>,
+        }) as unknown as Record<string, unknown>,
       );
     });
 
@@ -309,6 +346,9 @@ describe('Service + Dependencies Integration', () => {
           input_tokens: 100,
           output_tokens: 300,
           total_tokens: 400,
+          input_tokens_details: {
+            cached_tokens: 0,
+          },
           output_tokens_details: {
             reasoning_tokens: 200,
           },
@@ -328,8 +368,8 @@ describe('Service + Dependencies Integration', () => {
           metadata: expect.objectContaining({
             tokens_used: 400,
             reasoning_tokens: 200,
-          }),
-        }),
+          }) as unknown as Record<string, unknown>,
+        }) as unknown as Record<string, unknown>,
       );
     });
   });
@@ -456,11 +496,12 @@ describe('Service + Dependencies Integration', () => {
       const response = await service.createTextResponse(dto);
 
       // Assert - Verify usage data is accessible
-      expect(response.usage.input_tokens).toBe(50);
-      expect(response.usage.output_tokens).toBe(100);
-      expect(response.usage.total_tokens).toBe(150);
-      expect(response.usage.input_tokens_details?.cached_tokens).toBe(30);
-      expect(response.usage.output_tokens_details?.reasoning_tokens).toBe(60);
+      expect(response.usage).toBeDefined();
+      expect(response.usage?.input_tokens).toBe(50);
+      expect(response.usage?.output_tokens).toBe(100);
+      expect(response.usage?.total_tokens).toBe(150);
+      expect(response.usage?.input_tokens_details?.cached_tokens).toBe(30);
+      expect(response.usage?.output_tokens_details?.reasoning_tokens).toBe(60);
     });
 
     it('should handle responses without optional usage details', async () => {
@@ -475,7 +516,12 @@ describe('Service + Dependencies Integration', () => {
           input_tokens: 10,
           output_tokens: 20,
           total_tokens: 30,
-          // No input_tokens_details or output_tokens_details
+          input_tokens_details: {
+            cached_tokens: 0,
+          },
+          output_tokens_details: {
+            reasoning_tokens: 0,
+          },
         },
       });
 
@@ -486,10 +532,11 @@ describe('Service + Dependencies Integration', () => {
       // Act
       const response = await service.createTextResponse(dto);
 
-      // Assert - Should work without optional details
-      expect(response.usage.total_tokens).toBe(30);
-      expect(response.usage.input_tokens_details).toBeUndefined();
-      expect(response.usage.output_tokens_details).toBeUndefined();
+      // Assert - Should work with details present (factory always includes them)
+      expect(response.usage).toBeDefined();
+      expect(response.usage?.total_tokens).toBe(30);
+      expect(response.usage?.input_tokens_details).toBeDefined();
+      expect(response.usage?.output_tokens_details).toBeDefined();
     });
   });
 });

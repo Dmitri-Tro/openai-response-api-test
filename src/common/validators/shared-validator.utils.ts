@@ -69,7 +69,9 @@ export function isNonEmptyArray(value: unknown): value is unknown[] {
  * @param value - Value to check
  * @returns True if value is an object and not null or array
  */
-export function isNonNullObject(value: unknown): value is Record<string, unknown> {
+export function isNonNullObject(
+  value: unknown,
+): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -107,6 +109,70 @@ export function validateIdFormat(
   // Check if there's enough content after the prefix
   const contentLength = id.length - prefix.length;
   return contentLength >= minContentLength;
+}
+
+/**
+ * Validate file ID format
+ * @param id - File ID to validate
+ * @returns True if ID starts with "file-" and has content after prefix
+ *
+ * @example
+ * ```typescript
+ * validateFileId('file-abc123')  // true
+ * validateFileId('file-')        // false (no content)
+ * validateFileId('vs_abc')       // false (wrong prefix)
+ * ```
+ */
+export function validateFileId(id: string): boolean {
+  return validateIdFormat(id, 'file-', 1);
+}
+
+/**
+ * Validate vector store ID format
+ * @param id - Vector store ID to validate
+ * @returns True if ID starts with "vs_" and has content after prefix
+ *
+ * @example
+ * ```typescript
+ * validateVectorStoreId('vs_abc123')  // true
+ * validateVectorStoreId('vs_')        // false (no content)
+ * validateVectorStoreId('file-abc')   // false (wrong prefix)
+ * ```
+ */
+export function validateVectorStoreId(id: string): boolean {
+  return validateIdFormat(id, 'vs_', 1);
+}
+
+/**
+ * Validate video ID format
+ * @param id - Video ID to validate
+ * @returns True if ID starts with "vid_" and has content after prefix
+ *
+ * @example
+ * ```typescript
+ * validateVideoId('vid_abc123')  // true
+ * validateVideoId('vid_')        // false (no content)
+ * validateVideoId('file-abc')    // false (wrong prefix)
+ * ```
+ */
+export function validateVideoId(id: string): boolean {
+  return validateIdFormat(id, 'vid_', 1);
+}
+
+/**
+ * Validate batch ID format
+ * @param id - Batch ID to validate
+ * @returns True if ID starts with "batch_" and has content after prefix
+ *
+ * @example
+ * ```typescript
+ * validateBatchId('batch_abc123')  // true
+ * validateBatchId('batch_')        // false (no content)
+ * validateBatchId('file-abc')      // false (wrong prefix)
+ * ```
+ */
+export function validateBatchId(id: string): boolean {
+  return validateIdFormat(id, 'batch_', 1);
 }
 
 /**

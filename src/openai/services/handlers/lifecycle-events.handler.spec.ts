@@ -11,6 +11,31 @@ import {
   createMockStreamState,
 } from '../../../common/testing/test.factories';
 
+// Test data interfaces
+interface ResponseCompletedData {
+  response_id: string;
+  output_text: string;
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    cached_tokens: number;
+    reasoning_tokens: number;
+  };
+  status: string;
+  sequence: number;
+  latency_ms: number;
+}
+
+interface ResponseFailedData {
+  response_id?: string;
+  error?: {
+    message: string;
+    code?: string;
+  };
+  sequence: number;
+}
+
 describe('LifecycleEventsHandler', () => {
   let handler: LifecycleEventsHandler;
   let mockLoggerService: jest.Mocked<LoggerService>;
@@ -90,7 +115,7 @@ describe('LifecycleEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'response_created',
@@ -127,14 +152,30 @@ describe('LifecycleEventsHandler', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_123',
         object: 'response',
-        created: Date.now(),
+        created_at: Math.floor(Date.now() / 1000),
         model: 'gpt-5',
         status: 'completed',
         output: [],
+        output_text: '',
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
         usage: {
           input_tokens: 100,
           output_tokens: 50,
           total_tokens: 150,
+          input_tokens_details: {
+            cached_tokens: 20,
+          },
+          output_tokens_details: {
+            reasoning_tokens: 10,
+          },
         },
       };
 
@@ -173,7 +214,7 @@ describe('LifecycleEventsHandler', () => {
       expect(results).toHaveLength(1);
       expect(results[0].event).toBe('response_completed');
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as ResponseCompletedData;
       expect(data).toMatchObject({
         response_id: 'resp_123',
         output_text: 'Test response',
@@ -197,14 +238,30 @@ describe('LifecycleEventsHandler', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_123',
         object: 'response',
-        created: Date.now(),
+        created_at: Math.floor(Date.now() / 1000),
         model: 'gpt-5',
         status: 'completed',
         output: [],
+        output_text: '',
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
         usage: {
           input_tokens: 100,
           output_tokens: 50,
           total_tokens: 150,
+          input_tokens_details: {
+            cached_tokens: 20,
+          },
+          output_tokens_details: {
+            reasoning_tokens: 10,
+          },
         },
       };
 
@@ -243,10 +300,20 @@ describe('LifecycleEventsHandler', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_123',
         object: 'response',
-        created: Date.now(),
+        created_at: Math.floor(Date.now() / 1000),
         model: 'gpt-5',
         status: 'completed',
         output: [],
+        output_text: '',
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
       const event = { response: mockResponse };
@@ -270,14 +337,14 @@ describe('LifecycleEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'response_completed',
         sequence: 10,
         response: mockResponse,
         metadata: {
-          latency_ms: expect.any(Number),
+          latency_ms: expect.any(Number) as number,
           tokens_used: 100,
           cost_estimate: 0.003,
         },
@@ -357,7 +424,7 @@ describe('LifecycleEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'response_failed',
@@ -405,7 +472,7 @@ describe('LifecycleEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'error',
@@ -448,7 +515,7 @@ describe('LifecycleEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'response_in_progress',
@@ -504,7 +571,7 @@ describe('LifecycleEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'response_incomplete',
@@ -547,7 +614,7 @@ describe('LifecycleEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'response_queued',
@@ -567,10 +634,20 @@ describe('LifecycleEventsHandler', () => {
         response: {
           id: 'resp_multi',
           object: 'response' as const,
-          created: Date.now(),
+          created_at: Math.floor(Date.now() / 1000),
           model: 'gpt-5',
           status: 'completed' as const,
           output: [],
+          output_text: '',
+          error: null,
+          incomplete_details: null,
+          instructions: null,
+          metadata: null,
+          parallel_tool_calls: false,
+          temperature: null,
+          tool_choice: 'auto' as const,
+          tools: [],
+          top_p: null,
         },
       };
 
@@ -753,7 +830,7 @@ describe('LifecycleEventsHandler', () => {
         const results: SSEEvent[] = Array.from(generator);
 
         expect(results).toHaveLength(1);
-        const data = JSON.parse(results[0].data);
+        const data = JSON.parse(results[0].data) as ResponseFailedData;
         expect(data.error).toBeUndefined();
       });
     });

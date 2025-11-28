@@ -22,9 +22,6 @@ interface OpenAIResponse {
     output_tokens_details?: {
       reasoning_tokens?: number;
     };
-    // Legacy field names (for compatibility)
-    prompt_tokens?: number;
-    completion_tokens?: number;
   };
 }
 
@@ -222,18 +219,7 @@ export class LoggingInterceptor implements NestInterceptor {
     // Extract model from response (preferred) or request body
     const model = response.model || (requestBody.model as string) || 'gpt-4o';
 
-    // Normalize usage fields (handle both new and legacy field names)
-    const usage = {
-      input_tokens:
-        response.usage.input_tokens || response.usage.prompt_tokens || 0,
-      output_tokens:
-        response.usage.output_tokens || response.usage.completion_tokens || 0,
-      total_tokens: response.usage.total_tokens,
-      input_tokens_details: response.usage.input_tokens_details,
-      output_tokens_details: response.usage.output_tokens_details,
-    };
-
-    return this.pricingService.calculateCost(usage, model);
+    return this.pricingService.calculateCost(model, response.usage);
   }
 
   /**

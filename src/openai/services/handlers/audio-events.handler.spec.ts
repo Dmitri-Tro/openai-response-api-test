@@ -74,14 +74,17 @@ describe('AudioEventsHandler', () => {
 
       Array.from(handler.handleAudioDelta(event, mockState, sequence));
 
-      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
-        api: 'responses',
-        endpoint: '/v1/responses (stream)',
-        event_type: 'audio_delta',
-        sequence: 5,
-        delta: 'audio_data',
-      });
+      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          api: 'responses',
+          endpoint: '/v1/responses (stream)',
+          event_type: 'audio_delta',
+          sequence: 5,
+          delta: 'audio_data',
+        }),
+      );
+      const call = mockLoggerService.logStreamingEvent.mock.calls[0][0];
+      expect(typeof call.timestamp).toBe('string');
     });
 
     it('should handle empty delta', () => {
@@ -128,14 +131,17 @@ describe('AudioEventsHandler', () => {
 
       Array.from(handler.handleAudioDone({}, mockState, sequence));
 
-      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
-        api: 'responses',
-        endpoint: '/v1/responses (stream)',
-        event_type: 'audio_done',
-        sequence: 15,
-        response: { audio: 'final_audio' },
-      });
+      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          api: 'responses',
+          endpoint: '/v1/responses (stream)',
+          event_type: 'audio_done',
+          sequence: 15,
+          response: { audio: 'final_audio' },
+        }),
+      );
+      const call = mockLoggerService.logStreamingEvent.mock.calls[0][0];
+      expect(typeof call.timestamp).toBe('string');
     });
 
     it('should handle empty audio', () => {
@@ -145,7 +151,7 @@ describe('AudioEventsHandler', () => {
       const generator = handler.handleAudioDone({}, mockState, sequence);
       const results: SSEEvent[] = Array.from(generator);
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as { audio: string };
       expect(data.audio).toBe('');
     });
   });
@@ -193,14 +199,17 @@ describe('AudioEventsHandler', () => {
         handler.handleAudioTranscriptDelta(event, mockState, sequence),
       );
 
-      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
-        api: 'responses',
-        endpoint: '/v1/responses (stream)',
-        event_type: 'audio_transcript_delta',
-        sequence: 7,
-        delta: 'transcript chunk',
-      });
+      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          api: 'responses',
+          endpoint: '/v1/responses (stream)',
+          event_type: 'audio_transcript_delta',
+          sequence: 7,
+          delta: 'transcript chunk',
+        }),
+      );
+      const call = mockLoggerService.logStreamingEvent.mock.calls[0][0];
+      expect(typeof call.timestamp).toBe('string');
     });
 
     it('should handle empty delta', () => {
@@ -256,14 +265,17 @@ describe('AudioEventsHandler', () => {
 
       Array.from(handler.handleAudioTranscriptDone({}, mockState, sequence));
 
-      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
-        api: 'responses',
-        endpoint: '/v1/responses (stream)',
-        event_type: 'audio_transcript_done',
-        sequence: 20,
-        response: { transcript: 'Final transcript' },
-      });
+      expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          api: 'responses',
+          endpoint: '/v1/responses (stream)',
+          event_type: 'audio_transcript_done',
+          sequence: 20,
+          response: { transcript: 'Final transcript' },
+        }),
+      );
+      const call = mockLoggerService.logStreamingEvent.mock.calls[0][0];
+      expect(typeof call.timestamp).toBe('string');
     });
 
     it('should handle empty transcript', () => {
@@ -277,7 +289,7 @@ describe('AudioEventsHandler', () => {
       );
       const results: SSEEvent[] = Array.from(generator);
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as { transcript: string };
       expect(data.transcript).toBe('');
     });
   });

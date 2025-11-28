@@ -9,13 +9,17 @@ import { createMockLoggerService } from '../testing/test.factories';
 describe('LoggingInterceptor', () => {
   let interceptor: LoggingInterceptor;
   let mockLoggerService: jest.Mocked<LoggerService>;
-  let pricingService: PricingService;
   let mockExecutionContext: ExecutionContext;
   let mockCallHandler: CallHandler;
+  let logOpenAIInteractionSpy: jest.Mock;
 
   beforeEach(async () => {
+    // Create spy first
+    logOpenAIInteractionSpy = jest.fn();
+
     // Mock LoggerService using factory
     mockLoggerService = createMockLoggerService();
+    mockLoggerService.logOpenAIInteraction = logOpenAIInteractionSpy;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -29,7 +33,6 @@ describe('LoggingInterceptor', () => {
     }).compile();
 
     interceptor = module.get<LoggingInterceptor>(LoggingInterceptor);
-    pricingService = module.get<PricingService>(PricingService);
   });
 
   afterEach(() => {
@@ -53,8 +56,8 @@ describe('LoggingInterceptor', () => {
         id: 'resp_123',
         output_text: 'Response text',
         usage: {
-          prompt_tokens: 10,
-          completion_tokens: 20,
+          input_tokens: 10,
+          output_tokens: 20,
           total_tokens: 30,
         },
       };
@@ -66,17 +69,17 @@ describe('LoggingInterceptor', () => {
       interceptor.intercept(mockExecutionContext, mockCallHandler).subscribe({
         next: (response) => {
           expect(response).toEqual(mockResponse);
-          expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+          expect(logOpenAIInteractionSpy).toHaveBeenCalledWith(
             expect.objectContaining({
               api: 'responses',
               endpoint: '/api/responses/text',
               request: { input: 'test message' },
               response: mockResponse,
               metadata: expect.objectContaining({
-                latency_ms: expect.any(Number),
+                latency_ms: expect.any(Number) as number,
                 tokens_used: 30,
-                cost_estimate: expect.any(Number),
-              }),
+                cost_estimate: expect.any(Number) as number,
+              }) as Record<string, unknown>,
             }),
           );
           done();
@@ -108,7 +111,7 @@ describe('LoggingInterceptor', () => {
 
       interceptor.intercept(mockExecutionContext, mockCallHandler).subscribe({
         next: () => {
-          expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+          expect(logOpenAIInteractionSpy).toHaveBeenCalledWith(
             expect.objectContaining({
               api: 'images',
             }),
@@ -142,7 +145,7 @@ describe('LoggingInterceptor', () => {
 
       interceptor.intercept(mockExecutionContext, mockCallHandler).subscribe({
         next: () => {
-          expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+          expect(logOpenAIInteractionSpy).toHaveBeenCalledWith(
             expect.objectContaining({
               api: 'videos',
             }),
@@ -176,7 +179,7 @@ describe('LoggingInterceptor', () => {
       interceptor.intercept(mockExecutionContext, mockCallHandler).subscribe({
         next: (response) => {
           expect(response).toEqual(mockResponse);
-          expect(mockLoggerService.logOpenAIInteraction).not.toHaveBeenCalled();
+          expect(logOpenAIInteractionSpy).not.toHaveBeenCalled();
           done();
         },
         error: done,
@@ -198,8 +201,8 @@ describe('LoggingInterceptor', () => {
       const mockResponse = {
         model: 'gpt-5',
         usage: {
-          prompt_tokens: 1000,
-          completion_tokens: 2000,
+          input_tokens: 1000,
+          output_tokens: 2000,
           total_tokens: 3000,
         },
       };
@@ -244,12 +247,12 @@ describe('LoggingInterceptor', () => {
 
       interceptor.intercept(mockExecutionContext, mockCallHandler).subscribe({
         next: () => {
-          expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+          expect(logOpenAIInteractionSpy).toHaveBeenCalledWith(
             expect.objectContaining({
               metadata: expect.objectContaining({
                 tokens_used: undefined,
                 cost_estimate: 0,
-              }),
+              }) as Record<string, unknown>,
             }),
           );
           done();
@@ -288,7 +291,7 @@ describe('LoggingInterceptor', () => {
         },
         error: (error) => {
           expect(error).toEqual(mockError);
-          expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+          expect(logOpenAIInteractionSpy).toHaveBeenCalledWith(
             expect.objectContaining({
               api: 'responses',
               endpoint: '/api/responses/text',
@@ -297,10 +300,10 @@ describe('LoggingInterceptor', () => {
                 message: 'API Error',
                 status: 400,
                 stack: 'Error stack trace',
-              }),
+              }) as Record<string, unknown>,
               metadata: expect.objectContaining({
-                latency_ms: expect.any(Number),
-              }),
+                latency_ms: expect.any(Number) as number,
+              }) as Record<string, unknown>,
             }),
           );
           done();
@@ -333,12 +336,12 @@ describe('LoggingInterceptor', () => {
           done(new Error('Should not reach here'));
         },
         error: () => {
-          expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+          expect(logOpenAIInteractionSpy).toHaveBeenCalledWith(
             expect.objectContaining({
               error: expect.objectContaining({
                 message: 'Unknown error',
                 status: undefined,
-              }),
+              }) as Record<string, unknown>,
             }),
           );
           done();
@@ -380,7 +383,7 @@ describe('LoggingInterceptor', () => {
           done(new Error('Should not reach here'));
         },
         error: () => {
-          expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+          expect(logOpenAIInteractionSpy).toHaveBeenCalledWith(
             expect.objectContaining({
               error: expect.objectContaining({
                 response: {
@@ -389,7 +392,7 @@ describe('LoggingInterceptor', () => {
                     message: 'Internal server error',
                   },
                 },
-              }),
+              }) as Record<string, unknown>,
             }),
           );
           done();
@@ -420,11 +423,11 @@ describe('LoggingInterceptor', () => {
           done(new Error('Should not reach here'));
         },
         error: () => {
-          expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+          expect(logOpenAIInteractionSpy).toHaveBeenCalledWith(
             expect.objectContaining({
               error: expect.objectContaining({
                 message: 'Unknown error',
-              }),
+              }) as Record<string, unknown>,
             }),
           );
           done();
@@ -480,8 +483,8 @@ describe('LoggingInterceptor', () => {
       const mockResponse = {
         model: 'gpt-5',
         usage: {
-          prompt_tokens: 500,
-          completion_tokens: 1500,
+          input_tokens: 500,
+          output_tokens: 1500,
           total_tokens: 2000,
         },
       };
@@ -525,11 +528,11 @@ describe('LoggingInterceptor', () => {
 
       interceptor.intercept(mockExecutionContext, mockCallHandler).subscribe({
         next: () => {
-          expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+          expect(logOpenAIInteractionSpy).toHaveBeenCalledWith(
             expect.objectContaining({
               metadata: expect.objectContaining({
                 cost_estimate: 0,
-              }),
+              }) as Record<string, unknown>,
             }),
           );
           done();

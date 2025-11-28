@@ -191,7 +191,7 @@ describe('ListFilesDto', () => {
   describe('Invalid Purpose', () => {
     it('should fail when purpose is invalid string', async () => {
       const dto = createValidDto();
-      (dto as any).purpose = 'invalid-purpose';
+      (dto as unknown as Record<string, unknown>).purpose = 'invalid-purpose';
 
       const errors = await validateDto(dto);
 
@@ -203,7 +203,7 @@ describe('ListFilesDto', () => {
 
     it('should fail when purpose is empty string', async () => {
       const dto = createValidDto();
-      (dto as any).purpose = '';
+      (dto as unknown as Record<string, unknown>).purpose = '';
 
       const errors = await validateDto(dto);
 
@@ -214,7 +214,7 @@ describe('ListFilesDto', () => {
 
     it('should fail when purpose is not a string (number)', async () => {
       const dto = createValidDto();
-      (dto as any).purpose = 123;
+      (dto as unknown as Record<string, unknown>).purpose = 123;
 
       const errors = await validateDto(dto);
 
@@ -225,7 +225,9 @@ describe('ListFilesDto', () => {
 
     it('should fail when purpose is not a string (object)', async () => {
       const dto = createValidDto();
-      (dto as any).purpose = { value: 'assistants' };
+      (dto as unknown as Record<string, unknown>).purpose = {
+        value: 'assistants',
+      };
 
       const errors = await validateDto(dto);
 
@@ -236,7 +238,7 @@ describe('ListFilesDto', () => {
 
     it('should fail when purpose is not a string (array)', async () => {
       const dto = createValidDto();
-      (dto as any).purpose = ['assistants'];
+      (dto as unknown as Record<string, unknown>).purpose = ['assistants'];
 
       const errors = await validateDto(dto);
 
@@ -247,7 +249,7 @@ describe('ListFilesDto', () => {
 
     it('should fail when purpose is boolean', async () => {
       const dto = createValidDto();
-      (dto as any).purpose = true;
+      (dto as unknown as Record<string, unknown>).purpose = true;
 
       const errors = await validateDto(dto);
 
@@ -260,7 +262,7 @@ describe('ListFilesDto', () => {
   describe('Invalid Order', () => {
     it('should fail when order is invalid string', async () => {
       const dto = createValidDto();
-      (dto as any).order = 'invalid';
+      (dto as unknown as Record<string, unknown>).order = 'invalid';
 
       const errors = await validateDto(dto);
 
@@ -272,7 +274,7 @@ describe('ListFilesDto', () => {
 
     it('should fail when order is empty string', async () => {
       const dto = createValidDto();
-      (dto as any).order = '';
+      (dto as unknown as Record<string, unknown>).order = '';
 
       const errors = await validateDto(dto);
 
@@ -283,7 +285,7 @@ describe('ListFilesDto', () => {
 
     it('should fail when order is not a string (number)', async () => {
       const dto = createValidDto();
-      (dto as any).order = 123;
+      (dto as unknown as Record<string, unknown>).order = 123;
 
       const errors = await validateDto(dto);
 
@@ -294,7 +296,7 @@ describe('ListFilesDto', () => {
 
     it('should fail when order is not a string (object)', async () => {
       const dto = createValidDto();
-      (dto as any).order = { value: 'asc' };
+      (dto as unknown as Record<string, unknown>).order = { value: 'asc' };
 
       const errors = await validateDto(dto);
 
@@ -305,7 +307,7 @@ describe('ListFilesDto', () => {
 
     it('should fail when order is not a string (array)', async () => {
       const dto = createValidDto();
-      (dto as any).order = ['asc'];
+      (dto as unknown as Record<string, unknown>).order = ['asc'];
 
       const errors = await validateDto(dto);
 
@@ -316,7 +318,7 @@ describe('ListFilesDto', () => {
 
     it('should fail when order is boolean', async () => {
       const dto = createValidDto();
-      (dto as any).order = true;
+      (dto as unknown as Record<string, unknown>).order = true;
 
       const errors = await validateDto(dto);
 
@@ -327,7 +329,7 @@ describe('ListFilesDto', () => {
 
     it('should fail when order is uppercase ASC', async () => {
       const dto = createValidDto();
-      (dto as any).order = 'ASC';
+      (dto as unknown as Record<string, unknown>).order = 'ASC';
 
       const errors = await validateDto(dto);
 
@@ -338,7 +340,7 @@ describe('ListFilesDto', () => {
 
     it('should fail when order is uppercase DESC', async () => {
       const dto = createValidDto();
-      (dto as any).order = 'DESC';
+      (dto as unknown as Record<string, unknown>).order = 'DESC';
 
       const errors = await validateDto(dto);
 
@@ -374,7 +376,7 @@ describe('ListFilesDto', () => {
 
     it('should fail when limit is not a number (string)', async () => {
       const dto = createValidDto();
-      (dto as any).limit = '10';
+      (dto as unknown as Record<string, unknown>).limit = '10';
 
       const errors = await validateDto(dto);
 
@@ -386,7 +388,7 @@ describe('ListFilesDto', () => {
 
     it('should fail when limit is not a number (object)', async () => {
       const dto = createValidDto();
-      (dto as any).limit = { value: 10 };
+      (dto as unknown as Record<string, unknown>).limit = { value: 10 };
 
       const errors = await validateDto(dto);
 
@@ -397,7 +399,7 @@ describe('ListFilesDto', () => {
 
     it('should fail when limit is not a number (array)', async () => {
       const dto = createValidDto();
-      (dto as any).limit = [10];
+      (dto as unknown as Record<string, unknown>).limit = [10];
 
       const errors = await validateDto(dto);
 
@@ -408,7 +410,7 @@ describe('ListFilesDto', () => {
 
     it('should fail when limit is boolean', async () => {
       const dto = createValidDto();
-      (dto as any).limit = true;
+      (dto as unknown as Record<string, unknown>).limit = true;
 
       const errors = await validateDto(dto);
 

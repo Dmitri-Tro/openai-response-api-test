@@ -127,9 +127,9 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
             remaining_requests: '0',
             limit_tokens: '150000',
             remaining_tokens: '0',
-          }),
-          hint: expect.stringContaining('rate_limit_info'),
-        }),
+          }) as Record<string, unknown>,
+          hint: expect.stringContaining('rate_limit_info') as string,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -147,7 +147,7 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
       expect(mockResponse.json).toHaveBeenCalledWith(
         expect.objectContaining({
           retry_after_seconds: 60,
-        }),
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -174,8 +174,8 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
           message: 'Authentication failed with OpenAI API',
           request_id: 'req_456',
           error_code: 'authentication_error',
-          hint: expect.stringContaining('OPENAI_API_KEY'),
-        }),
+          hint: expect.stringContaining('OPENAI_API_KEY') as string,
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -202,8 +202,8 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
           message: 'OpenAI API server error',
           request_id: 'req_789',
           error_code: 'server_error',
-          hint: expect.stringContaining('exponential backoff'),
-        }),
+          hint: expect.stringContaining('exponential backoff') as string,
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -260,12 +260,12 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
 
         expect(mockResponse.json).toHaveBeenCalledWith(
           expect.objectContaining({
-            message: expect.stringContaining(message),
+            message: expect.stringContaining(message) as string,
             request_id: 'req_img',
             error_code: code,
             parameter: 'image',
-            hint: expect.stringContaining(hint),
-          }),
+            hint: expect.stringContaining(hint) as string,
+          }) as Record<string, unknown>,
         );
       });
     });
@@ -289,7 +289,7 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
       expect(mockResponse.json).toHaveBeenCalledWith(
         expect.objectContaining({
           parameter: 'images[0].url',
-        }),
+        }) as Record<string, unknown>,
       );
     });
 
@@ -314,8 +314,10 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
           statusCode: HttpStatus.BAD_REQUEST,
           message: 'Invalid request to OpenAI API',
           parameter: 'model',
-          hint: expect.stringContaining('Check your request parameters'),
-        }),
+          hint: expect.stringContaining(
+            'Check your request parameters',
+          ) as string,
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -337,7 +339,7 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
           statusCode: HttpStatus.FORBIDDEN,
           message: 'Permission denied for OpenAI API resource',
           error_code: 'permission_denied_error',
-        }),
+        }) as Record<string, unknown>,
       );
     });
 
@@ -357,7 +359,7 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
           statusCode: HttpStatus.NOT_FOUND,
           message: 'Resource not found',
           error_code: 'not_found_error',
-        }),
+        }) as Record<string, unknown>,
       );
     });
 
@@ -376,7 +378,7 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
           statusCode: HttpStatus.GATEWAY_TIMEOUT,
           message: 'Request to OpenAI API timed out',
           error_code: 'timeout_error',
-        }),
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -401,8 +403,8 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
           expect.objectContaining({
             statusCode: status,
             error_code: code,
-            hint: expect.any(String),
-          }),
+            hint: expect.any(String) as string,
+          }) as Record<string, unknown>,
         );
       });
     });
@@ -424,8 +426,8 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
           full_error: expect.objectContaining({
             message: 'Unknown error',
             name: 'Error',
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -433,18 +435,20 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
   describe('Logging Integration (Phase 2.10)', () => {
     it('should log all errors with original_error', () => {
       const exception = new Error('Test error');
+      const logInteraction = jest.fn();
+      mockLoggerService.logOpenAIInteraction = logInteraction;
 
       filter.catch(exception, mockArgumentsHost);
 
-      expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+      expect(logInteraction).toHaveBeenCalledWith(
         expect.objectContaining({
           api: 'responses',
           endpoint: '/api/responses/text',
           request: { input: 'test' },
           error: expect.objectContaining({
             original_error: exception,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -459,15 +463,17 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
         value: 'req_log',
         writable: true,
       });
+      const logInteraction = jest.fn();
+      mockLoggerService.logOpenAIInteraction = logInteraction;
 
       filter.catch(exception, mockArgumentsHost);
 
-      expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+      expect(logInteraction).toHaveBeenCalledWith(
         expect.objectContaining({
           error: expect.objectContaining({
             request_id: 'req_log',
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -487,7 +493,7 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
       expect(mockResponse.json).toHaveBeenCalledWith(
         expect.objectContaining({
           request_id: 'unknown',
-        }),
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -530,8 +536,8 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
         expect(mockResponse.json).toHaveBeenCalledWith(
           expect.objectContaining({
             error_code: code,
-            hint: expect.any(String),
-          }),
+            hint: expect.any(String) as string,
+          }) as Record<string, unknown>,
         );
       });
     });
@@ -591,12 +597,12 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
 
         expect(mockResponse.json).toHaveBeenCalledWith(
           expect.objectContaining({
-            message: expect.stringContaining(message),
+            message: expect.stringContaining(message) as string,
             request_id: 'req_vid',
             error_code: code,
             parameter: 'prompt',
-            hint: expect.stringContaining(hint),
-          }),
+            hint: expect.stringContaining(hint) as string,
+          }) as Record<string, unknown>,
         );
       });
     });
@@ -623,7 +629,7 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
         expect.objectContaining({
           parameter: 'size',
           error_code: 'invalid_video_size',
-        }),
+        }) as Record<string, unknown>,
       );
     });
 
@@ -649,7 +655,7 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
           statusCode: HttpStatus.BAD_REQUEST,
           message: 'Invalid request to OpenAI API',
           parameter: 'model',
-        }),
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -697,8 +703,8 @@ describe('OpenAIExceptionFilter - Phase 2.10', () => {
         expect(mockResponse.json).toHaveBeenCalledWith(
           expect.objectContaining({
             error_code: code,
-            hint: expect.any(String),
-          }),
+            hint: expect.any(String) as string,
+          }) as Record<string, unknown>,
         );
       });
     });

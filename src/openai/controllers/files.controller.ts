@@ -6,7 +6,6 @@ import {
   Delete,
   Param,
   Query,
-  UseFilters,
   UseInterceptors,
   UploadedFile,
   Res,
@@ -26,22 +25,10 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import type { Files } from 'openai/resources/files';
 import { OpenAIFilesService } from '../services/openai-files.service';
+import { streamBinaryResponse } from '../../common/mixins/binary-streaming.mixin';
 
-/**
- * Multer file type definition
- * Represents uploaded file from multipart/form-data requests
- */
-interface MulterFile {
-  buffer: Buffer;
-  originalname: string;
-  mimetype: string;
-  size: number;
-}
 import { CreateFileDto } from '../dto/create-file.dto';
 import { ListFilesDto } from '../dto/list-files.dto';
-import { LoggingInterceptor } from '../../common/interceptors/logging.interceptor';
-import { RetryInterceptor } from '../../common/interceptors/retry.interceptor';
-import { OpenAIExceptionFilter } from '../../common/filters/openai-exception.filter';
 
 /**
  * Controller for OpenAI Files API
@@ -49,8 +36,6 @@ import { OpenAIExceptionFilter } from '../../common/filters/openai-exception.fil
  */
 @ApiTags('Files API')
 @Controller('api/files')
-@UseInterceptors(RetryInterceptor, LoggingInterceptor)
-@UseFilters(OpenAIExceptionFilter)
 export class FilesController {
   constructor(private readonly filesService: OpenAIFilesService) {}
 
@@ -125,7 +110,7 @@ export class FilesController {
   @ApiResponse({ status: 413, description: 'File too large (>512MB)' })
   @ApiResponse({ status: 429, description: 'Rate limit exceeded' })
   async uploadFile(
-    @UploadedFile() file: MulterFile,
+    @UploadedFile() file: Express.Multer.File,
     @Body() dto: CreateFileDto,
   ): Promise<Files.FileObject> {
     return this.filesService.uploadFile(
@@ -255,22 +240,13 @@ export class FilesController {
 
     // Set content type (attempt to detect from filename, fallback to octet-stream)
     const contentType = this.getContentType(fileMetadata.filename);
-    res.setHeader('Content-Type', contentType);
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${fileMetadata.filename}"`,
+    // Stream OpenAI response body to client using shared mixin
+    await streamBinaryResponse(
+      response,
+      res,
+      contentType,
+      fileMetadata.filename,
     );
-
-    // Stream OpenAI response body to client
-    if (response.body) {
-      const reader = response.body.getReader();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        res.write(value);
-      }
-    }
-    res.end();
   }
 
   /**

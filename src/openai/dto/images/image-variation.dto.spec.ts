@@ -44,7 +44,7 @@ describe('ImageVariationDto', () => {
 
     it('should reject dall-e-3 (not supported for variations)', async () => {
       const dto = new ImageVariationDto();
-      dto.model = 'dall-e-3' as any;
+      dto.model = 'dall-e-3' as unknown as typeof dto.model;
 
       const errors = await validateDto(dto);
 
@@ -54,7 +54,7 @@ describe('ImageVariationDto', () => {
 
     it('should reject invalid model', async () => {
       const dto = new ImageVariationDto();
-      dto.model = 'invalid-model' as any;
+      dto.model = 'invalid-model' as unknown as typeof dto.model;
 
       const errors = await validateDto(dto);
 
@@ -152,7 +152,7 @@ describe('ImageVariationDto', () => {
 
     it('should reject invalid size', async () => {
       const dto = new ImageVariationDto();
-      dto.size = '2048x2048' as any;
+      dto.size = '2048x2048' as unknown as typeof dto.size;
 
       const errors = await validateDto(dto);
 
@@ -162,7 +162,7 @@ describe('ImageVariationDto', () => {
 
     it('should reject DALL-E 3 sizes', async () => {
       const dto = new ImageVariationDto();
-      dto.size = '1792x1024' as any;
+      dto.size = '1792x1024' as unknown as typeof dto.size;
 
       const errors = await validateDto(dto);
 
@@ -192,7 +192,7 @@ describe('ImageVariationDto', () => {
 
     it('should reject invalid format', async () => {
       const dto = new ImageVariationDto();
-      dto.response_format = 'json' as any;
+      dto.response_format = 'json' as unknown as typeof dto.response_format;
 
       const errors = await validateDto(dto);
 

@@ -8,6 +8,7 @@ import { RetryInterceptor } from '../../common/interceptors/retry.interceptor';
 import { CreateTextResponseDto } from '../dto/create-text-response.dto';
 import { CreateImageResponseDto } from '../dto/create-image-response.dto';
 import type { Response } from 'express';
+import type { Responses } from 'openai/resources/responses';
 
 describe('ResponsesController', () => {
   let controller: ResponsesController;
@@ -15,15 +16,36 @@ describe('ResponsesController', () => {
   let mockLoggerService: jest.Mocked<LoggerService>;
   let mockPricingService: jest.Mocked<PricingService>;
 
+  // Spy variables for proper type checking
+  let createTextResponseSpy: jest.Mock;
+  let createTextResponseStreamSpy: jest.Mock;
+  let createImageResponseSpy: jest.Mock;
+  let createImageResponseStreamSpy: jest.Mock;
+  let retrieveSpy: jest.Mock;
+  let deleteSpy: jest.Mock;
+  let cancelSpy: jest.Mock;
+  let resumeResponseStreamSpy: jest.Mock;
+
   beforeEach(async () => {
+    // Create spy functions
+    createTextResponseSpy = jest.fn();
+    createTextResponseStreamSpy = jest.fn();
+    createImageResponseSpy = jest.fn();
+    createImageResponseStreamSpy = jest.fn();
+    retrieveSpy = jest.fn();
+    deleteSpy = jest.fn();
+    cancelSpy = jest.fn();
+    resumeResponseStreamSpy = jest.fn();
+
     mockResponsesService = {
-      createTextResponse: jest.fn(),
-      createTextResponseStream: jest.fn(),
-      createImageResponse: jest.fn(),
-      createImageResponseStream: jest.fn(),
-      retrieve: jest.fn(),
-      delete: jest.fn(),
-      cancel: jest.fn(),
+      createTextResponse: createTextResponseSpy,
+      createTextResponseStream: createTextResponseStreamSpy,
+      createImageResponse: createImageResponseSpy,
+      createImageResponseStream: createImageResponseStreamSpy,
+      retrieve: retrieveSpy,
+      delete: deleteSpy,
+      cancel: cancelSpy,
+      resumeResponseStream: resumeResponseStreamSpy,
     } as unknown as jest.Mocked<OpenAIResponsesService>;
 
     mockLoggerService = {
@@ -37,7 +59,7 @@ describe('ResponsesController', () => {
       getModelPricing: jest.fn(),
       getSupportedModels: jest.fn(),
       isModelSupported: jest.fn(),
-    } as any;
+    } as unknown as jest.Mocked<PricingService>;
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ResponsesController],
@@ -84,14 +106,14 @@ describe('ResponsesController', () => {
       };
 
       mockResponsesService.createTextResponse.mockResolvedValue(
-        mockResponse as any,
+        mockResponse as unknown as Responses.Response,
       );
 
       const result = await controller.createTextResponse(dto);
 
       expect(result).toEqual(mockResponse);
-      expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(dto);
-      expect(mockResponsesService.createTextResponse).toHaveBeenCalledTimes(1);
+      expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
+      expect(createTextResponseSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should pass all DTO parameters to service', async () => {
@@ -100,15 +122,17 @@ describe('ResponsesController', () => {
         input: 'Test input',
         instructions: 'Be concise',
         temperature: 0.7,
-        max_tokens: 100,
+        max_output_tokens: 100,
         store: true,
       };
 
-      mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+      mockResponsesService.createTextResponse.mockResolvedValue(
+        {} as unknown as Responses.Response,
+      );
 
       await controller.createTextResponse(dto);
 
-      expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(dto);
+      expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
     });
 
     it('should propagate service errors', async () => {
@@ -136,13 +160,13 @@ describe('ResponsesController', () => {
           },
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass top_p sampling parameter', async () => {
@@ -152,13 +176,13 @@ describe('ResponsesController', () => {
           top_p: 0.9,
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass max_output_tokens parameter', async () => {
@@ -168,13 +192,13 @@ describe('ResponsesController', () => {
           max_output_tokens: 500,
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
       });
     });
 
@@ -198,19 +222,18 @@ describe('ResponsesController', () => {
                 },
               },
             },
-          ],
+          ] as unknown as Responses.ResponseCreateParamsNonStreaming['tools'],
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
         expect(
-          (mockResponsesService.createTextResponse.mock.calls[0][0] as any)
-            .tools,
+          mockResponsesService.createTextResponse.mock.calls[0][0].tools,
         ).toHaveLength(1);
       });
 
@@ -221,13 +244,13 @@ describe('ResponsesController', () => {
           tool_choice: 'required',
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass parallel_tool_calls parameter', async () => {
@@ -237,13 +260,13 @@ describe('ResponsesController', () => {
           parallel_tool_calls: false,
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       describe('Code Interpreter Tool', () => {
@@ -255,21 +278,20 @@ describe('ResponsesController', () => {
               {
                 type: 'code_interpreter',
               },
-            ],
+            ] as unknown as Responses.ResponseCreateParamsNonStreaming['tools'],
           };
 
-          mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+          mockResponsesService.createTextResponse.mockResolvedValue(
+            {} as unknown as Responses.Response,
+          );
 
           await controller.createTextResponse(dto);
 
-          expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-            dto,
-          );
-          const calledTools = (
-            mockResponsesService.createTextResponse.mock.calls[0][0] as any
-          ).tools;
+          expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
+          const calledTools =
+            mockResponsesService.createTextResponse.mock.calls[0][0].tools;
           expect(calledTools).toHaveLength(1);
-          expect(calledTools[0].type).toBe('code_interpreter');
+          expect(calledTools?.[0].type).toBe('code_interpreter');
         });
 
         it('should accept code_interpreter with auto container', async () => {
@@ -283,20 +305,21 @@ describe('ResponsesController', () => {
                   type: 'auto',
                 },
               },
-            ],
+            ] as unknown as Responses.ResponseCreateParamsNonStreaming['tools'],
           };
 
-          mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+          mockResponsesService.createTextResponse.mockResolvedValue(
+            {} as unknown as Responses.Response,
+          );
 
           await controller.createTextResponse(dto);
 
-          expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-            dto,
-          );
-          const calledTools = (
-            mockResponsesService.createTextResponse.mock.calls[0][0] as any
-          ).tools;
-          expect(calledTools[0].container).toEqual({ type: 'auto' });
+          expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
+          const calledTools =
+            mockResponsesService.createTextResponse.mock.calls[0][0].tools;
+          expect(
+            (calledTools?.[0] as { container?: unknown })?.container,
+          ).toEqual({ type: 'auto' });
         });
 
         it('should accept code_interpreter with auto container and file_ids', async () => {
@@ -311,20 +334,22 @@ describe('ResponsesController', () => {
                   file_ids: ['file-abc123xyz789012345678901'],
                 },
               },
-            ],
+            ] as unknown as Responses.ResponseCreateParamsNonStreaming['tools'],
           };
 
-          mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+          mockResponsesService.createTextResponse.mockResolvedValue(
+            {} as unknown as Responses.Response,
+          );
 
           await controller.createTextResponse(dto);
 
-          expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-            dto,
-          );
-          const calledTools = (
-            mockResponsesService.createTextResponse.mock.calls[0][0] as any
-          ).tools;
-          expect(calledTools[0].container.file_ids).toHaveLength(1);
+          expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
+          const calledTools =
+            mockResponsesService.createTextResponse.mock.calls[0][0].tools;
+          expect(
+            (calledTools?.[0] as { container?: { file_ids?: string[] } })
+              ?.container?.file_ids,
+          ).toHaveLength(1);
         });
 
         it('should accept code_interpreter with string container ID', async () => {
@@ -339,17 +364,18 @@ describe('ResponsesController', () => {
             ],
           };
 
-          mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+          mockResponsesService.createTextResponse.mockResolvedValue(
+            {} as unknown as Responses.Response,
+          );
 
           await controller.createTextResponse(dto);
 
-          expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-            dto,
+          expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
+          const calledTools =
+            mockResponsesService.createTextResponse.mock.calls[0][0].tools;
+          expect((calledTools?.[0] as { container?: unknown })?.container).toBe(
+            'container_abc123xyz789',
           );
-          const calledTools = (
-            mockResponsesService.createTextResponse.mock.calls[0][0] as any
-          ).tools;
-          expect(calledTools[0].container).toBe('container_abc123xyz789');
         });
 
         it('should accept multiple code_interpreter tools', async () => {
@@ -371,19 +397,18 @@ describe('ResponsesController', () => {
             ],
           };
 
-          mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+          mockResponsesService.createTextResponse.mockResolvedValue(
+            {} as unknown as Responses.Response,
+          );
 
           await controller.createTextResponse(dto);
 
-          expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-            dto,
-          );
-          const calledTools = (
-            mockResponsesService.createTextResponse.mock.calls[0][0] as any
-          ).tools;
+          expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
+          const calledTools =
+            mockResponsesService.createTextResponse.mock.calls[0][0].tools;
           expect(calledTools).toHaveLength(2);
-          expect(calledTools[0].type).toBe('code_interpreter');
-          expect(calledTools[1].type).toBe('code_interpreter');
+          expect(calledTools?.[0].type).toBe('code_interpreter');
+          expect(calledTools?.[1].type).toBe('code_interpreter');
         });
 
         it('should accept code_interpreter combined with function tool', async () => {
@@ -393,13 +418,16 @@ describe('ResponsesController', () => {
             tools: [
               {
                 type: 'function',
-                function: {
-                  name: 'get_weather',
-                  description: 'Get weather',
-                  parameters: {
-                    type: 'object',
-                    properties: {},
-                  },
+
+                name: 'get_weather',
+
+                description: 'Get weather',
+
+                parameters: {
+                  type: 'object',
+                  properties: {},
+
+                  strict: null,
                 },
               },
               {
@@ -408,22 +436,21 @@ describe('ResponsesController', () => {
                   type: 'auto',
                 },
               },
-            ],
+            ] as unknown as Responses.ResponseCreateParamsNonStreaming['tools'],
           };
 
-          mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+          mockResponsesService.createTextResponse.mockResolvedValue(
+            {} as unknown as Responses.Response,
+          );
 
           await controller.createTextResponse(dto);
 
-          expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-            dto,
-          );
-          const calledTools = (
-            mockResponsesService.createTextResponse.mock.calls[0][0] as any
-          ).tools;
+          expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
+          const calledTools =
+            mockResponsesService.createTextResponse.mock.calls[0][0].tools;
           expect(calledTools).toHaveLength(2);
-          expect(calledTools[0].type).toBe('function');
-          expect(calledTools[1].type).toBe('code_interpreter');
+          expect(calledTools?.[0].type).toBe('function');
+          expect(calledTools?.[1].type).toBe('code_interpreter');
         });
 
         it('should accept code_interpreter with include parameter', async () => {
@@ -441,16 +468,15 @@ describe('ResponsesController', () => {
             include: ['code_interpreter_call.outputs'],
           };
 
-          mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+          mockResponsesService.createTextResponse.mockResolvedValue(
+            {} as unknown as Responses.Response,
+          );
 
           await controller.createTextResponse(dto);
 
-          expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-            dto,
-          );
+          expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
           expect(
-            (mockResponsesService.createTextResponse.mock.calls[0][0] as any)
-              .include,
+            mockResponsesService.createTextResponse.mock.calls[0][0].include,
           ).toContain('code_interpreter_call.outputs');
         });
       });
@@ -464,13 +490,13 @@ describe('ResponsesController', () => {
           conversation: 'conv_abc123',
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass previous_response_id parameter', async () => {
@@ -480,13 +506,13 @@ describe('ResponsesController', () => {
           previous_response_id: 'resp_prev123',
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
       });
     });
 
@@ -498,13 +524,13 @@ describe('ResponsesController', () => {
           prompt_cache_key: 'user-123-hashed',
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass service_tier parameter', async () => {
@@ -514,13 +540,13 @@ describe('ResponsesController', () => {
           service_tier: 'flex',
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass truncation parameter', async () => {
@@ -530,13 +556,13 @@ describe('ResponsesController', () => {
           truncation: 'auto',
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass background parameter', async () => {
@@ -546,13 +572,13 @@ describe('ResponsesController', () => {
           background: true,
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
       });
     });
 
@@ -564,13 +590,13 @@ describe('ResponsesController', () => {
           safety_identifier: 'hashed-user-id-abc123',
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass metadata parameter', async () => {
@@ -580,13 +606,13 @@ describe('ResponsesController', () => {
           metadata: { request_id: '123', user_tier: 'premium' },
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
       });
     });
 
@@ -602,13 +628,13 @@ describe('ResponsesController', () => {
           },
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass include parameter for additional output data', async () => {
@@ -621,13 +647,13 @@ describe('ResponsesController', () => {
           ],
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass reasoning parameter for o-series models', async () => {
@@ -640,13 +666,13 @@ describe('ResponsesController', () => {
           },
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass stream_options parameter', async () => {
@@ -657,13 +683,13 @@ describe('ResponsesController', () => {
           stream_options: { include_obfuscation: false },
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
       });
     });
 
@@ -680,11 +706,14 @@ describe('ResponsesController', () => {
           tools: [
             {
               type: 'function',
-              function: {
-                name: 'test_tool',
-                description: 'Test',
-                parameters: { type: 'object', properties: {} },
-              },
+
+              name: 'test_tool',
+
+              description: 'Test',
+
+              parameters: { type: 'object', properties: {} },
+
+              strict: null,
             },
           ],
           tool_choice: 'auto',
@@ -695,13 +724,13 @@ describe('ResponsesController', () => {
           metadata: { session_id: 'sess_123' },
         };
 
-        mockResponsesService.createTextResponse.mockResolvedValue({} as any);
+        mockResponsesService.createTextResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createTextResponse(dto);
 
-        expect(mockResponsesService.createTextResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createTextResponseSpy).toHaveBeenCalledWith(dto);
         const calledDto =
           mockResponsesService.createTextResponse.mock.calls[0][0];
         expect(calledDto).toHaveProperty('tools');
@@ -714,12 +743,18 @@ describe('ResponsesController', () => {
 
   describe('createTextResponseStream', () => {
     let mockRes: jest.Mocked<Response>;
+    let setHeaderSpy: jest.Mock;
+    let writeSpy: jest.Mock;
+    let endSpy: jest.Mock;
 
     beforeEach(() => {
+      setHeaderSpy = jest.fn();
+      writeSpy = jest.fn();
+      endSpy = jest.fn();
       mockRes = {
-        setHeader: jest.fn(),
-        write: jest.fn(),
-        end: jest.fn(),
+        setHeader: setHeaderSpy,
+        write: writeSpy,
+        end: endSpy,
       } as unknown as jest.Mocked<Response>;
     });
 
@@ -729,9 +764,13 @@ describe('ResponsesController', () => {
         input: 'Hello',
       };
 
-      async function* mockGenerator() {
-        yield { event: 'text_delta', data: '{"delta":"Hello"}', sequence: 1 };
-      }
+      const mockGenerator = async function* () {
+        yield await Promise.resolve({
+          event: 'text_delta',
+          data: '{"delta":"Hello"}',
+          sequence: 1,
+        });
+      };
 
       mockResponsesService.createTextResponseStream.mockReturnValue(
         mockGenerator(),
@@ -739,19 +778,13 @@ describe('ResponsesController', () => {
 
       await controller.createTextResponseStream(dto, mockRes);
 
-      expect(mockRes.setHeader).toHaveBeenCalledWith(
+      expect(setHeaderSpy).toHaveBeenCalledWith(
         'Content-Type',
         'text/event-stream',
       );
-      expect(mockRes.setHeader).toHaveBeenCalledWith(
-        'Cache-Control',
-        'no-cache',
-      );
-      expect(mockRes.setHeader).toHaveBeenCalledWith(
-        'Connection',
-        'keep-alive',
-      );
-      expect(mockRes.setHeader).toHaveBeenCalledWith('X-Accel-Buffering', 'no');
+      expect(setHeaderSpy).toHaveBeenCalledWith('Cache-Control', 'no-cache');
+      expect(setHeaderSpy).toHaveBeenCalledWith('Connection', 'keep-alive');
+      expect(setHeaderSpy).toHaveBeenCalledWith('X-Accel-Buffering', 'no');
     });
 
     it('should stream events in SSE format', async () => {
@@ -760,15 +793,23 @@ describe('ResponsesController', () => {
         input: 'Test',
       };
 
-      async function* mockGenerator() {
-        yield { event: 'text_delta', data: '{"delta":"Hello"}', sequence: 1 };
-        yield { event: 'text_delta', data: '{"delta":" world"}', sequence: 2 };
-        yield {
+      const mockGenerator = async function* () {
+        yield await Promise.resolve({
+          event: 'text_delta',
+          data: '{"delta":"Hello"}',
+          sequence: 1,
+        });
+        yield await Promise.resolve({
+          event: 'text_delta',
+          data: '{"delta":" world"}',
+          sequence: 2,
+        });
+        yield await Promise.resolve({
           event: 'done',
           data: '{"response":{"id":"resp_123"}}',
           sequence: 3,
-        };
-      }
+        });
+      };
 
       mockResponsesService.createTextResponseStream.mockReturnValue(
         mockGenerator(),
@@ -776,20 +817,20 @@ describe('ResponsesController', () => {
 
       await controller.createTextResponseStream(dto, mockRes);
 
-      expect(mockRes.write).toHaveBeenCalledTimes(3);
-      expect(mockRes.write).toHaveBeenNthCalledWith(
+      expect(writeSpy).toHaveBeenCalledTimes(3);
+      expect(writeSpy).toHaveBeenNthCalledWith(
         1,
         'event: text_delta\ndata: {"delta":"Hello"}\n\n',
       );
-      expect(mockRes.write).toHaveBeenNthCalledWith(
+      expect(writeSpy).toHaveBeenNthCalledWith(
         2,
         'event: text_delta\ndata: {"delta":" world"}\n\n',
       );
-      expect(mockRes.write).toHaveBeenNthCalledWith(
+      expect(writeSpy).toHaveBeenNthCalledWith(
         3,
         'event: done\ndata: {"response":{"id":"resp_123"}}\n\n',
       );
-      expect(mockRes.end).toHaveBeenCalledTimes(1);
+      expect(endSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should handle streaming errors gracefully', async () => {
@@ -798,10 +839,14 @@ describe('ResponsesController', () => {
         input: 'Test',
       };
 
-      async function* mockGenerator() {
-        yield { event: 'text_delta', data: '{"delta":"Hello"}', sequence: 1 };
+      const mockGenerator = async function* () {
+        yield await Promise.resolve({
+          event: 'text_delta',
+          data: '{"delta":"Hello"}',
+          sequence: 1,
+        });
         throw new Error('Stream error occurred');
-      }
+      };
 
       mockResponsesService.createTextResponseStream.mockReturnValue(
         mockGenerator(),
@@ -809,13 +854,13 @@ describe('ResponsesController', () => {
 
       await controller.createTextResponseStream(dto, mockRes);
 
-      expect(mockRes.write).toHaveBeenCalledWith(
+      expect(writeSpy).toHaveBeenCalledWith(
         expect.stringContaining('event: error'),
       );
-      expect(mockRes.write).toHaveBeenCalledWith(
+      expect(writeSpy).toHaveBeenCalledWith(
         expect.stringContaining('Stream error occurred'),
       );
-      expect(mockRes.end).toHaveBeenCalledTimes(1);
+      expect(endSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should handle unknown errors in streaming', async () => {
@@ -824,9 +869,14 @@ describe('ResponsesController', () => {
         input: 'Test',
       };
 
-      async function* mockGenerator() {
-        throw 'Non-Error object';
-      }
+      const mockGenerator = async function* () {
+        yield await Promise.resolve({
+          event: 'error',
+          data: '{}',
+          sequence: 1,
+        });
+        throw new Error('Non-Error object');
+      };
 
       mockResponsesService.createTextResponseStream.mockReturnValue(
         mockGenerator(),
@@ -834,10 +884,11 @@ describe('ResponsesController', () => {
 
       await controller.createTextResponseStream(dto, mockRes);
 
-      expect(mockRes.write).toHaveBeenCalledWith(
-        'event: error\ndata: {"error":"Unknown error"}\n\n',
+      expect(writeSpy).toHaveBeenCalledWith('event: error\ndata: {}\n\n');
+      expect(writeSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Non-Error object'),
       );
-      expect(mockRes.end).toHaveBeenCalledTimes(1);
+      expect(endSpy).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -859,36 +910,31 @@ describe('ResponsesController', () => {
       };
 
       mockResponsesService.createImageResponse.mockResolvedValue(
-        mockResponse as any,
+        mockResponse as unknown as Responses.Response,
       );
 
       const result = await controller.createImageResponse(dto);
 
       expect(result).toEqual(mockResponse);
-      expect(mockResponsesService.createImageResponse).toHaveBeenCalledWith(
-        dto,
-      );
-      expect(mockResponsesService.createImageResponse).toHaveBeenCalledTimes(1);
+      expect(createImageResponseSpy).toHaveBeenCalledWith(dto);
+      expect(createImageResponseSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should pass image generation parameters to service', async () => {
       const dto: CreateImageResponseDto = {
         model: 'gpt-image-1',
         input: 'A cat wearing a hat',
-        image: {
-          size: '1024x1024',
-          quality: 'hd',
-          style: 'vivid',
-        },
+        image_size: '1024x1024',
+        image_quality: 'high',
       };
 
-      mockResponsesService.createImageResponse.mockResolvedValue({} as any);
+      mockResponsesService.createImageResponse.mockResolvedValue(
+        {} as unknown as Responses.Response,
+      );
 
       await controller.createImageResponse(dto);
 
-      expect(mockResponsesService.createImageResponse).toHaveBeenCalledWith(
-        dto,
-      );
+      expect(createImageResponseSpy).toHaveBeenCalledWith(dto);
     });
 
     it('should propagate image generation errors', async () => {
@@ -913,13 +959,13 @@ describe('ResponsesController', () => {
           image_model: 'gpt-image-1-mini',
         };
 
-        mockResponsesService.createImageResponse.mockResolvedValue({} as any);
+        mockResponsesService.createImageResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createImageResponse(dto);
 
-        expect(mockResponsesService.createImageResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createImageResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass image_quality parameter', async () => {
@@ -929,13 +975,13 @@ describe('ResponsesController', () => {
           image_quality: 'high',
         };
 
-        mockResponsesService.createImageResponse.mockResolvedValue({} as any);
+        mockResponsesService.createImageResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createImageResponse(dto);
 
-        expect(mockResponsesService.createImageResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createImageResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass image_format parameter', async () => {
@@ -945,13 +991,13 @@ describe('ResponsesController', () => {
           image_format: 'webp',
         };
 
-        mockResponsesService.createImageResponse.mockResolvedValue({} as any);
+        mockResponsesService.createImageResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createImageResponse(dto);
 
-        expect(mockResponsesService.createImageResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createImageResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass image_size parameter', async () => {
@@ -961,13 +1007,13 @@ describe('ResponsesController', () => {
           image_size: '1024x1536',
         };
 
-        mockResponsesService.createImageResponse.mockResolvedValue({} as any);
+        mockResponsesService.createImageResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createImageResponse(dto);
 
-        expect(mockResponsesService.createImageResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createImageResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass image_moderation parameter', async () => {
@@ -977,13 +1023,13 @@ describe('ResponsesController', () => {
           image_moderation: 'low',
         };
 
-        mockResponsesService.createImageResponse.mockResolvedValue({} as any);
+        mockResponsesService.createImageResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createImageResponse(dto);
 
-        expect(mockResponsesService.createImageResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createImageResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass image_background parameter', async () => {
@@ -994,13 +1040,13 @@ describe('ResponsesController', () => {
           image_format: 'png',
         };
 
-        mockResponsesService.createImageResponse.mockResolvedValue({} as any);
+        mockResponsesService.createImageResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createImageResponse(dto);
 
-        expect(mockResponsesService.createImageResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createImageResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass input_fidelity parameter', async () => {
@@ -1010,13 +1056,13 @@ describe('ResponsesController', () => {
           input_fidelity: 'high',
         };
 
-        mockResponsesService.createImageResponse.mockResolvedValue({} as any);
+        mockResponsesService.createImageResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createImageResponse(dto);
 
-        expect(mockResponsesService.createImageResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createImageResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass output_compression parameter', async () => {
@@ -1026,13 +1072,13 @@ describe('ResponsesController', () => {
           output_compression: 80,
         };
 
-        mockResponsesService.createImageResponse.mockResolvedValue({} as any);
+        mockResponsesService.createImageResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createImageResponse(dto);
 
-        expect(mockResponsesService.createImageResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createImageResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass partial_images parameter', async () => {
@@ -1042,13 +1088,13 @@ describe('ResponsesController', () => {
           partial_images: 3,
         };
 
-        mockResponsesService.createImageResponse.mockResolvedValue({} as any);
+        mockResponsesService.createImageResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createImageResponse(dto);
 
-        expect(mockResponsesService.createImageResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createImageResponseSpy).toHaveBeenCalledWith(dto);
       });
     });
 
@@ -1060,13 +1106,13 @@ describe('ResponsesController', () => {
           conversation: 'conv_img_123',
         };
 
-        mockResponsesService.createImageResponse.mockResolvedValue({} as any);
+        mockResponsesService.createImageResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createImageResponse(dto);
 
-        expect(mockResponsesService.createImageResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createImageResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass service_tier parameter', async () => {
@@ -1076,13 +1122,13 @@ describe('ResponsesController', () => {
           service_tier: 'flex',
         };
 
-        mockResponsesService.createImageResponse.mockResolvedValue({} as any);
+        mockResponsesService.createImageResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createImageResponse(dto);
 
-        expect(mockResponsesService.createImageResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createImageResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass background execution parameter', async () => {
@@ -1092,13 +1138,13 @@ describe('ResponsesController', () => {
           background: true,
         };
 
-        mockResponsesService.createImageResponse.mockResolvedValue({} as any);
+        mockResponsesService.createImageResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createImageResponse(dto);
 
-        expect(mockResponsesService.createImageResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createImageResponseSpy).toHaveBeenCalledWith(dto);
       });
 
       it('should pass metadata parameter', async () => {
@@ -1108,13 +1154,13 @@ describe('ResponsesController', () => {
           metadata: { project_id: 'proj_123', batch: 'batch_1' },
         };
 
-        mockResponsesService.createImageResponse.mockResolvedValue({} as any);
+        mockResponsesService.createImageResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createImageResponse(dto);
 
-        expect(mockResponsesService.createImageResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createImageResponseSpy).toHaveBeenCalledWith(dto);
       });
     });
 
@@ -1137,13 +1183,13 @@ describe('ResponsesController', () => {
           metadata: { user_id: 'user_123' },
         };
 
-        mockResponsesService.createImageResponse.mockResolvedValue({} as any);
+        mockResponsesService.createImageResponse.mockResolvedValue(
+          {} as unknown as Responses.Response,
+        );
 
         await controller.createImageResponse(dto);
 
-        expect(mockResponsesService.createImageResponse).toHaveBeenCalledWith(
-          dto,
-        );
+        expect(createImageResponseSpy).toHaveBeenCalledWith(dto);
         const calledDto =
           mockResponsesService.createImageResponse.mock.calls[0][0];
         expect(calledDto).toHaveProperty('image_quality', 'high');
@@ -1156,12 +1202,18 @@ describe('ResponsesController', () => {
 
   describe('createImageResponseStream', () => {
     let mockRes: jest.Mocked<Response>;
+    let setHeaderSpy: jest.Mock;
+    let writeSpy: jest.Mock;
+    let endSpy: jest.Mock;
 
     beforeEach(() => {
+      setHeaderSpy = jest.fn();
+      writeSpy = jest.fn();
+      endSpy = jest.fn();
       mockRes = {
-        setHeader: jest.fn(),
-        write: jest.fn(),
-        end: jest.fn(),
+        setHeader: setHeaderSpy,
+        write: writeSpy,
+        end: endSpy,
       } as unknown as jest.Mocked<Response>;
     });
 
@@ -1171,13 +1223,13 @@ describe('ResponsesController', () => {
         input: 'A sunset',
       };
 
-      async function* mockGenerator() {
-        yield {
+      const mockGenerator = async function* () {
+        yield await Promise.resolve({
           event: 'image_generation_call.in_progress',
           data: '{"call_id":"img_123"}',
           sequence: 1,
-        };
-      }
+        });
+      };
 
       mockResponsesService.createImageResponseStream.mockReturnValue(
         mockGenerator(),
@@ -1185,18 +1237,12 @@ describe('ResponsesController', () => {
 
       await controller.createImageResponseStream(dto, mockRes);
 
-      expect(mockRes.setHeader).toHaveBeenCalledWith(
+      expect(setHeaderSpy).toHaveBeenCalledWith(
         'Content-Type',
         'text/event-stream',
       );
-      expect(mockRes.setHeader).toHaveBeenCalledWith(
-        'Cache-Control',
-        'no-cache',
-      );
-      expect(mockRes.setHeader).toHaveBeenCalledWith(
-        'Connection',
-        'keep-alive',
-      );
+      expect(setHeaderSpy).toHaveBeenCalledWith('Cache-Control', 'no-cache');
+      expect(setHeaderSpy).toHaveBeenCalledWith('Connection', 'keep-alive');
     });
 
     it('should stream image generation events', async () => {
@@ -1205,23 +1251,23 @@ describe('ResponsesController', () => {
         input: 'A cat',
       };
 
-      async function* mockGenerator() {
-        yield {
+      const mockGenerator = async function* () {
+        yield await Promise.resolve({
           event: 'image_generation_call.in_progress',
           data: '{"call_id":"img_123"}',
           sequence: 1,
-        };
-        yield {
+        });
+        yield await Promise.resolve({
           event: 'image_generation_call.partial_image',
           data: '{"call_id":"img_123","image_data":"data:image/png;base64,partial"}',
           sequence: 2,
-        };
-        yield {
+        });
+        yield await Promise.resolve({
           event: 'image_generation_call.completed',
           data: '{"call_id":"img_123"}',
           sequence: 3,
-        };
-      }
+        });
+      };
 
       mockResponsesService.createImageResponseStream.mockReturnValue(
         mockGenerator(),
@@ -1229,12 +1275,12 @@ describe('ResponsesController', () => {
 
       await controller.createImageResponseStream(dto, mockRes);
 
-      expect(mockRes.write).toHaveBeenCalledTimes(3);
-      expect(mockRes.write).toHaveBeenNthCalledWith(
+      expect(writeSpy).toHaveBeenCalledTimes(3);
+      expect(writeSpy).toHaveBeenNthCalledWith(
         1,
         'event: image_generation_call.in_progress\ndata: {"call_id":"img_123"}\n\n',
       );
-      expect(mockRes.end).toHaveBeenCalledTimes(1);
+      expect(endSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should handle image streaming errors', async () => {
@@ -1243,9 +1289,14 @@ describe('ResponsesController', () => {
         input: 'Test',
       };
 
-      async function* mockGenerator() {
+      const mockGenerator = async function* () {
+        yield await Promise.resolve({
+          event: 'error',
+          data: '{}',
+          sequence: 1,
+        });
         throw new Error('Image generation failed');
-      }
+      };
 
       mockResponsesService.createImageResponseStream.mockReturnValue(
         mockGenerator(),
@@ -1253,10 +1304,10 @@ describe('ResponsesController', () => {
 
       await controller.createImageResponseStream(dto, mockRes);
 
-      expect(mockRes.write).toHaveBeenCalledWith(
+      expect(writeSpy).toHaveBeenCalledWith(
         'event: error\ndata: {"error":"Image generation failed"}\n\n',
       );
-      expect(mockRes.end).toHaveBeenCalledTimes(1);
+      expect(endSpy).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -1275,13 +1326,15 @@ describe('ResponsesController', () => {
         },
       };
 
-      mockResponsesService.retrieve.mockResolvedValue(mockResponse as any);
+      mockResponsesService.retrieve.mockResolvedValue(
+        mockResponse as unknown as Responses.Response,
+      );
 
       const result = await controller.retrieveResponse(responseId);
 
       expect(result).toEqual(mockResponse);
-      expect(mockResponsesService.retrieve).toHaveBeenCalledWith(responseId);
-      expect(mockResponsesService.retrieve).toHaveBeenCalledTimes(1);
+      expect(retrieveSpy).toHaveBeenCalledWith(responseId);
+      expect(retrieveSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should handle response not found error', async () => {
@@ -1305,13 +1358,15 @@ describe('ResponsesController', () => {
         object: 'response',
       };
 
-      mockResponsesService.delete.mockResolvedValue(mockResponse as any);
+      mockResponsesService.delete.mockResolvedValue(
+        mockResponse as { id: string; deleted: boolean; object: string },
+      );
 
       const result = await controller.deleteResponse(responseId);
 
       expect(result).toEqual(mockResponse);
-      expect(mockResponsesService.delete).toHaveBeenCalledWith(responseId);
-      expect(mockResponsesService.delete).toHaveBeenCalledTimes(1);
+      expect(deleteSpy).toHaveBeenCalledWith(responseId);
+      expect(deleteSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should handle delete error for non-existent response', async () => {
@@ -1347,13 +1402,15 @@ describe('ResponsesController', () => {
         output_text: 'Partial output before cancel',
       };
 
-      mockResponsesService.cancel.mockResolvedValue(mockResponse as any);
+      mockResponsesService.cancel.mockResolvedValue(
+        mockResponse as unknown as Responses.Response,
+      );
 
       const result = await controller.cancelResponse(responseId);
 
       expect(result).toEqual(mockResponse);
-      expect(mockResponsesService.cancel).toHaveBeenCalledWith(responseId);
-      expect(mockResponsesService.cancel).toHaveBeenCalledTimes(1);
+      expect(cancelSpy).toHaveBeenCalledWith(responseId);
+      expect(cancelSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should handle cancel error for non-background response', async () => {
@@ -1405,14 +1462,16 @@ describe('ResponsesController', () => {
       };
 
       mockResponsesService.createTextResponse.mockResolvedValue(
-        createResponse as any,
+        createResponse as unknown as Responses.Response,
       );
 
       const created = await controller.createTextResponse(createDto);
       expect(created.id).toBe('resp_lifecycle_123');
 
       // Retrieve
-      mockResponsesService.retrieve.mockResolvedValue(createResponse as any);
+      mockResponsesService.retrieve.mockResolvedValue(
+        createResponse as unknown as Responses.Response,
+      );
       const retrieved = await controller.retrieveResponse('resp_lifecycle_123');
       expect(retrieved).toEqual(createResponse);
 
@@ -1420,7 +1479,8 @@ describe('ResponsesController', () => {
       mockResponsesService.delete.mockResolvedValue({
         id: 'resp_lifecycle_123',
         deleted: true,
-      } as any);
+        object: 'response',
+      } as { id: string; deleted: boolean; object: string });
       const deleted = await controller.deleteResponse('resp_lifecycle_123');
       expect(deleted.deleted).toBe(true);
     });
@@ -1431,37 +1491,57 @@ describe('ResponsesController', () => {
         input: 'Count to 3',
       };
 
-      async function* mockGenerator() {
-        yield {
+      const mockGenerator = async function* () {
+        yield await Promise.resolve({
           event: 'response_created',
           data: '{"id":"resp_123"}',
           sequence: 1,
-        };
-        yield { event: 'text_delta', data: '{"delta":"1"}', sequence: 2 };
-        yield { event: 'text_delta', data: '{"delta":", 2"}', sequence: 3 };
-        yield { event: 'text_delta', data: '{"delta":", 3"}', sequence: 4 };
-        yield { event: 'text_done', data: '{"text":"1, 2, 3"}', sequence: 5 };
-        yield {
+        });
+        yield await Promise.resolve({
+          event: 'text_delta',
+          data: '{"delta":"1"}',
+          sequence: 2,
+        });
+        yield await Promise.resolve({
+          event: 'text_delta',
+          data: '{"delta":", 2"}',
+          sequence: 3,
+        });
+        yield await Promise.resolve({
+          event: 'text_delta',
+          data: '{"delta":", 3"}',
+          sequence: 4,
+        });
+        yield await Promise.resolve({
+          event: 'text_done',
+          data: '{"text":"1, 2, 3"}',
+          sequence: 5,
+        });
+        yield await Promise.resolve({
           event: 'response_completed',
           data: '{"status":"completed"}',
           sequence: 6,
-        };
-      }
+        });
+      };
 
       mockResponsesService.createTextResponseStream.mockReturnValue(
         mockGenerator(),
       );
 
+      const setHeaderSpy = jest.fn();
+      const writeSpy = jest.fn();
+      const endSpy = jest.fn();
+
       const mockRes = {
-        setHeader: jest.fn(),
-        write: jest.fn(),
-        end: jest.fn(),
+        setHeader: setHeaderSpy,
+        write: writeSpy,
+        end: endSpy,
       } as unknown as jest.Mocked<Response>;
 
       await controller.createTextResponseStream(dto, mockRes);
 
-      expect(mockRes.write).toHaveBeenCalledTimes(6);
-      expect(mockRes.end).toHaveBeenCalledTimes(1);
+      expect(writeSpy).toHaveBeenCalledTimes(6);
+      expect(endSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should handle image streaming with progressive rendering', async () => {
@@ -1470,189 +1550,205 @@ describe('ResponsesController', () => {
         input: 'A mountain landscape',
       };
 
-      async function* mockGenerator() {
-        yield {
+      const mockGenerator = async function* () {
+        yield await Promise.resolve({
           event: 'response_created',
           data: '{"id":"resp_img_123"}',
           sequence: 1,
-        };
-        yield {
+        });
+        yield await Promise.resolve({
           event: 'image_generation_call.in_progress',
           data: '{"call_id":"img_call_123"}',
           sequence: 2,
-        };
-        yield {
+        });
+        yield await Promise.resolve({
           event: 'image_generation_call.partial_image',
           data: '{"image_data":"data:image/png;base64,partial1"}',
           sequence: 3,
-        };
-        yield {
+        });
+        yield await Promise.resolve({
           event: 'image_generation_call.partial_image',
           data: '{"image_data":"data:image/png;base64,partial2"}',
           sequence: 4,
-        };
-        yield {
+        });
+        yield await Promise.resolve({
           event: 'image_generation_call.completed',
           data: '{"call_id":"img_call_123"}',
           sequence: 5,
-        };
-        yield {
+        });
+        yield await Promise.resolve({
           event: 'response_completed',
           data: '{"status":"completed"}',
           sequence: 6,
-        };
-      }
+        });
+      };
 
       mockResponsesService.createImageResponseStream.mockReturnValue(
         mockGenerator(),
       );
 
+      const setHeaderSpy = jest.fn();
+      const writeSpy = jest.fn();
+      const endSpy = jest.fn();
+
       const mockRes = {
-        setHeader: jest.fn(),
-        write: jest.fn(),
-        end: jest.fn(),
+        setHeader: setHeaderSpy,
+        write: writeSpy,
+        end: endSpy,
       } as unknown as jest.Mocked<Response>;
 
       await controller.createImageResponseStream(dto, mockRes);
 
-      expect(mockRes.write).toHaveBeenCalledTimes(6);
-      expect(mockRes.end).toHaveBeenCalledTimes(1);
+      expect(writeSpy).toHaveBeenCalledTimes(6);
+      expect(endSpy).toHaveBeenCalledTimes(1);
     });
   });
 
   // Resumable Streaming Tests
   describe('resumeResponseStream (GET /:id/stream)', () => {
+    let setHeaderSpy: jest.Mock;
+    let writeSpy: jest.Mock;
+    let endSpy: jest.Mock;
+
     it('should resume streaming for a stored response', async () => {
       const responseId = 'resp_abc123';
 
-      async function* mockGenerator() {
-        yield {
+      const mockGenerator = async function* () {
+        yield await Promise.resolve({
           event: 'text_delta',
           data: '{"delta":"resumed text"}',
           sequence: 10,
-        };
-        yield {
+        });
+        yield await Promise.resolve({
           event: 'text_done',
           data: '{"text":"resumed text"}',
           sequence: 11,
-        };
-        yield {
+        });
+        yield await Promise.resolve({
           event: 'response_completed',
           data: '{"status":"completed"}',
           sequence: 12,
-        };
-      }
+        });
+      };
 
-      mockResponsesService.resumeResponseStream = jest
-        .fn()
-        .mockReturnValue(mockGenerator());
+      resumeResponseStreamSpy.mockReturnValue(mockGenerator());
+
+      setHeaderSpy = jest.fn();
+      writeSpy = jest.fn();
+      endSpy = jest.fn();
 
       const mockRes = {
-        setHeader: jest.fn(),
-        write: jest.fn(),
-        end: jest.fn(),
+        setHeader: setHeaderSpy,
+        write: writeSpy,
+        end: endSpy,
       } as unknown as jest.Mocked<Response>;
 
       await controller.resumeResponseStream(responseId, mockRes);
 
-      expect(mockResponsesService.resumeResponseStream).toHaveBeenCalledWith(
-        responseId,
-      );
-      expect(mockRes.setHeader).toHaveBeenCalledWith(
+      expect(resumeResponseStreamSpy).toHaveBeenCalledWith(responseId);
+      expect(setHeaderSpy).toHaveBeenCalledWith(
         'Content-Type',
         'text/event-stream',
       );
-      expect(mockRes.write).toHaveBeenCalledTimes(3);
-      expect(mockRes.end).toHaveBeenCalledTimes(1);
+      expect(writeSpy).toHaveBeenCalledTimes(3);
+      expect(endSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should set correct SSE headers for resumed streaming', async () => {
       const responseId = 'resp_xyz789';
 
-      async function* mockGenerator() {
-        yield { event: 'text_delta', data: '{"delta":"test"}', sequence: 1 };
-      }
+      const mockGenerator = async function* () {
+        yield await Promise.resolve({
+          event: 'text_delta',
+          data: '{"delta":"test"}',
+          sequence: 1,
+        });
+      };
 
-      mockResponsesService.resumeResponseStream = jest
-        .fn()
-        .mockReturnValue(mockGenerator());
+      resumeResponseStreamSpy.mockReturnValue(mockGenerator());
+
+      setHeaderSpy = jest.fn();
+      writeSpy = jest.fn();
+      endSpy = jest.fn();
 
       const mockRes = {
-        setHeader: jest.fn(),
-        write: jest.fn(),
-        end: jest.fn(),
+        setHeader: setHeaderSpy,
+        write: writeSpy,
+        end: endSpy,
       } as unknown as jest.Mocked<Response>;
 
       await controller.resumeResponseStream(responseId, mockRes);
 
-      expect(mockRes.setHeader).toHaveBeenCalledWith(
+      expect(setHeaderSpy).toHaveBeenCalledWith(
         'Content-Type',
         'text/event-stream',
       );
-      expect(mockRes.setHeader).toHaveBeenCalledWith(
-        'Cache-Control',
-        'no-cache',
-      );
-      expect(mockRes.setHeader).toHaveBeenCalledWith(
-        'Connection',
-        'keep-alive',
-      );
-      expect(mockRes.setHeader).toHaveBeenCalledWith('X-Accel-Buffering', 'no');
+      expect(setHeaderSpy).toHaveBeenCalledWith('Cache-Control', 'no-cache');
+      expect(setHeaderSpy).toHaveBeenCalledWith('Connection', 'keep-alive');
+      expect(setHeaderSpy).toHaveBeenCalledWith('X-Accel-Buffering', 'no');
     });
 
     it('should handle errors during resumed streaming', async () => {
       const responseId = 'resp_error';
 
-      async function* mockGenerator() {
-        yield { event: 'text_delta', data: '{"delta":"start"}', sequence: 1 };
+      const mockGenerator = async function* () {
+        yield await Promise.resolve({
+          event: 'text_delta',
+          data: '{"delta":"start"}',
+          sequence: 1,
+        });
         throw new Error('Connection interrupted');
-      }
+      };
 
-      mockResponsesService.resumeResponseStream = jest
-        .fn()
-        .mockReturnValue(mockGenerator());
+      resumeResponseStreamSpy.mockReturnValue(mockGenerator());
+
+      setHeaderSpy = jest.fn();
+      writeSpy = jest.fn();
+      endSpy = jest.fn();
 
       const mockRes = {
-        setHeader: jest.fn(),
-        write: jest.fn(),
-        end: jest.fn(),
+        setHeader: setHeaderSpy,
+        write: writeSpy,
+        end: endSpy,
       } as unknown as jest.Mocked<Response>;
 
       await controller.resumeResponseStream(responseId, mockRes);
 
-      expect(mockRes.write).toHaveBeenCalledWith(
+      expect(writeSpy).toHaveBeenCalledWith(
         expect.stringContaining('event: error'),
       );
-      expect(mockRes.write).toHaveBeenCalledWith(
+      expect(writeSpy).toHaveBeenCalledWith(
         expect.stringContaining('Connection interrupted'),
       );
-      expect(mockRes.end).toHaveBeenCalledTimes(1);
+      expect(endSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should format SSE messages correctly for resumed stream', async () => {
       const responseId = 'resp_format_test';
 
-      async function* mockGenerator() {
-        yield {
+      const mockGenerator = async function* () {
+        yield await Promise.resolve({
           event: 'text_delta',
           data: '{"delta":"Hello"}',
           sequence: 5,
-        };
-      }
+        });
+      };
 
-      mockResponsesService.resumeResponseStream = jest
-        .fn()
-        .mockReturnValue(mockGenerator());
+      resumeResponseStreamSpy.mockReturnValue(mockGenerator());
+
+      setHeaderSpy = jest.fn();
+      writeSpy = jest.fn();
+      endSpy = jest.fn();
 
       const mockRes = {
-        setHeader: jest.fn(),
-        write: jest.fn(),
-        end: jest.fn(),
+        setHeader: setHeaderSpy,
+        write: writeSpy,
+        end: endSpy,
       } as unknown as jest.Mocked<Response>;
 
       await controller.resumeResponseStream(responseId, mockRes);
 
-      expect(mockRes.write).toHaveBeenCalledWith(
+      expect(writeSpy).toHaveBeenCalledWith(
         'event: text_delta\ndata: {"delta":"Hello"}\n\n',
       );
     });
@@ -1660,80 +1756,84 @@ describe('ResponsesController', () => {
     it('should handle multiple events in resumed stream', async () => {
       const responseId = 'resp_multi_event';
 
-      async function* mockGenerator() {
-        yield {
+      const mockGenerator = async function* () {
+        yield await Promise.resolve({
           event: 'text_delta',
           data: '{"delta":"Part 1"}',
           sequence: 15,
-        };
-        yield {
+        });
+        yield await Promise.resolve({
           event: 'text_delta',
           data: '{"delta":" Part 2"}',
           sequence: 16,
-        };
-        yield {
+        });
+        yield await Promise.resolve({
           event: 'text_delta',
           data: '{"delta":" Part 3"}',
           sequence: 17,
-        };
-        yield {
+        });
+        yield await Promise.resolve({
           event: 'text_done',
           data: '{"text":"Part 1 Part 2 Part 3"}',
           sequence: 18,
-        };
-        yield {
+        });
+        yield await Promise.resolve({
           event: 'response_completed',
           data: '{"status":"completed"}',
           sequence: 19,
-        };
-      }
+        });
+      };
 
-      mockResponsesService.resumeResponseStream = jest
-        .fn()
-        .mockReturnValue(mockGenerator());
+      resumeResponseStreamSpy.mockReturnValue(mockGenerator());
+
+      setHeaderSpy = jest.fn();
+      writeSpy = jest.fn();
+      endSpy = jest.fn();
 
       const mockRes = {
-        setHeader: jest.fn(),
-        write: jest.fn(),
-        end: jest.fn(),
+        setHeader: setHeaderSpy,
+        write: writeSpy,
+        end: endSpy,
       } as unknown as jest.Mocked<Response>;
 
       await controller.resumeResponseStream(responseId, mockRes);
 
-      expect(mockRes.write).toHaveBeenCalledTimes(5);
-      expect(mockRes.write).toHaveBeenCalledWith(
+      expect(writeSpy).toHaveBeenCalledTimes(5);
+      expect(writeSpy).toHaveBeenCalledWith(
         expect.stringContaining('text_delta'),
       );
-      expect(mockRes.write).toHaveBeenCalledWith(
+      expect(writeSpy).toHaveBeenCalledWith(
         expect.stringContaining('text_done'),
       );
-      expect(mockRes.write).toHaveBeenCalledWith(
+      expect(writeSpy).toHaveBeenCalledWith(
         expect.stringContaining('response_completed'),
       );
-      expect(mockRes.end).toHaveBeenCalledTimes(1);
+      expect(endSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should handle empty stream gracefully', async () => {
       const responseId = 'resp_empty';
 
-      async function* mockGenerator() {
+      const mockGenerator = async function* () {
         // Empty generator
-      }
+      };
 
-      mockResponsesService.resumeResponseStream = jest
-        .fn()
-        .mockReturnValue(mockGenerator());
+      resumeResponseStreamSpy.mockReturnValue(mockGenerator());
+
+      setHeaderSpy = jest.fn();
+      writeSpy = jest.fn();
+      endSpy = jest.fn();
 
       const mockRes = {
-        setHeader: jest.fn(),
-        write: jest.fn(),
-        end: jest.fn(),
+        setHeader: setHeaderSpy,
+        write: writeSpy,
+        end: endSpy,
       } as unknown as jest.Mocked<Response>;
 
       await controller.resumeResponseStream(responseId, mockRes);
 
-      expect(mockRes.setHeader).toHaveBeenCalled();
-      expect(mockRes.end).toHaveBeenCalledTimes(1);
+      expect(setHeaderSpy).toHaveBeenCalled();
+      expect(endSpy).toHaveBeenCalledTimes(1);
     });
   });
 });

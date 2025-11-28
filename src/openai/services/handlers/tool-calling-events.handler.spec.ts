@@ -10,6 +10,43 @@ import {
   createMockStreamState,
 } from '../../../common/testing/test.factories';
 
+// Test data interfaces
+interface FunctionCallData {
+  call_id: string;
+  delta?: string;
+  snapshot?: string;
+  arguments?: Record<string, unknown>;
+  sequence: number;
+}
+
+interface CodeInterpreterData {
+  call_id: string;
+  delta?: string;
+  code?: string;
+  output?: Record<string, unknown>;
+  sequence: number;
+}
+
+interface FileSearchData {
+  call_id: string;
+  results?: unknown[];
+  sequence: number;
+}
+
+interface WebSearchData {
+  call_id: string;
+  results?: unknown[];
+  input?: string;
+  sequence: number;
+}
+
+interface CustomToolData {
+  call_id: string;
+  delta?: string;
+  input?: Record<string, unknown>;
+  sequence: number;
+}
+
 describe('ToolCallingEventsHandler', () => {
   let handler: ToolCallingEventsHandler;
   let mockLoggerService: jest.Mocked<LoggerService>;
@@ -61,7 +98,7 @@ describe('ToolCallingEventsHandler', () => {
       expect(results[0].event).toBe('function_call_delta');
       expect(results[0].sequence).toBe(1);
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as FunctionCallData;
       expect(data).toEqual({
         call_id: 'call_123',
         delta: '{"query":',
@@ -122,7 +159,7 @@ describe('ToolCallingEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'function_call_delta',
@@ -157,7 +194,7 @@ describe('ToolCallingEventsHandler', () => {
       expect(results).toHaveLength(1);
       expect(results[0].event).toBe('function_call_done');
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as FunctionCallData;
       expect(data).toEqual({
         call_id: 'call_abc',
         arguments: '{"name":"value"}',
@@ -195,7 +232,7 @@ describe('ToolCallingEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'function_call_done',
@@ -259,7 +296,7 @@ describe('ToolCallingEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'response.code_interpreter_call.in_progress',
@@ -286,7 +323,7 @@ describe('ToolCallingEventsHandler', () => {
       expect(results).toHaveLength(1);
       expect(results[0].event).toBe('code_interpreter_code_delta');
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as CodeInterpreterData;
       expect(data).toEqual({
         call_id: 'code_abc',
         delta: 'import ',
@@ -337,7 +374,7 @@ describe('ToolCallingEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'code_interpreter_code_delta',
@@ -365,7 +402,7 @@ describe('ToolCallingEventsHandler', () => {
       expect(results).toHaveLength(1);
       expect(results[0].event).toBe('code_interpreter_code_done');
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as CodeInterpreterData;
       expect(data).toEqual({
         call_id: 'code_jkl',
         code: 'import math\nprint(math.pi)',
@@ -385,7 +422,7 @@ describe('ToolCallingEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'code_interpreter_code_done',
@@ -420,7 +457,7 @@ describe('ToolCallingEventsHandler', () => {
       expect(results).toHaveLength(1);
       expect(results[0].event).toBe('code_interpreter_completed');
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as CodeInterpreterData;
       expect(data.output).toEqual({ type: 'text', text: 'test\n' });
 
       // Verify state updated
@@ -446,7 +483,7 @@ describe('ToolCallingEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'code_interpreter_completed',
@@ -513,7 +550,7 @@ describe('ToolCallingEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'response.file_search_call.in_progress',
@@ -543,7 +580,7 @@ describe('ToolCallingEventsHandler', () => {
       expect(results).toHaveLength(1);
       expect(results[0].event).toBe('file_search_completed');
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as FileSearchData;
       expect(data.results).toHaveLength(2);
       expect(data.call_id).toBe('file_abc');
     });
@@ -563,7 +600,7 @@ describe('ToolCallingEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'file_search_completed',
@@ -627,7 +664,7 @@ describe('ToolCallingEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'response.web_search_call.searching',
@@ -657,7 +694,7 @@ describe('ToolCallingEventsHandler', () => {
       expect(results).toHaveLength(1);
       expect(results[0].event).toBe('web_search_completed');
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as WebSearchData;
       expect(data.results).toHaveLength(2);
       expect(data.call_id).toBe('web_abc');
     });
@@ -677,7 +714,7 @@ describe('ToolCallingEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'web_search_completed',
@@ -707,7 +744,7 @@ describe('ToolCallingEventsHandler', () => {
       expect(results).toHaveLength(1);
       expect(results[0].event).toBe('custom_tool_delta');
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as CustomToolData;
       expect(data).toEqual({
         call_id: 'custom_123',
         delta: '{"action":',
@@ -727,7 +764,7 @@ describe('ToolCallingEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'custom_tool_delta',
@@ -755,7 +792,7 @@ describe('ToolCallingEventsHandler', () => {
       expect(results).toHaveLength(1);
       expect(results[0].event).toBe('custom_tool_done');
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as CustomToolData;
       expect(data.input).toEqual({ action: 'execute', params: { value: 42 } });
     });
 
@@ -771,7 +808,7 @@ describe('ToolCallingEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'custom_tool_done',

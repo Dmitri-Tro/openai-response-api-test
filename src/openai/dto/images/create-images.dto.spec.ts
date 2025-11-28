@@ -88,7 +88,7 @@ describe('CreateImagesDto', () => {
 
     it('should reject invalid model', async () => {
       const dto = createValidDto();
-      dto.model = 'invalid-model' as any;
+      dto.model = 'invalid-model' as unknown as typeof dto.model;
 
       const errors = await validateDto(dto);
 
@@ -250,14 +250,16 @@ describe('CreateImagesDto', () => {
       it('should reject 512x512 for gpt-image-1 (invalid model-size combination)', async () => {
         const dto = createValidDto();
         dto.model = 'gpt-image-1';
-        dto.size = '512x512' as any;
+        dto.size = '512x512' as unknown as typeof dto.size;
 
         const errors = await validateDto(dto);
 
         // @IsImageModelSizeValid() should reject this invalid combination
         const sizeErrors = errors.filter((e) => e.property === 'size');
         expect(sizeErrors.length).toBeGreaterThan(0);
-        expect(sizeErrors[0].constraints).toHaveProperty('IsImageModelSizeValidConstraint');
+        expect(sizeErrors[0].constraints).toHaveProperty(
+          'IsImageModelSizeValidConstraint',
+        );
       });
     });
 
@@ -295,14 +297,16 @@ describe('CreateImagesDto', () => {
       it('should reject 1792x1024 for dall-e-2 (invalid model-size combination)', async () => {
         const dto = createValidDto();
         dto.model = 'dall-e-2';
-        dto.size = '1792x1024' as any;
+        dto.size = '1792x1024' as unknown as typeof dto.size;
 
         const errors = await validateDto(dto);
 
         // @IsImageModelSizeValid() should reject this invalid combination
         const sizeErrors = errors.filter((e) => e.property === 'size');
         expect(sizeErrors.length).toBeGreaterThan(0);
-        expect(sizeErrors[0].constraints).toHaveProperty('IsImageModelSizeValidConstraint');
+        expect(sizeErrors[0].constraints).toHaveProperty(
+          'IsImageModelSizeValidConstraint',
+        );
       });
     });
 
@@ -340,14 +344,16 @@ describe('CreateImagesDto', () => {
       it('should reject 512x512 for dall-e-3 (invalid model-size combination)', async () => {
         const dto = createValidDto();
         dto.model = 'dall-e-3';
-        dto.size = '512x512' as any;
+        dto.size = '512x512' as unknown as typeof dto.size;
 
         const errors = await validateDto(dto);
 
         // @IsImageModelSizeValid() should reject this invalid combination
         const sizeErrors = errors.filter((e) => e.property === 'size');
         expect(sizeErrors.length).toBeGreaterThan(0);
-        expect(sizeErrors[0].constraints).toHaveProperty('IsImageModelSizeValidConstraint');
+        expect(sizeErrors[0].constraints).toHaveProperty(
+          'IsImageModelSizeValidConstraint',
+        );
       });
     });
   });
@@ -373,7 +379,7 @@ describe('CreateImagesDto', () => {
 
     it('should reject invalid quality', async () => {
       const dto = createValidDto();
-      dto.quality = 'ultra' as any;
+      dto.quality = 'ultra' as unknown as typeof dto.quality;
 
       const errors = await validateDto(dto);
 
@@ -403,7 +409,7 @@ describe('CreateImagesDto', () => {
 
     it('should reject invalid style', async () => {
       const dto = createValidDto();
-      dto.style = 'artistic' as any;
+      dto.style = 'artistic' as unknown as typeof dto.style;
 
       const errors = await validateDto(dto);
 
@@ -433,7 +439,7 @@ describe('CreateImagesDto', () => {
 
     it('should reject invalid format', async () => {
       const dto = createValidDto();
-      dto.response_format = 'json' as any;
+      dto.response_format = 'json' as unknown as typeof dto.response_format;
 
       const errors = await validateDto(dto);
 

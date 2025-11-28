@@ -1,20 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
 import { OpenAIFilesService } from './openai-files.service';
+import { OPENAI_CLIENT } from '../providers/openai-client.provider';
 import { LoggerService } from '../../common/services/logger.service';
 import type { Files } from 'openai/resources/files';
 
-// Mock OpenAI client
-const mockOpenAIClient = {
-  files: {
-    create: jest.fn(),
-    retrieve: jest.fn(),
-    list: jest.fn(),
-    delete: jest.fn(),
-    content: jest.fn(),
-  },
-};
-
+// Mock toFile function
 jest.mock('openai', () => {
   const mockToFile = jest.fn((buffer: Buffer, filename: string) => {
     return Promise.resolve({ buffer, filename });
@@ -22,15 +12,25 @@ jest.mock('openai', () => {
 
   return {
     __esModule: true,
-    default: jest.fn().mockImplementation(() => mockOpenAIClient),
     toFile: mockToFile,
   };
 });
 
 describe('OpenAIFilesService', () => {
   let service: OpenAIFilesService;
-  let configService: ConfigService;
   let loggerService: LoggerService;
+  let logOpenAIInteractionSpy: jest.SpyInstance;
+
+  // Mock OpenAI client (singleton provider pattern)
+  const mockOpenAIClient = {
+    files: {
+      create: jest.fn(),
+      retrieve: jest.fn(),
+      list: jest.fn(),
+      delete: jest.fn(),
+      content: jest.fn(),
+    },
+  };
 
   const mockFile: Files.FileObject = {
     id: 'file-abc123xyz789',
@@ -40,8 +40,8 @@ describe('OpenAIFilesService', () => {
     filename: 'test-document.pdf',
     purpose: 'assistants',
     status: 'uploaded',
-    status_details: null,
-    expires_at: null,
+    status_details: undefined,
+    expires_at: undefined,
   };
 
   const mockProcessedFile: Files.FileObject = {
@@ -65,18 +65,8 @@ describe('OpenAIFilesService', () => {
       providers: [
         OpenAIFilesService,
         {
-          provide: ConfigService,
-          useValue: {
-            get: jest.fn((key: string) => {
-              const config: Record<string, unknown> = {
-                'openai.apiKey': 'test-api-key',
-                'openai.baseUrl': 'https://api.openai.com/v1',
-                'openai.timeout': 60000,
-                'openai.maxRetries': 3,
-              };
-              return config[key];
-            }),
-          },
+          provide: OPENAI_CLIENT,
+          useValue: mockOpenAIClient,
         },
         {
           provide: LoggerService,
@@ -88,8 +78,10 @@ describe('OpenAIFilesService', () => {
     }).compile();
 
     service = module.get<OpenAIFilesService>(OpenAIFilesService);
-    configService = module.get<ConfigService>(ConfigService);
     loggerService = module.get<LoggerService>(LoggerService);
+
+    // Create spy for logOpenAIInteraction
+    logOpenAIInteractionSpy = jest.spyOn(loggerService, 'logOpenAIInteraction');
 
     // Reset all mocks before each test
     jest.clearAllMocks();
@@ -97,26 +89,6 @@ describe('OpenAIFilesService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
-  });
-
-  describe('constructor', () => {
-    it('should throw error if API key is not configured', () => {
-      jest.spyOn(configService, 'get').mockReturnValue(undefined);
-      expect(() => {
-        new OpenAIFilesService(configService, loggerService);
-      }).toThrow('OpenAI API key is not configured');
-    });
-
-    it('should initialize OpenAI client with correct config', () => {
-      const getSpy = jest.spyOn(configService, 'get');
-
-      new OpenAIFilesService(configService, loggerService);
-
-      expect(getSpy).toHaveBeenCalledWith('openai.apiKey');
-      expect(getSpy).toHaveBeenCalledWith('openai.baseUrl');
-      expect(getSpy).toHaveBeenCalledWith('openai.timeout');
-      expect(getSpy).toHaveBeenCalledWith('openai.maxRetries');
-    });
   });
 
   describe('uploadFile', () => {
@@ -146,7 +118,7 @@ describe('OpenAIFilesService', () => {
         }),
       );
       expect(result).toEqual(mockFileWithExpiration);
-      expect(loggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+      expect(logOpenAIInteractionSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           api: 'files',
           endpoint: '/v1/files',
@@ -155,9 +127,9 @@ describe('OpenAIFilesService', () => {
             purpose,
             bytes: fileBuffer.length,
             expires_after: expiresAfter,
-          }),
+          }) as Record<string, unknown>,
           response: mockFileWithExpiration,
-        }),
+        }) as Record<string, unknown>,
       );
     });
 
@@ -218,18 +190,18 @@ describe('OpenAIFilesService', () => {
 
       await service.uploadFile(fileBuffer, filename, purpose);
 
-      expect(loggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+      expect(logOpenAIInteractionSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           metadata: expect.objectContaining({
-            latency_ms: expect.any(Number),
+            latency_ms: expect.any(Number) as number,
             file_id: 'file-abc123xyz789',
             filename: 'test-document.pdf',
             bytes: 1024,
             purpose: 'assistants',
             status: 'uploaded',
             created_at: 1234567890,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -265,12 +237,12 @@ describe('OpenAIFilesService', () => {
 
       await service.uploadFile(fileBuffer, specialName, purpose);
 
-      expect(loggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+      expect(logOpenAIInteractionSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           request: expect.objectContaining({
             filename: specialName,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -624,8 +596,8 @@ describe('OpenAIFilesService', () => {
         filename: 'test-document.pdf',
         purpose: 'assistants',
         status: 'uploaded',
-        status_details: null,
-        expires_at: null,
+        status_details: undefined,
+        expires_at: undefined,
       });
     });
 
@@ -649,21 +621,24 @@ describe('OpenAIFilesService', () => {
     });
 
     it('should extract vision file metadata', () => {
-      const visionFile = { ...mockFile, purpose: 'vision' };
+      const visionFile: Files.FileObject = { ...mockFile, purpose: 'vision' };
       const metadata = service.extractFileMetadata(visionFile);
 
       expect(metadata.purpose).toBe('vision');
     });
 
     it('should extract batch file metadata', () => {
-      const batchFile = { ...mockFile, purpose: 'batch' };
+      const batchFile: Files.FileObject = { ...mockFile, purpose: 'batch' };
       const metadata = service.extractFileMetadata(batchFile);
 
       expect(metadata.purpose).toBe('batch');
     });
 
     it('should extract fine-tune file metadata', () => {
-      const fineTuneFile = { ...mockFile, purpose: 'fine-tune' };
+      const fineTuneFile: Files.FileObject = {
+        ...mockFile,
+        purpose: 'fine-tune',
+      };
       const metadata = service.extractFileMetadata(fineTuneFile);
 
       expect(metadata.purpose).toBe('fine-tune');

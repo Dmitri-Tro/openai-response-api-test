@@ -111,9 +111,7 @@ export const OPENAI_CONFIG = {
  * @param type - Timeout type
  * @returns Timeout value in milliseconds
  */
-export function getTestTimeout(
-  type: keyof typeof TEST_TIMEOUTS,
-): number {
+export function getTestTimeout(type: keyof typeof TEST_TIMEOUTS): number {
   return TEST_TIMEOUTS[type];
 }
 
@@ -122,9 +120,7 @@ export function getTestTimeout(
  * @param type - Polling config type
  * @returns Config value in milliseconds
  */
-export function getPollingConfig(
-  type: keyof typeof POLLING_CONFIG,
-): number {
+export function getPollingConfig(type: keyof typeof POLLING_CONFIG): number {
   return POLLING_CONFIG[type];
 }
 
@@ -133,8 +129,6 @@ export function getPollingConfig(
  * @param type - OpenAI config type
  * @returns Config value in milliseconds
  */
-export function getOpenAIConfig(
-  type: keyof typeof OPENAI_CONFIG,
-): number {
+export function getOpenAIConfig(type: keyof typeof OPENAI_CONFIG): number {
   return OPENAI_CONFIG[type];
 }

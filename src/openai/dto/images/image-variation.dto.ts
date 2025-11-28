@@ -7,6 +7,7 @@ import {
   Min,
   Max,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import type { ImageModel } from '../../interfaces/images';
 
 /**
@@ -84,6 +85,7 @@ export class ImageVariationDto {
     example: 3,
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(1, { message: 'n must be at least 1' })
   @Max(10, { message: 'n must not exceed 10' })

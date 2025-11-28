@@ -1,4 +1,4 @@
-import { validate } from 'class-validator';
+import { validate, ValidationArguments } from 'class-validator';
 import { IsVideoSizeConstraint } from './video-size.validator';
 import { CreateVideoDto } from '../dto/create-video.dto';
 
@@ -126,7 +126,7 @@ describe('IsVideoSizeConstraint', () => {
     it('should return appropriate message for non-string type', () => {
       const message = validator.defaultMessage({
         value: 1280,
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('must be a string');
       expect(message).toContain('WIDTHxHEIGHT');
@@ -136,7 +136,7 @@ describe('IsVideoSizeConstraint', () => {
     it('should return appropriate message for unsupported valid-format size', () => {
       const message = validator.defaultMessage({
         value: '1920x1080',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('not supported');
       expect(message).toContain('720x1280');
@@ -148,7 +148,7 @@ describe('IsVideoSizeConstraint', () => {
     it('should return appropriate message for malformed string', () => {
       const message = validator.defaultMessage({
         value: 'invalid-size',
-      } as any);
+      } as ValidationArguments);
 
       expect(message).toContain('Invalid video size format');
       expect(message).toContain('WIDTHxHEIGHT');
@@ -204,7 +204,7 @@ describe('IsVideoSizeConstraint', () => {
     it('should reject invalid size in DTO', async () => {
       const dto = new CreateVideoDto();
       dto.prompt = 'Test video';
-      dto.size = '1920x1080' as any;
+      dto.size = '1920x1080' as unknown as typeof dto.size;
 
       const errors = await validate(dto);
       const sizeErrors = errors.filter((e) => e.property === 'size');

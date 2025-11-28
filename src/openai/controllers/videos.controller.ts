@@ -6,8 +6,6 @@ import {
   Delete,
   Param,
   Query,
-  UseFilters,
-  UseInterceptors,
   Res,
   HttpCode,
   HttpStatus,
@@ -18,14 +16,13 @@ import {
   ApiResponse,
   ApiQuery,
   ApiParam,
+  ApiBody,
 } from '@nestjs/swagger';
+import { streamBinaryResponse } from '../../common/mixins/binary-streaming.mixin';
 import type { Response } from 'express';
 import type { Videos } from 'openai/resources/videos';
 import { OpenAIVideosService } from '../services/openai-videos.service';
 import { CreateVideoDto } from '../dto/create-video.dto';
-import { LoggingInterceptor } from '../../common/interceptors/logging.interceptor';
-import { RetryInterceptor } from '../../common/interceptors/retry.interceptor';
-import { OpenAIExceptionFilter } from '../../common/filters/openai-exception.filter';
 
 /**
  * Controller for OpenAI Videos API
@@ -33,8 +30,6 @@ import { OpenAIExceptionFilter } from '../../common/filters/openai-exception.fil
  */
 @ApiTags('Videos API')
 @Controller('api/videos')
-@UseInterceptors(RetryInterceptor, LoggingInterceptor)
-@UseFilters(OpenAIExceptionFilter)
 export class VideosController {
   constructor(private readonly videosService: OpenAIVideosService) {}
 
@@ -49,6 +44,47 @@ export class VideosController {
     description:
       'Submit a video generation request to OpenAI Videos API. Returns immediately with status: queued. ' +
       'Use GET /api/videos/:id to check status or GET /api/videos/:id/poll to wait for completion.',
+  })
+  @ApiBody({
+    description: 'Video generation parameters',
+    schema: {
+      type: 'object',
+      required: ['prompt'],
+      properties: {
+        prompt: {
+          type: 'string',
+          description:
+            'Text description of the video to generate. Max 500 chars.',
+          example:
+            'A serene mountain landscape at sunset with birds flying over a lake',
+          maxLength: 500,
+        },
+        model: {
+          type: 'string',
+          enum: ['sora-2', 'sora-2-pro'],
+          description:
+            'Video generation model. sora-2 (standard), sora-2-pro (professional).',
+          default: 'sora-2',
+          example: 'sora-2',
+        },
+        seconds: {
+          type: 'string',
+          enum: ['4', '8', '12'],
+          description:
+            'Duration in seconds (as string). "4", "8", or "12". Cost scales with duration.',
+          default: '4',
+          example: '4',
+        },
+        size: {
+          type: 'string',
+          enum: ['720x1280', '1280x720', '1024x1792', '1792x1024'],
+          description:
+            'Output resolution. Portrait (9:16) or Landscape (16:9).',
+          default: '720x1280',
+          example: '720x1280',
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 201,
@@ -172,22 +208,13 @@ export class VideosController {
     const contentType = variant === 'video' ? 'video/mp4' : 'image/jpeg';
     const extension = variant === 'video' ? 'mp4' : 'jpg';
 
-    res.setHeader('Content-Type', contentType);
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${id}.${extension}"`,
+    // Stream OpenAI response body to client using shared mixin
+    await streamBinaryResponse(
+      response,
+      res,
+      contentType,
+      `${id}.${extension}`,
     );
-
-    // Stream OpenAI response body to client
-    if (response.body) {
-      const reader = response.body.getReader();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        res.write(value);
-      }
-    }
-    res.end();
   }
 
   /**

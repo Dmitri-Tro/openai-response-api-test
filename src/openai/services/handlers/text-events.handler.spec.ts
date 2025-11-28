@@ -10,6 +10,30 @@ import {
   createMockStreamState,
 } from '../../../common/testing/test.factories';
 
+// Test data interfaces
+interface TextDeltaData {
+  delta: string;
+  sequence: number;
+}
+
+interface TextDoneData {
+  output_text: string;
+  sequence: number;
+}
+
+interface TextAnnotationData {
+  annotation: Record<string, unknown>;
+  sequence: number;
+}
+
+interface LogprobsData {
+  logprobs?: Record<string, unknown>;
+  content_index?: number;
+  item_id?: string;
+  output_index?: number;
+  sequence: number;
+}
+
 describe('TextEventsHandler', () => {
   let handler: TextEventsHandler;
   let mockLoggerService: jest.Mocked<LoggerService>;
@@ -83,7 +107,7 @@ describe('TextEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'text_delta',
@@ -126,7 +150,7 @@ describe('TextEventsHandler', () => {
 
       expect(results).toHaveLength(1);
       // JSON.stringify should properly escape special characters
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as TextDeltaData;
       expect(data.delta).toBe('{"key": "value"}\n\t');
       expect(mockState.fullText).toBe('{"key": "value"}\n\t');
     });
@@ -139,7 +163,7 @@ describe('TextEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as TextDeltaData;
       expect(data.delta).toBe('你好世界 🌍');
       expect(mockState.fullText).toBe('你好世界 🌍');
     });
@@ -158,7 +182,7 @@ describe('TextEventsHandler', () => {
       expect(results[0].event).toBe('text_done');
       expect(results[0].sequence).toBe(10);
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as TextDoneData;
       expect(data).toEqual({
         output_text: 'Complete response text',
         sequence: 10,
@@ -175,21 +199,22 @@ describe('TextEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'text_done',
         sequence: 10,
         response: { output_text: 'Response' },
         metadata: {
-          latency_ms: expect.any(Number),
+          latency_ms: expect.any(Number) as number,
         },
       });
 
       // Verify latency is approximately 2500ms (with some tolerance)
-      const logCall = mockLoggerService.logStreamingEvent.mock.calls[0][0];
-      const latency = (logCall as { metadata?: { latency_ms?: number } })
-        .metadata?.latency_ms;
+      const logCall = mockLoggerService.logStreamingEvent.mock.calls[0][0] as {
+        metadata?: { latency_ms?: number };
+      };
+      const latency = logCall.metadata?.latency_ms;
       expect(latency).toBeGreaterThanOrEqual(2400);
       expect(latency).toBeLessThanOrEqual(2600);
     });
@@ -203,13 +228,13 @@ describe('TextEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'text_done',
         sequence: 15,
         response: { output_text: 'Final text' },
-        metadata: { latency_ms: expect.any(Number) },
+        metadata: { latency_ms: expect.any(Number) as number },
       });
     });
 
@@ -222,7 +247,7 @@ describe('TextEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as TextDoneData;
       expect(data.output_text).toBe('');
     });
 
@@ -236,7 +261,7 @@ describe('TextEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as TextDoneData;
       expect(data.output_text).toBe(longText);
       expect(data.output_text.length).toBe(10000);
     });
@@ -294,7 +319,7 @@ describe('TextEventsHandler', () => {
       Array.from(generator);
 
       expect(mockLoggerService.logStreamingEvent).toHaveBeenCalledWith({
-        timestamp: expect.any(String),
+        timestamp: expect.any(String) as string,
         api: 'responses',
         endpoint: '/v1/responses (stream)',
         event_type: 'text_annotation',
@@ -320,7 +345,7 @@ describe('TextEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as TextAnnotationData;
       expect(data.annotation).toBeUndefined();
     });
 
@@ -347,7 +372,7 @@ describe('TextEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as TextAnnotationData;
       expect(data.annotation).toEqual(event.annotation);
     });
   });
@@ -399,7 +424,7 @@ describe('TextEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as TextDoneData;
       expect(data.output_text).toBe('');
     });
 
@@ -416,7 +441,7 @@ describe('TextEventsHandler', () => {
       expect(mockState.fullText).toBe('Existing text. New content.');
 
       const doneResults = Array.from(handler.handleTextDone({}, mockState, 3));
-      const data = JSON.parse(doneResults[0].data);
+      const data = JSON.parse(doneResults[0].data) as TextDoneData;
       expect(data.output_text).toBe('Existing text. New content.');
     });
   });
@@ -435,7 +460,7 @@ describe('TextEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as LogprobsData;
       expect(data.logprobs).toEqual(event.logprobs);
     });
 
@@ -452,7 +477,7 @@ describe('TextEventsHandler', () => {
       const results: SSEEvent[] = Array.from(generator);
 
       expect(results).toHaveLength(1);
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as LogprobsData;
       expect(data.logprobs).toEqual(event.logprobs);
     });
 
@@ -478,7 +503,7 @@ describe('TextEventsHandler', () => {
       const generator = handler.handleTextDelta(event, mockState, 1);
       const results: SSEEvent[] = Array.from(generator);
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as LogprobsData;
       expect(data.logprobs).toBeUndefined();
     });
   });
@@ -493,7 +518,7 @@ describe('TextEventsHandler', () => {
       const generator = handler.handleTextDelta(event, mockState, 1);
       const results: SSEEvent[] = Array.from(generator);
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as LogprobsData;
       expect(data.content_index).toBe(0);
     });
 
@@ -506,7 +531,7 @@ describe('TextEventsHandler', () => {
       const generator = handler.handleTextDelta(event, mockState, 1);
       const results: SSEEvent[] = Array.from(generator);
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as LogprobsData;
       expect(data.item_id).toBe('item_abc123');
     });
 
@@ -519,7 +544,7 @@ describe('TextEventsHandler', () => {
       const generator = handler.handleTextDelta(event, mockState, 1);
       const results: SSEEvent[] = Array.from(generator);
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as LogprobsData;
       expect(data.output_index).toBe(2);
     });
 
@@ -535,7 +560,7 @@ describe('TextEventsHandler', () => {
       const generator = handler.handleTextDelta(event, mockState, 1);
       const results: SSEEvent[] = Array.from(generator);
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as LogprobsData;
       expect(data.logprobs).toEqual(event.logprobs);
       expect(data.content_index).toBe(1);
       expect(data.item_id).toBe('item_xyz');
@@ -554,7 +579,7 @@ describe('TextEventsHandler', () => {
       const generator = handler.handleTextDone(event, mockState, 5);
       const results: SSEEvent[] = Array.from(generator);
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as LogprobsData;
       expect(data.logprobs).toEqual(event.logprobs);
       expect(data.content_index).toBe(0);
       expect(data.item_id).toBe('item_final');
@@ -593,7 +618,7 @@ describe('TextEventsHandler', () => {
       const generator = handler.handleTextDelta(event, mockState, 1);
       const results: SSEEvent[] = Array.from(generator);
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as LogprobsData;
       expect(data.content_index).toBe(0);
       expect(data).toHaveProperty('content_index');
     });
@@ -607,7 +632,7 @@ describe('TextEventsHandler', () => {
       const generator = handler.handleTextDelta(event, mockState, 1);
       const results: SSEEvent[] = Array.from(generator);
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as LogprobsData;
       expect(data.output_index).toBe(0);
       expect(data).toHaveProperty('output_index');
     });
@@ -618,7 +643,7 @@ describe('TextEventsHandler', () => {
       const generator = handler.handleTextDelta(event, mockState, 1);
       const results: SSEEvent[] = Array.from(generator);
 
-      const data = JSON.parse(results[0].data);
+      const data = JSON.parse(results[0].data) as LogprobsData;
       expect(data.logprobs).toBeUndefined();
       expect(data.content_index).toBeUndefined();
       expect(data.item_id).toBeUndefined();
@@ -720,7 +745,7 @@ describe('TextEventsHandler', () => {
         const results: SSEEvent[] = Array.from(generator);
 
         expect(results).toHaveLength(1);
-        const data = JSON.parse(results[0].data);
+        const data = JSON.parse(results[0].data) as TextDoneData;
         // Should fallback to state.fullText
         expect(data.output_text).toBe('existing text');
       });
@@ -734,7 +759,7 @@ describe('TextEventsHandler', () => {
         const results: SSEEvent[] = Array.from(generator);
 
         expect(results).toHaveLength(1);
-        const data = JSON.parse(results[0].data);
+        const data = JSON.parse(results[0].data) as TextDoneData;
         expect(data.output_text).toBe('fallback text');
       });
 
@@ -747,7 +772,7 @@ describe('TextEventsHandler', () => {
         const results: SSEEvent[] = Array.from(generator);
 
         expect(results).toHaveLength(1);
-        const data = JSON.parse(results[0].data);
+        const data = JSON.parse(results[0].data) as TextDoneData;
         expect(data.output_text).toBe('state text');
       });
 
@@ -760,7 +785,7 @@ describe('TextEventsHandler', () => {
         const results: SSEEvent[] = Array.from(generator);
 
         expect(results).toHaveLength(1);
-        const data = JSON.parse(results[0].data);
+        const data = JSON.parse(results[0].data) as TextDoneData;
         // JavaScript coerces number to string - number is truthy so || doesn't trigger
         expect(data.output_text).toBe(12345);
       });
@@ -779,7 +804,7 @@ describe('TextEventsHandler', () => {
         const results: SSEEvent[] = Array.from(generator);
 
         expect(results).toHaveLength(1);
-        const data = JSON.parse(results[0].data);
+        const data = JSON.parse(results[0].data) as TextAnnotationData;
         expect(data.annotation).toBeUndefined();
       });
 
@@ -795,7 +820,7 @@ describe('TextEventsHandler', () => {
         const results: SSEEvent[] = Array.from(generator);
 
         expect(results).toHaveLength(1);
-        const data = JSON.parse(results[0].data);
+        const data = JSON.parse(results[0].data) as TextAnnotationData;
         expect(data.annotation).toBeUndefined();
       });
 
@@ -853,7 +878,7 @@ describe('TextEventsHandler', () => {
 
         expect(results).toHaveLength(1);
         expect(mockState.fullText).toBe('你好世界 🌍 مرحبا בעולם');
-        const data = JSON.parse(results[0].data);
+        const data = JSON.parse(results[0].data) as TextDeltaData;
         expect(data.delta).toBe('你好世界 🌍 مرحبا בעולם');
       });
 
@@ -888,7 +913,9 @@ describe('TextEventsHandler', () => {
 
         expect(results).toHaveLength(1);
         // Should be properly serialized in SSE data
-        expect(() => JSON.parse(results[0].data)).not.toThrow();
+        expect(
+          () => JSON.parse(results[0].data) as TextDeltaData,
+        ).not.toThrow();
       });
     });
 
@@ -948,7 +975,7 @@ describe('TextEventsHandler', () => {
         const results: SSEEvent[] = Array.from(generator);
 
         expect(results).toHaveLength(1);
-        const data = JSON.parse(results[0].data);
+        const data = JSON.parse(results[0].data) as LogprobsData;
         expect(data.logprobs).toEqual(event.logprobs);
       });
 
@@ -968,7 +995,7 @@ describe('TextEventsHandler', () => {
         const results: SSEEvent[] = Array.from(generator);
 
         expect(results).toHaveLength(1);
-        const data = JSON.parse(results[0].data);
+        const data = JSON.parse(results[0].data) as LogprobsData;
         expect(data.logprobs).toHaveLength(100);
       });
     });

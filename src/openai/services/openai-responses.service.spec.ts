@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import type { Responses } from 'openai/resources/responses';
 import { OpenAIResponsesService } from './openai-responses.service';
+import { OPENAI_CLIENT } from '../providers/openai-client.provider';
 import { LoggerService } from '../../common/services/logger.service';
 import { PricingService } from '../../common/services/pricing.service';
 import { CreateTextResponseDto } from '../dto/create-text-response.dto';
@@ -16,20 +17,19 @@ import { AudioEventsHandler } from './handlers/audio-events.handler';
 import { MCPEventsHandler } from './handlers/mcp-events.handler';
 import { RefusalEventsHandler } from './handlers/refusal-events.handler';
 import { StructuralEventsHandler } from './handlers/structural-events.handler';
+import { ComputerUseEventsHandler } from './handlers/computer-use-events.handler';
 import {
   createMockConfigService,
   createMockLoggerService,
   createMockOpenAIClient,
   createMockOpenAIResponse,
   createOpenAIError,
-  injectMockOpenAIClient,
 } from '../../common/testing/test.factories';
 
 describe('OpenAIResponsesService', () => {
   let service: OpenAIResponsesService;
   let mockConfigService: jest.Mocked<ConfigService>;
   let mockLoggerService: jest.Mocked<LoggerService>;
-  let pricingService: PricingService;
   let mockOpenAIClient: jest.Mocked<OpenAI>;
 
   // Mock event handlers
@@ -42,6 +42,7 @@ describe('OpenAIResponsesService', () => {
   let mockMCPHandler: jest.Mocked<MCPEventsHandler>;
   let mockRefusalHandler: jest.Mocked<RefusalEventsHandler>;
   let mockStructuralHandler: jest.Mocked<StructuralEventsHandler>;
+  let mockComputerUseHandler: jest.Mocked<ComputerUseEventsHandler>;
 
   beforeEach(async () => {
     // Mock services using factories
@@ -70,10 +71,18 @@ describe('OpenAIResponsesService', () => {
     mockMCPHandler = {} as jest.Mocked<MCPEventsHandler>;
     mockRefusalHandler = {} as jest.Mocked<RefusalEventsHandler>;
     mockStructuralHandler = {} as jest.Mocked<StructuralEventsHandler>;
+    mockComputerUseHandler = {} as jest.Mocked<ComputerUseEventsHandler>;
+
+    // Mock OpenAI client (singleton provider pattern)
+    mockOpenAIClient = createMockOpenAIClient();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OpenAIResponsesService,
+        {
+          provide: OPENAI_CLIENT,
+          useValue: mockOpenAIClient,
+        },
         {
           provide: ConfigService,
           useValue: mockConfigService,
@@ -119,15 +128,14 @@ describe('OpenAIResponsesService', () => {
           provide: StructuralEventsHandler,
           useValue: mockStructuralHandler,
         },
+        {
+          provide: ComputerUseEventsHandler,
+          useValue: mockComputerUseHandler,
+        },
       ],
     }).compile();
 
     service = module.get<OpenAIResponsesService>(OpenAIResponsesService);
-    pricingService = module.get<PricingService>(PricingService);
-
-    // Mock the OpenAI client using factory and helper
-    mockOpenAIClient = createMockOpenAIClient();
-    injectMockOpenAIClient(service, mockOpenAIClient);
   });
 
   afterEach(() => {
@@ -144,7 +152,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_123',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Hello! How can I help you today?',
@@ -152,12 +160,24 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 10,
           output_tokens: 20,
           total_tokens: 30,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       const result = await service.createTextResponse(dto);
 
@@ -174,10 +194,10 @@ describe('OpenAIResponsesService', () => {
           api: 'responses',
           endpoint: '/v1/responses',
           metadata: expect.objectContaining({
-            latency_ms: expect.any(Number),
+            latency_ms: expect.any(Number) as number,
             tokens_used: 30,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -187,23 +207,21 @@ describe('OpenAIResponsesService', () => {
         instructions: 'You are a helpful assistant',
       };
 
-      const mockResponse: Responses.Response = {
+      const mockResponse: Responses.Response = createMockOpenAIResponse({
         id: 'resp_456',
-        object: 'response',
-        created: 1234567890,
-        model: 'gpt-5',
-        status: 'completed',
         output_text: 'Response text',
         usage: {
           input_tokens: 5,
           output_tokens: 10,
           total_tokens: 15,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
-      };
+      });
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -224,7 +242,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_789',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Response',
@@ -232,12 +250,24 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 1,
           output_tokens: 2,
           total_tokens: 3,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -257,7 +287,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_cache',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Response',
@@ -268,11 +298,23 @@ describe('OpenAIResponsesService', () => {
           input_tokens_details: {
             cached_tokens: 80,
           },
-          output_tokens_details: {},
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -280,8 +322,8 @@ describe('OpenAIResponsesService', () => {
         expect.objectContaining({
           metadata: expect.objectContaining({
             cached_tokens: 80,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -294,7 +336,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_reasoning',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'o1',
         status: 'completed',
         output_text: 'Response',
@@ -302,14 +344,26 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 50,
           output_tokens: 100,
           total_tokens: 150,
-          input_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
           output_tokens_details: {
             reasoning_tokens: 75,
           },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -317,8 +371,8 @@ describe('OpenAIResponsesService', () => {
         expect.objectContaining({
           metadata: expect.objectContaining({
             reasoning_tokens: 75,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -336,7 +390,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_opt',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Response',
@@ -344,12 +398,24 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 10,
           output_tokens: 20,
           total_tokens: 30,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -371,7 +437,9 @@ describe('OpenAIResponsesService', () => {
       };
 
       const mockError = new Error('API Error');
-      mockOpenAIClient.responses.create.mockRejectedValue(mockError);
+      (mockOpenAIClient.responses.create as jest.Mock).mockRejectedValue(
+        mockError,
+      );
 
       await expect(service.createTextResponse(dto)).rejects.toThrow(
         'API Error',
@@ -384,8 +452,8 @@ describe('OpenAIResponsesService', () => {
           error: expect.objectContaining({
             message: 'API Error',
             original_error: mockError,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -397,7 +465,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_default',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Response',
@@ -405,12 +473,24 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 10,
           output_tokens: 20,
           total_tokens: 30,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -431,7 +511,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_img_123',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'base64encodedimagedata',
@@ -439,12 +519,24 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 5,
           output_tokens: 0,
           total_tokens: 5,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       const result = await service.createImageResponse(dto);
 
@@ -457,8 +549,8 @@ describe('OpenAIResponsesService', () => {
           tools: expect.arrayContaining([
             expect.objectContaining({
               type: 'image_generation',
-            }),
-          ]),
+            }) as Record<string, unknown>,
+          ]) as unknown[],
         }),
       );
     });
@@ -480,7 +572,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_img_params',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'base64image',
@@ -488,16 +580,31 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 10,
           output_tokens: 0,
           total_tokens: 10,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createImageResponse(dto);
 
-      const createCall = mockOpenAIClient.responses.create.mock.calls[0][0];
+      const createCall = (
+        (mockOpenAIClient.responses.create as jest.Mock).mock
+          .calls as unknown[][]
+      )[0][0] as Record<string, unknown>;
       const tools = createCall.tools as Array<Record<string, unknown>>;
       const imageGenTool = tools?.find(
         (t) => t.type === 'image_generation',
@@ -518,14 +625,13 @@ describe('OpenAIResponsesService', () => {
     it('should combine user tools with image_generation tool', async () => {
       const userTool: Responses.Tool = {
         type: 'function',
-        function: {
-          name: 'custom_function',
-          description: 'Custom function',
-          parameters: {
-            type: 'object',
-            properties: {},
-          },
+        name: 'custom_function',
+        description: 'Custom function',
+        parameters: {
+          type: 'object',
+          properties: {},
         },
+        strict: null,
       };
 
       const dto: CreateImageResponseDto = {
@@ -536,7 +642,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_tools',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'base64',
@@ -544,16 +650,31 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 5,
           output_tokens: 0,
           total_tokens: 5,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createImageResponse(dto);
 
-      const createCall = mockOpenAIClient.responses.create.mock.calls[0][0];
+      const createCall = (
+        (mockOpenAIClient.responses.create as jest.Mock).mock
+          .calls as unknown[][]
+      )[0][0] as Record<string, unknown>;
       expect(createCall.tools).toHaveLength(2);
       expect(createCall.tools).toContainEqual(userTool);
     });
@@ -564,7 +685,9 @@ describe('OpenAIResponsesService', () => {
       };
 
       const mockError = new Error('Image generation failed');
-      mockOpenAIClient.responses.create.mockRejectedValue(mockError);
+      (mockOpenAIClient.responses.create as jest.Mock).mockRejectedValue(
+        mockError,
+      );
 
       await expect(service.createImageResponse(dto)).rejects.toThrow(
         'Image generation failed',
@@ -575,8 +698,8 @@ describe('OpenAIResponsesService', () => {
           endpoint: '/v1/responses (gpt-image-1)',
           error: expect.objectContaining({
             message: 'Image generation failed',
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -597,7 +720,7 @@ describe('OpenAIResponsesService', () => {
         const mockResponse: Responses.Response = {
           id: `resp_${quality}`,
           object: 'response',
-          created: 1234567890,
+          created_at: 1234567890,
           model: 'gpt-5',
           status: 'completed',
           output_text: 'image',
@@ -605,18 +728,32 @@ describe('OpenAIResponsesService', () => {
             input_tokens: 1,
             output_tokens: 0,
             total_tokens: 1,
-            input_tokens_details: {},
-            output_tokens_details: {},
+            input_tokens_details: { cached_tokens: 0 },
+            output_tokens_details: { reasoning_tokens: 0 },
           },
+          error: null,
+          incomplete_details: null,
+          instructions: null,
+          metadata: null,
+          output: [],
+          parallel_tool_calls: false,
+          temperature: null,
+          tool_choice: 'auto',
+          tools: [],
+          top_p: null,
         };
 
-        mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+        (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+          mockResponse,
+        );
         await service.createImageResponse(dto);
 
-        const createCall =
-          mockOpenAIClient.responses.create.mock.calls[
-            mockOpenAIClient.responses.create.mock.calls.length - 1
-          ][0];
+        const mockCalls = (mockOpenAIClient.responses.create as jest.Mock).mock
+          .calls as unknown[][];
+        const createCall = mockCalls[mockCalls.length - 1][0] as Record<
+          string,
+          unknown
+        >;
         const tools = createCall.tools as Array<Record<string, unknown>>;
         const imageGenTool = tools?.find(
           (t) => t.type === 'image_generation',
@@ -638,7 +775,7 @@ describe('OpenAIResponsesService', () => {
         const mockResponse: Responses.Response = {
           id: `resp_${format}`,
           object: 'response',
-          created: 1234567890,
+          created_at: 1234567890,
           model: 'gpt-5',
           status: 'completed',
           output_text: 'image',
@@ -646,18 +783,32 @@ describe('OpenAIResponsesService', () => {
             input_tokens: 1,
             output_tokens: 0,
             total_tokens: 1,
-            input_tokens_details: {},
-            output_tokens_details: {},
+            input_tokens_details: { cached_tokens: 0 },
+            output_tokens_details: { reasoning_tokens: 0 },
           },
+          error: null,
+          incomplete_details: null,
+          instructions: null,
+          metadata: null,
+          output: [],
+          parallel_tool_calls: false,
+          temperature: null,
+          tool_choice: 'auto',
+          tools: [],
+          top_p: null,
         };
 
-        mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+        (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+          mockResponse,
+        );
         await service.createImageResponse(dto);
 
-        const createCall =
-          mockOpenAIClient.responses.create.mock.calls[
-            mockOpenAIClient.responses.create.mock.calls.length - 1
-          ][0];
+        const mockCalls = (mockOpenAIClient.responses.create as jest.Mock).mock
+          .calls as unknown[][];
+        const createCall = mockCalls[mockCalls.length - 1][0] as Record<
+          string,
+          unknown
+        >;
         const tools = createCall.tools as Array<Record<string, unknown>>;
         const imageGenTool = tools?.find(
           (t) => t.type === 'image_generation',
@@ -679,7 +830,7 @@ describe('OpenAIResponsesService', () => {
         const mockResponse: Responses.Response = {
           id: `resp_comp_${compression}`,
           object: 'response',
-          created: 1234567890,
+          created_at: 1234567890,
           model: 'gpt-5',
           status: 'completed',
           output_text: 'image',
@@ -687,18 +838,32 @@ describe('OpenAIResponsesService', () => {
             input_tokens: 1,
             output_tokens: 0,
             total_tokens: 1,
-            input_tokens_details: {},
-            output_tokens_details: {},
+            input_tokens_details: { cached_tokens: 0 },
+            output_tokens_details: { reasoning_tokens: 0 },
           },
+          error: null,
+          incomplete_details: null,
+          instructions: null,
+          metadata: null,
+          output: [],
+          parallel_tool_calls: false,
+          temperature: null,
+          tool_choice: 'auto',
+          tools: [],
+          top_p: null,
         };
 
-        mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+        (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+          mockResponse,
+        );
         await service.createImageResponse(dto);
 
-        const createCall =
-          mockOpenAIClient.responses.create.mock.calls[
-            mockOpenAIClient.responses.create.mock.calls.length - 1
-          ][0];
+        const mockCalls = (mockOpenAIClient.responses.create as jest.Mock).mock
+          .calls as unknown[][];
+        const createCall = mockCalls[mockCalls.length - 1][0] as Record<
+          string,
+          unknown
+        >;
         const tools = createCall.tools as Array<Record<string, unknown>>;
         const imageGenTool = tools?.find(
           (t) => t.type === 'image_generation',
@@ -720,7 +885,7 @@ describe('OpenAIResponsesService', () => {
         const mockResponse: Responses.Response = {
           id: `resp_partial_${partial}`,
           object: 'response',
-          created: 1234567890,
+          created_at: 1234567890,
           model: 'gpt-5',
           status: 'completed',
           output_text: 'image',
@@ -728,18 +893,32 @@ describe('OpenAIResponsesService', () => {
             input_tokens: 1,
             output_tokens: 0,
             total_tokens: 1,
-            input_tokens_details: {},
-            output_tokens_details: {},
+            input_tokens_details: { cached_tokens: 0 },
+            output_tokens_details: { reasoning_tokens: 0 },
           },
+          error: null,
+          incomplete_details: null,
+          instructions: null,
+          metadata: null,
+          output: [],
+          parallel_tool_calls: false,
+          temperature: null,
+          tool_choice: 'auto',
+          tools: [],
+          top_p: null,
         };
 
-        mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+        (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+          mockResponse,
+        );
         await service.createImageResponse(dto);
 
-        const createCall =
-          mockOpenAIClient.responses.create.mock.calls[
-            mockOpenAIClient.responses.create.mock.calls.length - 1
-          ][0];
+        const mockCalls = (mockOpenAIClient.responses.create as jest.Mock).mock
+          .calls as unknown[][];
+        const createCall = mockCalls[mockCalls.length - 1][0] as Record<
+          string,
+          unknown
+        >;
         const tools = createCall.tools as Array<Record<string, unknown>>;
         const imageGenTool = tools?.find(
           (t) => t.type === 'image_generation',
@@ -756,7 +935,7 @@ describe('OpenAIResponsesService', () => {
         input: 'A beautiful landscape',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.created',
           sequence_number: 1,
@@ -789,7 +968,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockLifecycleHandler.handleResponseCreated = jest
         .fn()
         .mockReturnValue([]);
@@ -813,8 +994,9 @@ describe('OpenAIResponsesService', () => {
         .mockReturnValue([]);
 
       const generator = service.createImageResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockOpenAIClient.responses.create).toHaveBeenCalledWith(
@@ -824,8 +1006,8 @@ describe('OpenAIResponsesService', () => {
           tools: expect.arrayContaining([
             expect.objectContaining({
               type: 'image_generation',
-            }),
-          ]),
+            }) as Record<string, unknown>,
+          ]) as unknown[],
         }),
       );
     });
@@ -844,7 +1026,7 @@ describe('OpenAIResponsesService', () => {
         partial_images: 3,
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.completed',
           sequence_number: 1,
@@ -852,17 +1034,23 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockLifecycleHandler.handleResponseCompleted = jest
         .fn()
         .mockReturnValue([]);
 
       const generator = service.createImageResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
-      const createCall = mockOpenAIClient.responses.create.mock.calls[0][0];
+      const createCall = (
+        (mockOpenAIClient.responses.create as jest.Mock).mock
+          .calls as unknown[][]
+      )[0][0] as Record<string, unknown>;
       const tools = createCall.tools as Array<Record<string, unknown>>;
       const imageGenTool = tools?.find(
         (t) => t.type === 'image_generation',
@@ -885,7 +1073,7 @@ describe('OpenAIResponsesService', () => {
         partial_images: 3,
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.image_generation_call.in_progress',
           sequence_number: 1,
@@ -917,7 +1105,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockImageHandler.handleImageGenProgress = jest.fn().mockReturnValue(
         (function* () {
           yield { event: 'progress', data: '{}', sequence: 1 };
@@ -935,8 +1125,9 @@ describe('OpenAIResponsesService', () => {
       );
 
       const generator = service.createImageResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockImageHandler.handleImageGenProgress).toHaveBeenCalledTimes(1);
@@ -949,7 +1140,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Error test streaming',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.image_generation_call.in_progress',
           sequence_number: 1,
@@ -965,7 +1156,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockImageHandler.handleImageGenProgress = jest.fn().mockReturnValue(
         (function* () {
           yield { event: 'progress', data: '{}', sequence: 1 };
@@ -974,8 +1167,9 @@ describe('OpenAIResponsesService', () => {
       mockLifecycleHandler.handleErrorEvent = jest.fn().mockReturnValue([]);
 
       const generator = service.createImageResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockImageHandler.handleImageGenProgress).toHaveBeenCalled();
@@ -987,7 +1181,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test generating event',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.image_generation_call.generating',
           sequence_number: 1,
@@ -996,7 +1190,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockImageHandler.handleImageGenProgress = jest.fn().mockReturnValue(
         (function* () {
           yield { event: 'generating', data: '{}', sequence: 1 };
@@ -1004,8 +1200,9 @@ describe('OpenAIResponsesService', () => {
       );
 
       const generator = service.createImageResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockImageHandler.handleImageGenProgress).toHaveBeenCalled();
@@ -1036,11 +1233,11 @@ describe('OpenAIResponsesService', () => {
         background: false,
         safety_identifier: 'safety_123',
         metadata: { test: 'metadata' },
-        truncation: { type: 'auto' as const },
+        truncation: 'auto',
         include: ['file_search_call.results'],
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.completed',
           sequence_number: 1,
@@ -1048,17 +1245,23 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockLifecycleHandler.handleResponseCompleted = jest
         .fn()
         .mockReturnValue([]);
 
       const generator = service.createImageResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
-      const createCall = mockOpenAIClient.responses.create.mock.calls[0][0];
+      const createCall = (
+        (mockOpenAIClient.responses.create as jest.Mock).mock
+          .calls as unknown[][]
+      )[0][0] as Record<string, unknown>;
 
       // Verify all parameters were included
       expect(createCall).toMatchObject({
@@ -1077,7 +1280,7 @@ describe('OpenAIResponsesService', () => {
         background: false,
         safety_identifier: 'safety_123',
         metadata: { test: 'metadata' },
-        truncation: { type: 'auto' },
+        truncation: 'auto',
         include: ['file_search_call.results'],
       });
 
@@ -1108,11 +1311,19 @@ describe('OpenAIResponsesService', () => {
 
       const error = new Error('Streaming failed');
 
-      async function* mockStream() {
-        throw error;
-      }
+      const mockStream = (): AsyncIterable<Record<string, unknown>> => ({
+        [Symbol.asyncIterator]() {
+          return {
+            next() {
+              return Promise.reject(error);
+            },
+          };
+        },
+      });
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream(),
+      );
 
       const generator = service.createImageResponseStream(dto);
 
@@ -1133,18 +1344,18 @@ describe('OpenAIResponsesService', () => {
           endpoint: '/v1/responses (gpt-image-1 stream)',
           error: expect.objectContaining({
             message: 'Streaming failed',
-          }),
+          }) as Record<string, unknown>,
           metadata: expect.objectContaining({
-            latency_ms: expect.any(Number),
-          }),
-        }),
+            latency_ms: expect.any(Number) as number,
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
 
       // Verify error event was yielded
       expect(events).toHaveLength(1);
       expect(events[0]).toMatchObject({
         event: 'error',
-        data: expect.stringContaining('Streaming failed'),
+        data: expect.stringContaining('Streaming failed') as string,
       });
     });
 
@@ -1159,17 +1370,26 @@ describe('OpenAIResponsesService', () => {
         status: 400,
       });
 
-      async function* mockStream() {
-        throw apiError;
-      }
+      const mockStream = (): AsyncIterable<Record<string, unknown>> => ({
+        [Symbol.asyncIterator]() {
+          return {
+            next() {
+              return Promise.reject(apiError);
+            },
+          };
+        },
+      });
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream(),
+      );
 
       const generator = service.createImageResponseStream(dto);
 
       try {
-        for await (const event of generator) {
-          // Consume events
+        // Consume all events from generator
+        for await (const _ of generator) {
+          void _;
         }
         fail('Should have thrown an error');
       } catch (e) {
@@ -1184,8 +1404,8 @@ describe('OpenAIResponsesService', () => {
             type: 'invalid_request_error',
             code: 'invalid_parameter',
             status: 400,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -1194,7 +1414,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Image with text description',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.output_text.delta',
           sequence_number: 1,
@@ -1213,7 +1433,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockTextHandler.handleTextDelta = jest.fn().mockReturnValue(
         (function* () {
           yield { event: 'text_delta', data: '{}', sequence: 1 };
@@ -1247,7 +1469,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Logging test',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.image_generation_call.in_progress',
           sequence_number: 1,
@@ -1261,7 +1483,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockImageHandler.handleImageGenProgress = jest.fn().mockReturnValue(
         (function* () {
           yield { event: 'progress', data: '{}', sequence: 1 };
@@ -1274,8 +1498,9 @@ describe('OpenAIResponsesService', () => {
       );
 
       const generator = service.createImageResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       // Verify logging calls
@@ -1301,14 +1526,16 @@ describe('OpenAIResponsesService', () => {
         input: 'Unknown event test',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.unknown_event_type',
           sequence_number: 1,
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockStructuralHandler.handleStructuralEvent = jest.fn().mockReturnValue(
         (function* () {
           yield { event: 'structural', data: '{}', sequence: 1 };
@@ -1316,8 +1543,9 @@ describe('OpenAIResponsesService', () => {
       );
 
       const generator = service.createImageResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockStructuralHandler.handleStructuralEvent).toHaveBeenCalled();
@@ -1329,10 +1557,10 @@ describe('OpenAIResponsesService', () => {
         prompt: {
           type: 'text',
           text: 'System prompt for image generation',
-        } as any,
+        } as unknown as typeof dto.prompt,
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.completed',
           sequence_number: 1,
@@ -1340,17 +1568,23 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockLifecycleHandler.handleResponseCompleted = jest
         .fn()
         .mockReturnValue([]);
 
       const generator = service.createImageResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
-      const createCall = mockOpenAIClient.responses.create.mock.calls[0][0];
+      const createCall = (
+        (mockOpenAIClient.responses.create as jest.Mock).mock
+          .calls as unknown[][]
+      )[0][0] as Record<string, unknown>;
       expect(createCall.prompt).toBeDefined();
       expect(createCall.prompt).toMatchObject({
         type: 'text',
@@ -1363,7 +1597,7 @@ describe('OpenAIResponsesService', () => {
     it('should resume streaming a stored response by ID', async () => {
       const responseId = 'resp_resume_123';
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.created',
           sequence_number: 1,
@@ -1385,7 +1619,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.retrieve.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.retrieve as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockLifecycleHandler.handleResponseCreated = jest
         .fn()
         .mockReturnValue([]);
@@ -1417,11 +1653,19 @@ describe('OpenAIResponsesService', () => {
       const responseId = 'resp_error';
       const error = new Error('Resume failed');
 
-      async function* mockStream() {
-        throw error;
-      }
+      const mockStream = (): AsyncIterable<Record<string, unknown>> => ({
+        [Symbol.asyncIterator]() {
+          return {
+            next() {
+              return Promise.reject(error);
+            },
+          };
+        },
+      });
 
-      mockOpenAIClient.responses.retrieve.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.retrieve as jest.Mock).mockReturnValue(
+        mockStream(),
+      );
 
       const generator = service.resumeResponseStream(responseId);
 
@@ -1443,22 +1687,22 @@ describe('OpenAIResponsesService', () => {
           event_type: 'stream_error',
           error: expect.objectContaining({
             message: 'Resume failed',
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
 
       // Verify error event was yielded
       expect(events).toHaveLength(1);
       expect(events[0]).toMatchObject({
         event: 'error',
-        data: expect.stringContaining('Resume failed'),
+        data: expect.stringContaining('Resume failed') as string,
       });
     });
 
     it('should log stream resume event', async () => {
       const responseId = 'resp_logging';
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.completed',
           sequence_number: 1,
@@ -1474,14 +1718,17 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.retrieve.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.retrieve as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockLifecycleHandler.handleResponseCompleted = jest
         .fn()
         .mockReturnValue([]);
 
       const generator = service.resumeResponseStream(responseId);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       // Verify stream resume was logged at start
@@ -1493,8 +1740,8 @@ describe('OpenAIResponsesService', () => {
           request: {
             responseId,
             stream: true,
-          },
-        }),
+          } as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -1506,7 +1753,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: responseId,
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Retrieved response',
@@ -1514,12 +1761,24 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 10,
           output_tokens: 20,
           total_tokens: 30,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.retrieve.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.retrieve as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       const result = await service.retrieve(responseId);
 
@@ -1533,8 +1792,8 @@ describe('OpenAIResponsesService', () => {
           endpoint: `/v1/responses/${responseId} (GET)`,
           request: expect.objectContaining({
             responseId,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -1542,7 +1801,9 @@ describe('OpenAIResponsesService', () => {
       const responseId = 'resp_not_found';
       const mockError = new Error('Response not found');
 
-      mockOpenAIClient.responses.retrieve.mockRejectedValue(mockError);
+      (mockOpenAIClient.responses.retrieve as jest.Mock).mockRejectedValue(
+        mockError,
+      );
 
       await expect(service.retrieve(responseId)).rejects.toThrow(
         'Response not found',
@@ -1553,8 +1814,8 @@ describe('OpenAIResponsesService', () => {
           endpoint: `/v1/responses/${responseId} (GET)`,
           error: expect.objectContaining({
             message: 'Response not found',
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -1563,7 +1824,9 @@ describe('OpenAIResponsesService', () => {
     it('should delete a stored response by ID', async () => {
       const responseId = 'resp_delete_123';
 
-      mockOpenAIClient.responses.delete.mockResolvedValue(undefined);
+      (mockOpenAIClient.responses.delete as jest.Mock).mockResolvedValue(
+        undefined,
+      );
 
       const result = await service.delete(responseId);
 
@@ -1580,8 +1843,8 @@ describe('OpenAIResponsesService', () => {
           endpoint: `/v1/responses/${responseId} (DELETE)`,
           response: expect.objectContaining({
             deleted: true,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -1589,7 +1852,9 @@ describe('OpenAIResponsesService', () => {
       const responseId = 'resp_delete_error';
       const mockError = new Error('Delete failed');
 
-      mockOpenAIClient.responses.delete.mockRejectedValue(mockError);
+      (mockOpenAIClient.responses.delete as jest.Mock).mockRejectedValue(
+        mockError,
+      );
 
       await expect(service.delete(responseId)).rejects.toThrow('Delete failed');
 
@@ -1598,8 +1863,8 @@ describe('OpenAIResponsesService', () => {
           endpoint: `/v1/responses/${responseId} (DELETE)`,
           error: expect.objectContaining({
             message: 'Delete failed',
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -1611,7 +1876,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: responseId,
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'cancelled',
         output_text: '',
@@ -1619,12 +1884,24 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 10,
           output_tokens: 0,
           total_tokens: 10,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.cancel.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.cancel as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       const result = await service.cancel(responseId);
 
@@ -1644,7 +1921,9 @@ describe('OpenAIResponsesService', () => {
       const responseId = 'resp_cancel_error';
       const mockError = new Error('Not a background response');
 
-      mockOpenAIClient.responses.cancel.mockRejectedValue(mockError);
+      (mockOpenAIClient.responses.cancel as jest.Mock).mockRejectedValue(
+        mockError,
+      );
 
       await expect(service.cancel(responseId)).rejects.toThrow(
         'Not a background response',
@@ -1655,8 +1934,8 @@ describe('OpenAIResponsesService', () => {
           endpoint: `/v1/responses/${responseId}/cancel (POST)`,
           error: expect.objectContaining({
             message: 'Not a background response',
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -1670,7 +1949,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_usage',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Response',
@@ -1678,12 +1957,24 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 100,
           output_tokens: 200,
           total_tokens: 300,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -1691,8 +1982,8 @@ describe('OpenAIResponsesService', () => {
         expect.objectContaining({
           metadata: expect.objectContaining({
             tokens_used: 300,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -1701,16 +1992,15 @@ describe('OpenAIResponsesService', () => {
         input: 'No usage',
       };
 
-      const mockResponse: Responses.Response = {
+      const mockResponse: Responses.Response = createMockOpenAIResponse({
         id: 'resp_no_usage',
-        object: 'response',
-        created: 1234567890,
-        model: 'gpt-5',
-        status: 'completed',
         output_text: 'Response',
-      };
+        usage: undefined as unknown as Responses.Response['usage'],
+      });
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -1718,8 +2008,8 @@ describe('OpenAIResponsesService', () => {
         expect.objectContaining({
           metadata: expect.objectContaining({
             tokens_used: undefined,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -1731,7 +2021,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_cached',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Response',
@@ -1741,19 +2031,26 @@ describe('OpenAIResponsesService', () => {
           total_tokens: 600,
           input_tokens_details: {
             cached_tokens: 300,
-            text_tokens: 200,
-            audio_tokens: 0,
-            image_tokens: 0,
           },
           output_tokens_details: {
-            text_tokens: 100,
-            audio_tokens: 0,
             reasoning_tokens: 0,
           },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -1762,8 +2059,8 @@ describe('OpenAIResponsesService', () => {
           metadata: expect.objectContaining({
             tokens_used: 600,
             cached_tokens: 300,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -1776,7 +2073,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_reasoning',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'o3',
         status: 'completed',
         output_text: 'Response',
@@ -1786,19 +2083,26 @@ describe('OpenAIResponsesService', () => {
           total_tokens: 600,
           input_tokens_details: {
             cached_tokens: 0,
-            text_tokens: 200,
-            audio_tokens: 0,
-            image_tokens: 0,
           },
           output_tokens_details: {
-            text_tokens: 300,
-            audio_tokens: 0,
             reasoning_tokens: 100,
           },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -1807,8 +2111,8 @@ describe('OpenAIResponsesService', () => {
           metadata: expect.objectContaining({
             tokens_used: 600,
             reasoning_tokens: 100,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -1821,7 +2125,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_both',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'o3',
         status: 'completed',
         output_text: 'Response',
@@ -1831,19 +2135,26 @@ describe('OpenAIResponsesService', () => {
           total_tokens: 1500,
           input_tokens_details: {
             cached_tokens: 600,
-            text_tokens: 400,
-            audio_tokens: 0,
-            image_tokens: 0,
           },
           output_tokens_details: {
-            text_tokens: 350,
-            audio_tokens: 0,
             reasoning_tokens: 150,
           },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -1853,8 +2164,8 @@ describe('OpenAIResponsesService', () => {
             tokens_used: 1500,
             cached_tokens: 600,
             reasoning_tokens: 150,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -1866,7 +2177,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_no_details',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Response',
@@ -1874,10 +2185,26 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 100,
           output_tokens: 50,
           total_tokens: 150,
+          input_tokens_details:
+            {} as Responses.ResponseUsage['input_tokens_details'],
+          output_tokens_details:
+            {} as Responses.ResponseUsage['output_tokens_details'],
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -1887,8 +2214,8 @@ describe('OpenAIResponsesService', () => {
             tokens_used: 150,
             cached_tokens: undefined,
             reasoning_tokens: undefined,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -1898,13 +2225,12 @@ describe('OpenAIResponsesService', () => {
       const dto: CreateTextResponseDto = {
         input: 'Test metadata',
         background: true,
-        conversation: 'conv_123',
       };
 
       const mockResponse: Responses.Response = {
         id: 'resp_metadata',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Response',
@@ -1912,14 +2238,25 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 10,
           output_tokens: 20,
           total_tokens: 30,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
         background: true,
-        conversation: 'conv_123',
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -1928,9 +2265,8 @@ describe('OpenAIResponsesService', () => {
           metadata: expect.objectContaining({
             response_status: 'completed',
             background: true,
-            conversation: 'conv_123',
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -1946,7 +2282,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_opt',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Response',
@@ -1954,16 +2290,27 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 10,
           output_tokens: 20,
           total_tokens: 30,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
         prompt_cache_key: 'cache_key_123',
         service_tier: 'flex',
         safety_identifier: 'user_hash_abc',
         metadata: { request_id: 'req_123', app: 'test' },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -1975,8 +2322,8 @@ describe('OpenAIResponsesService', () => {
             service_tier: 'flex',
             safety_identifier: 'user_hash_abc',
             metadata: { request_id: 'req_123', app: 'test' },
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -1987,25 +2334,23 @@ describe('OpenAIResponsesService', () => {
         previous_response_id: 'resp_prev123',
       };
 
-      const mockResponse: Responses.Response = {
+      const mockResponse: Responses.Response = createMockOpenAIResponse({
         id: 'resp_conv',
-        object: 'response',
-        created: 1234567890,
-        model: 'gpt-5',
-        status: 'completed',
         output_text: 'Response',
         usage: {
           input_tokens: 10,
           output_tokens: 20,
           total_tokens: 30,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
         max_output_tokens: 1000,
         previous_response_id: 'resp_prev123',
-      };
+      });
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -2014,8 +2359,8 @@ describe('OpenAIResponsesService', () => {
           metadata: expect.objectContaining({
             max_output_tokens: 1000,
             previous_response_id: 'resp_prev123',
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -2028,7 +2373,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_trunc',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Response',
@@ -2036,13 +2381,25 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 10,
           output_tokens: 20,
           total_tokens: 30,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
         truncation: 'auto',
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -2051,8 +2408,8 @@ describe('OpenAIResponsesService', () => {
         expect.objectContaining({
           response: expect.objectContaining({
             truncation: 'auto',
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -2064,7 +2421,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_err',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'incomplete',
         output_text: '',
@@ -2076,12 +2433,23 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 10,
           output_tokens: 0,
           total_tokens: 10,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -2094,8 +2462,8 @@ describe('OpenAIResponsesService', () => {
               code: 'rate_limit_exceeded',
               message: 'Rate limit reached',
             },
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -2107,23 +2475,34 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_incomplete',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'incomplete',
         output_text: 'Partial response',
         incomplete_details: {
-          reason: 'max_tokens',
+          reason: 'max_output_tokens',
         },
         usage: {
           input_tokens: 10,
           output_tokens: 5,
           total_tokens: 15,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -2132,10 +2511,10 @@ describe('OpenAIResponsesService', () => {
           metadata: expect.objectContaining({
             response_status: 'incomplete',
             incomplete_details: {
-              reason: 'max_tokens',
+              reason: 'max_output_tokens',
             },
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -2143,30 +2522,42 @@ describe('OpenAIResponsesService', () => {
       const dto: CreateTextResponseDto = {
         input: 'Test text verbosity',
         text: {
-          verbosity: 'concise',
+          verbosity: 'low',
         },
       };
 
       const mockResponse: Responses.Response = {
         id: 'resp_verbosity',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Response',
         text: {
-          verbosity: 'concise',
+          verbosity: 'low',
         },
         usage: {
           input_tokens: 10,
           output_tokens: 20,
           total_tokens: 30,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -2175,10 +2566,10 @@ describe('OpenAIResponsesService', () => {
         expect.objectContaining({
           response: expect.objectContaining({
             text: {
-              verbosity: 'concise',
+              verbosity: 'low',
             },
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -2190,7 +2581,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_minimal',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Response',
@@ -2198,12 +2589,24 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 10,
           output_tokens: 20,
           total_tokens: 30,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -2214,7 +2617,7 @@ describe('OpenAIResponsesService', () => {
       const metadata = call.metadata;
 
       expect(metadata.response_status).toBe('completed');
-      expect(metadata.error).toBeUndefined();
+      expect(metadata.response_error).toBeUndefined();
       expect(metadata.incomplete_details).toBeUndefined();
       expect(metadata.prompt_cache_key).toBeUndefined();
     });
@@ -2229,7 +2632,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_cost',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Response',
@@ -2237,12 +2640,24 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 1000,
           output_tokens: 2000,
           total_tokens: 3000,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -2261,13 +2676,25 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_no_cost',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Response',
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -2275,8 +2702,8 @@ describe('OpenAIResponsesService', () => {
         expect.objectContaining({
           metadata: expect.objectContaining({
             cost_estimate: 0,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -2288,7 +2715,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_zero',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: '',
@@ -2296,12 +2723,24 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 0,
           output_tokens: 0,
           total_tokens: 0,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -2309,8 +2748,8 @@ describe('OpenAIResponsesService', () => {
         expect.objectContaining({
           metadata: expect.objectContaining({
             cost_estimate: 0,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -2322,7 +2761,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_input_only',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'incomplete',
         output_text: '',
@@ -2330,12 +2769,24 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 500,
           output_tokens: 0,
           total_tokens: 500,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -2354,7 +2805,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_output_only',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Response',
@@ -2362,12 +2813,24 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 0,
           output_tokens: 1000,
           total_tokens: 1000,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -2376,8 +2839,8 @@ describe('OpenAIResponsesService', () => {
         expect.objectContaining({
           metadata: expect.objectContaining({
             cost_estimate: 0.00001,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -2389,7 +2852,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_large',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Response',
@@ -2397,12 +2860,24 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 100000,
           output_tokens: 50000,
           total_tokens: 150000,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -2421,7 +2896,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_fractional',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Response',
@@ -2429,12 +2904,24 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 250,
           output_tokens: 150,
           total_tokens: 400,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -2465,7 +2952,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_search',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Results found in documents',
@@ -2473,16 +2960,31 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 10,
           output_tokens: 20,
           total_tokens: 30,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
-      const createCall = mockOpenAIClient.responses.create.mock.calls[0][0];
+      const createCall = (
+        (mockOpenAIClient.responses.create as jest.Mock).mock
+          .calls as unknown[][]
+      )[0][0] as Record<string, unknown>;
       expect(createCall.tools).toContainEqual(fileSearchTool);
       expect(createCall.include).toContain('file_search_call.results');
     });
@@ -2501,7 +3003,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_search',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Search results',
@@ -2509,33 +3011,47 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 10,
           output_tokens: 20,
           total_tokens: 30,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
-      const createCall = mockOpenAIClient.responses.create.mock.calls[0][0];
+      const createCall = (
+        (mockOpenAIClient.responses.create as jest.Mock).mock
+          .calls as unknown[][]
+      )[0][0] as Record<string, unknown>;
       expect(createCall.tools).toContainEqual(fileSearchTool);
     });
 
     it('should combine file_search with other tools', async () => {
       const functionTool = {
         type: 'function' as const,
-        function: {
-          name: 'get_weather',
-          description: 'Get weather information',
-          parameters: {
-            type: 'object' as const,
-            properties: {
-              location: { type: 'string' as const },
-            },
-            required: ['location'],
+        name: 'get_weather',
+        description: 'Get weather information',
+        parameters: {
+          type: 'object' as const,
+          properties: {
+            location: { type: 'string' as const },
           },
+          required: ['location'],
         },
+        strict: null,
       };
 
       const fileSearchTool = {
@@ -2552,7 +3068,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_combined',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Combined response',
@@ -2560,16 +3076,31 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 15,
           output_tokens: 25,
           total_tokens: 40,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
-      const createCall = mockOpenAIClient.responses.create.mock.calls[0][0];
+      const createCall = (
+        (mockOpenAIClient.responses.create as jest.Mock).mock
+          .calls as unknown[][]
+      )[0][0] as Record<string, unknown>;
       expect(createCall.tools).toHaveLength(2);
       expect(createCall.tools).toContainEqual(functionTool);
       expect(createCall.tools).toContainEqual(fileSearchTool);
@@ -2594,7 +3125,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_multi_store',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Multi-store results',
@@ -2602,23 +3133,43 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 20,
           output_tokens: 30,
           total_tokens: 50,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
-      const createCall = mockOpenAIClient.responses.create.mock.calls[0][0];
-      expect(createCall.tools[0].vector_store_ids).toEqual([
+      const createCall = (
+        (mockOpenAIClient.responses.create as jest.Mock).mock
+          .calls as unknown[][]
+      )[0][0] as Record<string, unknown>;
+      const tools = createCall.tools as Array<Record<string, unknown>>;
+      expect(tools[0].vector_store_ids).toEqual([
         'vs_store1',
         'vs_store2',
         'vs_store3',
       ]);
-      expect(createCall.tools[0].max_num_results).toBe(15);
-      expect(createCall.tools[0].ranking_options.score_threshold).toBe(0.85);
+      expect(tools[0].max_num_results).toBe(15);
+      const rankingOptions = tools[0].ranking_options as Record<
+        string,
+        unknown
+      >;
+      expect(rankingOptions.score_threshold).toBe(0.85);
     });
 
     it('should log file_search tool usage correctly', async () => {
@@ -2636,7 +3187,7 @@ describe('OpenAIResponsesService', () => {
       const mockResponse: Responses.Response = {
         id: 'resp_logged',
         object: 'response',
-        created: 1234567890,
+        created_at: 1234567890,
         model: 'gpt-5',
         status: 'completed',
         output_text: 'Search results',
@@ -2644,12 +3195,24 @@ describe('OpenAIResponsesService', () => {
           input_tokens: 10,
           output_tokens: 20,
           total_tokens: 30,
-          input_tokens_details: {},
-          output_tokens_details: {},
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens_details: { reasoning_tokens: 0 },
         },
+        error: null,
+        incomplete_details: null,
+        instructions: null,
+        metadata: null,
+        output: [],
+        parallel_tool_calls: false,
+        temperature: null,
+        tool_choice: 'auto',
+        tools: [],
+        top_p: null,
       };
 
-      mockOpenAIClient.responses.create.mockResolvedValue(mockResponse);
+      (mockOpenAIClient.responses.create as jest.Mock).mockResolvedValue(
+        mockResponse,
+      );
 
       await service.createTextResponse(dto);
 
@@ -2658,10 +3221,10 @@ describe('OpenAIResponsesService', () => {
           api: 'responses',
           endpoint: '/v1/responses',
           request: expect.objectContaining({
-            tools: expect.arrayContaining([fileSearchTool]),
-          }),
+            tools: expect.arrayContaining([fileSearchTool]) as unknown[],
+          }) as Record<string, unknown>,
           response: mockResponse,
-        }),
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -2674,7 +3237,7 @@ describe('OpenAIResponsesService', () => {
       };
 
       // Mock async generator for streaming
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.created',
           sequence_number: 1,
@@ -2700,7 +3263,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
 
       // Mock handler responses
       mockLifecycleHandler.handleResponseCreated = jest
@@ -2733,12 +3298,47 @@ describe('OpenAIResponsesService', () => {
       );
     });
 
+    it('should include stream_options in the request', async () => {
+      const dto: CreateTextResponseDto = {
+        input: 'Test stream options',
+        stream_options: { include_obfuscation: true },
+      };
+
+      function* mockStream() {
+        yield {
+          type: 'response.created',
+          sequence_number: 1,
+          response: { id: 'resp_stream_opts' },
+        };
+      }
+
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
+      mockLifecycleHandler.handleResponseCreated = jest
+        .fn()
+        .mockReturnValue([]);
+
+      const generator = service.createTextResponseStream(dto);
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
+      }
+
+      expect(mockOpenAIClient.responses.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stream: true,
+          stream_options: { include_obfuscation: true },
+        }),
+      );
+    });
+
     it('should handle lifecycle events - response.created', async () => {
       const dto: CreateTextResponseDto = {
         input: 'Test lifecycle',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.created',
           sequence_number: 1,
@@ -2746,7 +3346,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockLifecycleHandler.handleResponseCreated = jest
         .fn()
         .mockReturnValue([{ event: 'created', data: '{}', sequence: 1 }]);
@@ -2765,7 +3367,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test text delta',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.output_text.delta',
           sequence_number: 1,
@@ -2778,12 +3380,15 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockTextHandler.handleTextDelta = jest.fn().mockReturnValue([]);
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockTextHandler.handleTextDelta).toHaveBeenCalledTimes(2);
@@ -2795,7 +3400,7 @@ describe('OpenAIResponsesService', () => {
         model: 'o1',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.reasoning_text.delta',
           sequence_number: 1,
@@ -2808,7 +3413,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockReasoningHandler.handleReasoningTextDelta = jest
         .fn()
         .mockReturnValue([]);
@@ -2817,8 +3424,9 @@ describe('OpenAIResponsesService', () => {
         .mockReturnValue([]);
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockReasoningHandler.handleReasoningTextDelta).toHaveBeenCalled();
@@ -2828,10 +3436,18 @@ describe('OpenAIResponsesService', () => {
     it('should handle tool calling events', async () => {
       const dto: CreateTextResponseDto = {
         input: 'Test tools',
-        tools: [{ type: 'function' as const, name: 'test_func' }],
+        tools: [
+          {
+            type: 'function' as const,
+            name: 'test_func',
+            description: 'Test function',
+            parameters: { type: 'object', properties: {} },
+            strict: null,
+          },
+        ],
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.function_call_arguments.delta',
           sequence_number: 1,
@@ -2846,7 +3462,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockToolCallingHandler.handleFunctionCallDelta = jest
         .fn()
         .mockReturnValue(
@@ -2861,8 +3479,9 @@ describe('OpenAIResponsesService', () => {
       );
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockToolCallingHandler.handleFunctionCallDelta).toHaveBeenCalled();
@@ -2874,7 +3493,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Generate image',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.image_generation_call.in_progress',
           sequence_number: 1,
@@ -2888,7 +3507,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockImageHandler.handleImageGenProgress = jest.fn().mockReturnValue(
         (function* () {
           yield { event: 'image_progress', data: '{}', sequence: 1 };
@@ -2901,8 +3522,9 @@ describe('OpenAIResponsesService', () => {
       );
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockImageHandler.handleImageGenProgress).toHaveBeenCalled();
@@ -2914,7 +3536,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test audio',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.audio.delta',
           sequence_number: 1,
@@ -2927,15 +3549,18 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockAudioHandler.handleAudioDelta = jest.fn().mockReturnValue([]);
       mockAudioHandler.handleAudioTranscriptDelta = jest
         .fn()
         .mockReturnValue([]);
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockAudioHandler.handleAudioDelta).toHaveBeenCalled();
@@ -2947,7 +3572,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test MCP',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.mcp_call.in_progress',
           sequence_number: 1,
@@ -2961,7 +3586,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockMCPHandler.handleMCPCallProgress = jest.fn().mockReturnValue(
         (function* () {
           yield { event: 'mcp_progress', data: '{}', sequence: 1 };
@@ -2974,8 +3601,9 @@ describe('OpenAIResponsesService', () => {
       );
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockMCPHandler.handleMCPCallProgress).toHaveBeenCalled();
@@ -2987,7 +3615,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test refusal',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.refusal.delta',
           sequence_number: 1,
@@ -3000,13 +3628,16 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockRefusalHandler.handleRefusalDelta = jest.fn().mockReturnValue([]);
       mockRefusalHandler.handleRefusalDone = jest.fn().mockReturnValue([]);
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockRefusalHandler.handleRefusalDelta).toHaveBeenCalled();
@@ -3018,7 +3649,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test structural',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.output_item.added',
           sequence_number: 1,
@@ -3031,7 +3662,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockStructuralHandler.handleStructuralEvent = jest.fn().mockReturnValue(
         (function* () {
           yield { event: 'structural', data: '{}', sequence: 1 };
@@ -3039,8 +3672,9 @@ describe('OpenAIResponsesService', () => {
       );
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockStructuralHandler.handleStructuralEvent).toHaveBeenCalledTimes(
@@ -3065,7 +3699,7 @@ describe('OpenAIResponsesService', () => {
         metadata: { user: 'test' },
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.completed',
           sequence_number: 1,
@@ -3073,14 +3707,17 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockLifecycleHandler.handleResponseCompleted = jest
         .fn()
         .mockReturnValue([]);
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockOpenAIClient.responses.create).toHaveBeenCalledWith(
@@ -3089,7 +3726,6 @@ describe('OpenAIResponsesService', () => {
           instructions: 'Be helpful',
           temperature: 0.7,
           top_p: 0.9,
-          conversation: 'conv_123',
           previous_response_id: 'resp_prev',
           store: true,
           max_output_tokens: 1000,
@@ -3108,7 +3744,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test error',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'error',
           sequence_number: 1,
@@ -3119,12 +3755,15 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockLifecycleHandler.handleErrorEvent = jest.fn().mockReturnValue([]);
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockLifecycleHandler.handleErrorEvent).toHaveBeenCalled();
@@ -3135,7 +3774,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test unknown',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'unknown.event.type',
           sequence_number: 1,
@@ -3143,12 +3782,15 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockStructuralHandler.handleUnknownEvent = jest.fn().mockReturnValue([]);
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockStructuralHandler.handleUnknownEvent).toHaveBeenCalled();
@@ -3159,7 +3801,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test code interpreter',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.code_interpreter_call.in_progress',
           sequence_number: 1,
@@ -3190,7 +3832,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockToolCallingHandler.handleCodeInterpreterProgress = jest
         .fn()
         .mockReturnValue(
@@ -3221,8 +3865,9 @@ describe('OpenAIResponsesService', () => {
         );
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(
@@ -3244,7 +3889,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test file search',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.file_search_call.in_progress',
           sequence_number: 1,
@@ -3263,7 +3908,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockToolCallingHandler.handleFileSearchProgress = jest
         .fn()
         .mockReturnValue(
@@ -3280,8 +3927,9 @@ describe('OpenAIResponsesService', () => {
         );
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(
@@ -3297,7 +3945,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test web search',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.web_search_call.in_progress',
           sequence_number: 1,
@@ -3316,7 +3964,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockToolCallingHandler.handleWebSearchProgress = jest
         .fn()
         .mockReturnValue(
@@ -3333,8 +3983,9 @@ describe('OpenAIResponsesService', () => {
         );
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(
@@ -3350,7 +4001,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test custom tool',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.custom_tool_call_input.delta',
           sequence_number: 1,
@@ -3365,7 +4016,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockToolCallingHandler.handleCustomToolDelta = jest.fn().mockReturnValue(
         (function* () {
           yield { event: 'custom_delta', data: '{}', sequence: 1 };
@@ -3378,8 +4031,9 @@ describe('OpenAIResponsesService', () => {
       );
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockToolCallingHandler.handleCustomToolDelta).toHaveBeenCalled();
@@ -3391,7 +4045,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test queued',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.queued',
           sequence_number: 1,
@@ -3399,12 +4053,15 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockLifecycleHandler.handleResponseQueued = jest.fn().mockReturnValue([]);
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockLifecycleHandler.handleResponseQueued).toHaveBeenCalled();
@@ -3415,7 +4072,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test annotation',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.output_text.annotation.added',
           sequence_number: 1,
@@ -3423,12 +4080,15 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockTextHandler.handleTextAnnotation = jest.fn().mockReturnValue([]);
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockTextHandler.handleTextAnnotation).toHaveBeenCalled();
@@ -3439,7 +4099,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test text done',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.output_text.done',
           sequence_number: 1,
@@ -3447,12 +4107,15 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockTextHandler.handleTextDone = jest.fn().mockReturnValue([]);
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockTextHandler.handleTextDone).toHaveBeenCalled();
@@ -3464,7 +4127,7 @@ describe('OpenAIResponsesService', () => {
         model: 'o1',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.reasoning_summary_part.added',
           sequence_number: 1,
@@ -3487,7 +4150,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockReasoningHandler.handleReasoningSummaryPart = jest
         .fn()
         .mockReturnValue(
@@ -3503,8 +4168,9 @@ describe('OpenAIResponsesService', () => {
         .mockReturnValue([]);
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(
@@ -3523,7 +4189,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test audio done',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.audio.done',
           sequence_number: 1,
@@ -3536,15 +4202,18 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockAudioHandler.handleAudioDone = jest.fn().mockReturnValue([]);
       mockAudioHandler.handleAudioTranscriptDone = jest
         .fn()
         .mockReturnValue([]);
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockAudioHandler.handleAudioDone).toHaveBeenCalled();
@@ -3556,7 +4225,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test MCP comprehensive',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.mcp_call_arguments.done',
           sequence_number: 1,
@@ -3591,7 +4260,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockMCPHandler.handleMCPCallDone = jest.fn().mockReturnValue(
         (function* () {
           yield { event: 'mcp_done', data: '{}', sequence: 1 };
@@ -3614,8 +4285,9 @@ describe('OpenAIResponsesService', () => {
       );
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockMCPHandler.handleMCPCallDone).toHaveBeenCalled();
@@ -3629,7 +4301,7 @@ describe('OpenAIResponsesService', () => {
         input: 'Test structural done',
       };
 
-      async function* mockStream() {
+      function* mockStream() {
         yield {
           type: 'response.output_item.done',
           sequence_number: 1,
@@ -3637,7 +4309,9 @@ describe('OpenAIResponsesService', () => {
         };
       }
 
-      mockOpenAIClient.responses.create.mockReturnValue(mockStream() as any);
+      (mockOpenAIClient.responses.create as jest.Mock).mockReturnValue(
+        mockStream() as unknown as AsyncIterable<Record<string, unknown>>,
+      );
       mockStructuralHandler.handleStructuralEvent = jest.fn().mockReturnValue(
         (function* () {
           yield { event: 'structural', data: '{}', sequence: 1 };
@@ -3645,8 +4319,9 @@ describe('OpenAIResponsesService', () => {
       );
 
       const generator = service.createTextResponseStream(dto);
-      for await (const event of generator) {
-        // Consume events
+      // Consume all events from generator
+      for await (const _ of generator) {
+        void _;
       }
 
       expect(mockStructuralHandler.handleStructuralEvent).toHaveBeenCalled();
@@ -3684,16 +4359,16 @@ describe('OpenAIResponsesService', () => {
             request: {
               responseId,
               stream: false,
-            },
+            } as Record<string, unknown>,
             response: mockResponse,
             metadata: expect.objectContaining({
-              latency_ms: expect.any(Number),
+              latency_ms: expect.any(Number) as number,
               tokens_used: 150,
               cached_tokens: 0,
               reasoning_tokens: 0,
-              cost_estimate: expect.any(Number),
-            }),
-          }),
+              cost_estimate: expect.any(Number) as number,
+            }) as Record<string, unknown>,
+          }) as Record<string, unknown>,
         );
       });
 
@@ -3716,22 +4391,22 @@ describe('OpenAIResponsesService', () => {
             request: {
               responseId,
               stream: false,
-            },
+            } as Record<string, unknown>,
             error: expect.objectContaining({
               message: 'Response not found',
               original_error: error,
-            }),
+            }) as Record<string, unknown>,
             metadata: expect.objectContaining({
-              latency_ms: expect.any(Number),
-            }),
-          }),
+              latency_ms: expect.any(Number) as number,
+            }) as Record<string, unknown>,
+          }) as Record<string, unknown>,
         );
       });
 
       it('should handle OpenAI API errors with status codes', async () => {
         const responseId = 'resp_error';
         const apiError = createOpenAIError(
-          OpenAI.NotFoundError,
+          OpenAI.NotFoundError as new (...args: unknown[]) => unknown,
           404,
           'Resource not found',
           'req_123',
@@ -3741,15 +4416,17 @@ describe('OpenAIResponsesService', () => {
           .fn()
           .mockRejectedValue(apiError);
 
-        await expect(service.retrieve(responseId)).rejects.toThrow(apiError);
+        await expect(service.retrieve(responseId)).rejects.toThrow(
+          apiError as Error,
+        );
 
         expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
           expect.objectContaining({
             error: expect.objectContaining({
               status: 404,
-              message: expect.stringContaining('Resource not found'),
-            }),
-          }),
+              message: expect.stringContaining('Resource not found') as string,
+            }) as Record<string, unknown>,
+          }) as Record<string, unknown>,
         );
       });
 
@@ -3763,13 +4440,8 @@ describe('OpenAIResponsesService', () => {
             total_tokens: 700,
             input_tokens_details: {
               cached_tokens: 300,
-              text_tokens: 200,
-              audio_tokens: 0,
-              image_tokens: 0,
             },
             output_tokens_details: {
-              text_tokens: 150,
-              audio_tokens: 0,
               reasoning_tokens: 50,
             },
           },
@@ -3787,8 +4459,8 @@ describe('OpenAIResponsesService', () => {
               tokens_used: 700,
               cached_tokens: 300,
               reasoning_tokens: 50,
-            }),
-          }),
+            }) as Record<string, unknown>,
+          }) as Record<string, unknown>,
         );
       });
     });
@@ -3824,8 +4496,8 @@ describe('OpenAIResponsesService', () => {
               object: 'response',
             },
             metadata: expect.objectContaining({
-              latency_ms: expect.any(Number),
-            }),
+              latency_ms: expect.any(Number) as number,
+            }) as Record<string, unknown>,
           }),
         );
       });
@@ -3846,22 +4518,22 @@ describe('OpenAIResponsesService', () => {
             endpoint: `/v1/responses/${responseId} (DELETE)`,
             request: {
               responseId,
-            },
+            } as Record<string, unknown>,
             error: expect.objectContaining({
               message: 'Cannot delete response',
               original_error: error,
-            }),
+            }) as Record<string, unknown>,
             metadata: expect.objectContaining({
-              latency_ms: expect.any(Number),
-            }),
-          }),
+              latency_ms: expect.any(Number) as number,
+            }) as Record<string, unknown>,
+          }) as Record<string, unknown>,
         );
       });
 
       it('should handle OpenAI API errors during deletion', async () => {
         const responseId = 'resp_forbidden';
         const apiError = createOpenAIError(
-          OpenAI.PermissionDeniedError,
+          OpenAI.PermissionDeniedError as new (...args: unknown[]) => unknown,
           403,
           'Permission denied',
           'req_456',
@@ -3871,15 +4543,17 @@ describe('OpenAIResponsesService', () => {
           .fn()
           .mockRejectedValue(apiError);
 
-        await expect(service.delete(responseId)).rejects.toThrow(apiError);
+        await expect(service.delete(responseId)).rejects.toThrow(
+          apiError as Error,
+        );
 
         expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
           expect.objectContaining({
             error: expect.objectContaining({
               status: 403,
-              message: expect.stringContaining('Permission denied'),
-            }),
-          }),
+              message: expect.stringContaining('Permission denied') as string,
+            }) as Record<string, unknown>,
+          }) as Record<string, unknown>,
         );
       });
 
@@ -3923,15 +4597,15 @@ describe('OpenAIResponsesService', () => {
             endpoint: `/v1/responses/${responseId}/cancel (POST)`,
             request: {
               responseId,
-            },
+            } as Record<string, unknown>,
             response: mockCanceledResponse,
             metadata: expect.objectContaining({
-              latency_ms: expect.any(Number),
+              latency_ms: expect.any(Number) as number,
               tokens_used: 150,
               cached_tokens: 0,
               reasoning_tokens: 0,
-              cost_estimate: expect.any(Number),
-            }),
+              cost_estimate: expect.any(Number) as number,
+            }) as Record<string, unknown>,
           }),
         );
       });
@@ -3954,22 +4628,22 @@ describe('OpenAIResponsesService', () => {
             endpoint: `/v1/responses/${responseId}/cancel (POST)`,
             request: {
               responseId,
-            },
+            } as Record<string, unknown>,
             error: expect.objectContaining({
               message: 'Response was not created with background=true',
               original_error: error,
-            }),
+            }) as Record<string, unknown>,
             metadata: expect.objectContaining({
-              latency_ms: expect.any(Number),
-            }),
-          }),
+              latency_ms: expect.any(Number) as number,
+            }) as Record<string, unknown>,
+          }) as Record<string, unknown>,
         );
       });
 
       it('should handle OpenAI API errors during cancellation', async () => {
         const responseId = 'resp_alreadycompleted';
         const apiError = createOpenAIError(
-          OpenAI.BadRequestError,
+          OpenAI.BadRequestError as new (...args: unknown[]) => unknown,
           400,
           'Response already completed',
           'req_789',
@@ -3979,15 +4653,19 @@ describe('OpenAIResponsesService', () => {
           .fn()
           .mockRejectedValue(apiError);
 
-        await expect(service.cancel(responseId)).rejects.toThrow(apiError);
+        await expect(service.cancel(responseId)).rejects.toThrow(
+          apiError as Error,
+        );
 
         expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
           expect.objectContaining({
             error: expect.objectContaining({
               status: 400,
-              message: expect.stringContaining('Response already completed'),
-            }),
-          }),
+              message: expect.stringContaining(
+                'Response already completed',
+              ) as string,
+            }) as Record<string, unknown>,
+          }) as Record<string, unknown>,
         );
       });
 
@@ -4002,13 +4680,8 @@ describe('OpenAIResponsesService', () => {
             total_tokens: 125,
             input_tokens_details: {
               cached_tokens: 50,
-              text_tokens: 50,
-              audio_tokens: 0,
-              image_tokens: 0,
             },
             output_tokens_details: {
-              text_tokens: 20,
-              audio_tokens: 0,
               reasoning_tokens: 5,
             },
           },
@@ -4026,8 +4699,8 @@ describe('OpenAIResponsesService', () => {
               tokens_used: 125,
               cached_tokens: 50,
               reasoning_tokens: 5,
-            }),
-          }),
+            }) as Record<string, unknown>,
+          }) as Record<string, unknown>,
         );
       });
 

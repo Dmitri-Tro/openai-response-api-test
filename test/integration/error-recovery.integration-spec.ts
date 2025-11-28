@@ -13,12 +13,12 @@
  */
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 import OpenAI from 'openai';
-import type { Responses } from 'openai/resources/responses';
 import { OpenAIResponsesService } from '../../src/openai/services/openai-responses.service';
 import { ResponsesController } from '../../src/openai/controllers/responses.controller';
 import { LoggerService } from '../../src/common/services/logger.service';
+import { PricingService } from '../../src/common/services/pricing.service';
 import { OpenAIExceptionFilter } from '../../src/common/filters/openai-exception.filter';
 import { LifecycleEventsHandler } from '../../src/openai/services/handlers/lifecycle-events.handler';
 import { TextEventsHandler } from '../../src/openai/services/handlers/text-events.handler';
@@ -29,6 +29,8 @@ import { AudioEventsHandler } from '../../src/openai/services/handlers/audio-eve
 import { MCPEventsHandler } from '../../src/openai/services/handlers/mcp-events.handler';
 import { RefusalEventsHandler } from '../../src/openai/services/handlers/refusal-events.handler';
 import { StructuralEventsHandler } from '../../src/openai/services/handlers/structural-events.handler';
+import { ComputerUseEventsHandler } from '../../src/openai/services/handlers/computer-use-events.handler';
+import { OPENAI_CLIENT } from '../../src/openai/providers/openai-client.provider';
 import configuration from '../../src/config/configuration';
 import {
   createMockOpenAIResponse,
@@ -43,6 +45,13 @@ describe('Error Recovery Integration', () => {
   let mockLoggerService: jest.Mocked<LoggerService>;
   let mockClient: jest.Mocked<OpenAI>;
 
+  // Helper to get typed client from service
+  const getClientFromService = (
+    svc: OpenAIResponsesService,
+  ): jest.Mocked<OpenAI> => {
+    return (svc as unknown as { client: OpenAI }).client as jest.Mocked<OpenAI>;
+  };
+
   beforeAll(async () => {
     process.env.OPENAI_API_KEY = 'sk-test-error-recovery-key';
     process.env.OPENAI_API_BASE_URL = 'https://api.test.openai.com';
@@ -52,6 +61,16 @@ describe('Error Recovery Integration', () => {
     process.env.LOG_LEVEL = 'error';
 
     mockLoggerService = createMockLoggerService();
+
+    // Create mock OpenAI client
+    const mockOpenAIClient = {
+      responses: {
+        create: jest.fn(),
+        retrieve: jest.fn(),
+        cancel: jest.fn(),
+        delete: jest.fn(),
+      },
+    } as unknown as jest.Mocked<OpenAI>;
 
     module = await Test.createTestingModule({
       imports: [
@@ -64,6 +83,7 @@ describe('Error Recovery Integration', () => {
       providers: [
         OpenAIResponsesService,
         LoggerService,
+        PricingService,
         OpenAIExceptionFilter,
         LifecycleEventsHandler,
         TextEventsHandler,
@@ -74,6 +94,11 @@ describe('Error Recovery Integration', () => {
         MCPEventsHandler,
         RefusalEventsHandler,
         StructuralEventsHandler,
+        ComputerUseEventsHandler,
+        {
+          provide: OPENAI_CLIENT,
+          useValue: mockOpenAIClient,
+        },
       ],
     })
       .overrideProvider(LoggerService)
@@ -82,7 +107,7 @@ describe('Error Recovery Integration', () => {
 
     service = module.get<OpenAIResponsesService>(OpenAIResponsesService);
     controller = module.get<ResponsesController>(ResponsesController);
-    mockClient = (service as any).client as jest.Mocked<OpenAI>;
+    mockClient = getClientFromService(service);
   });
 
   afterAll(async () => {
@@ -142,9 +167,11 @@ describe('Error Recovery Integration', () => {
         expect.objectContaining({
           error: expect.objectContaining({
             status: 429,
-            message: expect.stringContaining('Rate limit exceeded'),
-          }),
-        }),
+            message: expect.stringContaining(
+              'Rate limit exceeded',
+            ) as unknown as string,
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -174,9 +201,11 @@ describe('Error Recovery Integration', () => {
       expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
         expect.objectContaining({
           error: expect.objectContaining({
-            message: expect.stringContaining('Request timeout'),
-          }),
-        }),
+            message: expect.stringContaining(
+              'Request timeout',
+            ) as unknown as string,
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -212,9 +241,11 @@ describe('Error Recovery Integration', () => {
         expect.objectContaining({
           error: expect.objectContaining({
             status: 500,
-            message: expect.stringContaining('Internal server error'),
-          }),
-        }),
+            message: expect.stringContaining(
+              'Internal server error',
+            ) as unknown as string,
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -251,10 +282,15 @@ describe('Error Recovery Integration', () => {
       // Verify the error has proper status and retry-after header - Second call
       try {
         await service.createTextResponse(dto);
-      } catch (error) {
+      } catch (error: unknown) {
         if (error instanceof OpenAI.APIError) {
           expect(error.status).toBe(503);
-          expect(error.headers?.get('retry-after')).toBe('30');
+          const headers: Headers | undefined = error.headers as
+            | Headers
+            | undefined;
+          if (headers) {
+            expect(headers.get('retry-after')).toBe('30');
+          }
         }
       }
     });
@@ -293,9 +329,11 @@ describe('Error Recovery Integration', () => {
         expect.objectContaining({
           error: expect.objectContaining({
             status: 401,
-            message: expect.stringContaining('Invalid API key'),
-          }),
-        }),
+            message: expect.stringContaining(
+              'Invalid API key',
+            ) as unknown as string,
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
 
       // Verify only one call was made (no retry for auth errors)
@@ -334,9 +372,11 @@ describe('Error Recovery Integration', () => {
         expect.objectContaining({
           error: expect.objectContaining({
             status: 403,
-            message: expect.stringContaining('Insufficient permissions'),
-          }),
-        }),
+            message: expect.stringContaining(
+              'Insufficient permissions',
+            ) as unknown as string,
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -461,9 +501,11 @@ describe('Error Recovery Integration', () => {
         expect.objectContaining({
           error: expect.objectContaining({
             status: 400,
-            message: expect.stringContaining('Input cannot be empty'),
-          }),
-        }),
+            message: expect.stringContaining(
+              'Input cannot be empty',
+            ) as unknown as string,
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
 
       // Verify no retry for validation errors
@@ -502,7 +544,7 @@ describe('Error Recovery Integration', () => {
       // Verify parameter context is preserved
       try {
         await service.createTextResponse(dto);
-      } catch (error) {
+      } catch (error: unknown) {
         if (error instanceof OpenAI.BadRequestError) {
           expect(error.status).toBe(400);
           expect(error.message).toContain('Invalid model specified');
@@ -546,9 +588,9 @@ describe('Error Recovery Integration', () => {
         expect.objectContaining({
           error: expect.objectContaining({
             status: 400,
-            message: expect.stringContaining('Cannot use'),
-          }),
-        }),
+            message: expect.stringContaining('Cannot use') as unknown as string,
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -578,9 +620,11 @@ describe('Error Recovery Integration', () => {
       expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
         expect.objectContaining({
           error: expect.objectContaining({
-            message: expect.stringContaining('Connection refused'),
-          }),
-        }),
+            message: expect.stringContaining(
+              'Connection refused',
+            ) as unknown as string,
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -610,9 +654,11 @@ describe('Error Recovery Integration', () => {
       expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
         expect.objectContaining({
           error: expect.objectContaining({
-            message: expect.stringContaining('DNS lookup failed'),
-          }),
-        }),
+            message: expect.stringContaining(
+              'DNS lookup failed',
+            ) as unknown as string,
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -640,9 +686,11 @@ describe('Error Recovery Integration', () => {
       expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
         expect.objectContaining({
           error: expect.objectContaining({
-            message: expect.stringContaining('Connection reset'),
-          }),
-        }),
+            message: expect.stringContaining(
+              'Connection reset',
+            ) as unknown as string,
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
   });
@@ -686,11 +734,11 @@ describe('Error Recovery Integration', () => {
           request: expect.objectContaining({
             input: 'Test with metadata',
             model: 'gpt-5',
-          }),
+          }) as Record<string, unknown>,
           error: expect.objectContaining({
             status: 500,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -741,11 +789,11 @@ describe('Error Recovery Integration', () => {
         expect.objectContaining({
           request: expect.objectContaining({
             input: 'This will succeed',
-          }),
+          }) as Record<string, unknown>,
           response: expect.objectContaining({
             output_text: 'Success',
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
 
       // Second call: error
@@ -754,11 +802,11 @@ describe('Error Recovery Integration', () => {
         expect.objectContaining({
           request: expect.objectContaining({
             input: 'This will fail',
-          }),
+          }) as Record<string, unknown>,
           error: expect.objectContaining({
             status: 500,
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 

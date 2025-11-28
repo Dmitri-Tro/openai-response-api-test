@@ -51,6 +51,15 @@ This project serves as a **source of truth** for implementing OpenAI API capabil
   - Processing status tracking (uploaded, processed, error)
   - Automatic content-type detection from file extensions
 
+- ✅ **Audio API**
+  - Text-to-Speech (TTS) with 13 voices and 6 audio formats
+  - Speech-to-Text (STT) transcription with 4 models
+  - Audio translation to English (any language → English)
+  - Support for 9 audio formats (max 25 MB)
+  - Speaker diarization (up to 4 speakers)
+  - Word and segment-level timestamps
+  - Subtitle generation (SRT, VTT formats)
+
 - ⏳ **Images API** - Direct image generation *[Planned]*
 
 ### Production Features
@@ -58,6 +67,7 @@ This project serves as a **source of truth** for implementing OpenAI API capabil
 - ✅ **Comprehensive Error Handling**
   - 15 image-specific error codes with actionable hints
   - 12 file-specific error codes (upload, processing, download, purpose)
+  - 10 audio-specific error codes (TTS, STT, translation)
   - OpenAI SDK `instanceof` checks for reliable error detection
   - Request ID tracking for support inquiries
   - Rate limit extraction and retry guidance
@@ -3876,6 +3886,387 @@ export class ResponsesController { ... }
 **Non-Retryable Errors:**
 - 4xx (except 429) - Client errors requiring user action
 
+### Audio API
+
+The Audio API provides speech-to-text (STT), text-to-speech (TTS), and audio translation capabilities with support for multiple models and formats.
+
+#### Text-to-Speech (TTS)
+
+**Endpoint:** `POST /api/audio/speech`
+
+**Content-Type:** `application/json`
+
+**Description:** Generate spoken audio from text using AI voice models.
+
+**Example Request (Basic):**
+
+```bash
+curl -X POST http://localhost:3000/api/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "tts-1",
+    "voice": "alloy",
+    "input": "The quick brown fox jumps over the lazy dog."
+  }' \
+  --output speech.mp3
+```
+
+**Example Request (High Quality with Custom Speed):**
+
+```bash
+curl -X POST http://localhost:3000/api/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "tts-1-hd",
+    "voice": "shimmer",
+    "input": "High quality audio with custom speed.",
+    "response_format": "opus",
+    "speed": 1.25
+  }' \
+  --output speech.opus
+```
+
+**Example Request (GPT-4o with Instructions):**
+
+```bash
+curl -X POST http://localhost:3000/api/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o-mini-tts",
+    "voice": "nova",
+    "input": "Welcome to our service!",
+    "instructions": "Speak in a cheerful, energetic tone",
+    "response_format": "mp3"
+  }' \
+  --output speech.mp3
+```
+
+**Example Response:**
+
+Binary audio data with appropriate content-type header:
+- `Content-Type: audio/mpeg` (for mp3)
+- `Content-Type: audio/opus` (for opus)
+- `Content-Disposition: attachment; filename="speech.{format}"`
+
+**Parameters:**
+
+| Parameter | Type | Description | Required | Options/Range |
+|-----------|------|-------------|----------|---------------|
+| `model` | string | TTS model to use | Yes | `tts-1`, `tts-1-hd`, `gpt-4o-mini-tts` |
+| `voice` | string | Voice to use for generation | Yes | See voice options below |
+| `input` | string | Text to generate audio for | Yes | 1-4096 characters |
+| `response_format` | string | Audio output format | No (default: `mp3`) | `mp3`, `opus`, `aac`, `flac`, `wav`, `pcm` |
+| `speed` | number | Playback speed | No (default: `1.0`) | 0.25-4.0 |
+| `instructions` | string | Style guidance (gpt-4o-mini-tts only) | No | Any descriptive text |
+
+**Voice Options (13 total):**
+
+| Voice | Characteristics | Gender | Use Cases |
+|-------|-----------------|--------|-----------|
+| `alloy` | Neutral, versatile | Neutral | General purpose, can pass as masculine or feminine |
+| `ash` | New voice (2025) | - | Modern, professional |
+| `ballad` | New voice (2025) | - | Storytelling, narration |
+| `coral` | New voice (2025) | - | Friendly, approachable |
+| `echo` | Masculine | Male | Authoritative, news reading |
+| `fable` | Masculine | Male | Story telling, characters |
+| `nova` | Feminine | Female | Customer service, assistants |
+| `onyx` | Masculine | Male | Deep, commanding |
+| `sage` | New voice (2025) | - | Calm, educational |
+| `shimmer` | Feminine | Female | Bright, energetic |
+| `verse` | New voice (2025) | - | Poetic, artistic |
+| `marin` | New voice (2025) | - | Natural, conversational |
+| `cedar` | New voice (2025) | - | Warm, inviting |
+
+**Audio Format Comparison:**
+
+| Format | Bitrate/Quality | Latency | File Size | Use Case |
+|--------|-----------------|---------|-----------|----------|
+| `mp3` | 128 kbps (default) | Low | Small | General purpose, widely compatible |
+| `opus` | ~64 kbps | Lowest | Smallest | Internet streaming, real-time apps |
+| `aac` | ~128 kbps | Low | Small | Mobile (iOS/Android), YouTube |
+| `flac` | Lossless | Medium | Large | Audiophile quality, archiving |
+| `wav` | Uncompressed | Low | Largest | Low-latency applications |
+| `pcm` | 24kHz, no headers | Lowest | Medium | Raw audio, embedded systems |
+
+**Model Comparison:**
+
+| Model | Latency | Quality | Cost | Special Features |
+|-------|---------|---------|------|------------------|
+| `tts-1` | Low | Good | $15/1M chars | Real-time optimized |
+| `tts-1-hd` | Medium | Best | $30/1M chars | Highest fidelity |
+| `gpt-4o-mini-tts` | Variable | Excellent | Variable | Supports instructions parameter |
+
+**Pricing:**
+- **tts-1**: $0.015 per 1,000 characters (~$15 per million)
+- **tts-1-hd**: $0.030 per 1,000 characters (~$30 per million)
+- **gpt-4o-mini-tts**: Variable pricing based on usage
+
+**Best Practices:**
+1. **Use `tts-1` for real-time applications** - Lower latency, lower cost
+2. **Use `tts-1-hd` for high-quality content** - Podcasts, audiobooks, premium content
+3. **Use `gpt-4o-mini-tts` when you need emotional control** - Instructions parameter allows tone customization
+4. **Choose opus format for streaming** - Best compression, lowest latency
+5. **Use WAV/PCM for editing pipelines** - Uncompressed for further processing
+6. **Optimize input text length** - Batch requests when possible (max 4096 chars per request)
+
+#### Speech-to-Text (Transcription)
+
+**Endpoint:** `POST /api/audio/transcriptions`
+
+**Content-Type:** `multipart/form-data`
+
+**Description:** Transcribe audio to text in the original language.
+
+**Example Request (Basic - JSON):**
+
+```bash
+curl -X POST http://localhost:3000/api/audio/transcriptions \
+  -F "file=@audio.mp3" \
+  -F "model=whisper-1"
+```
+
+**Example Request (with Language Hint):**
+
+```bash
+curl -X POST http://localhost:3000/api/audio/transcriptions \
+  -F "file=@audio.mp3" \
+  -F "model=whisper-1" \
+  -F "language=en" \
+  -F "response_format=json"
+```
+
+**Example Request (Verbose with Timestamps):**
+
+```bash
+curl -X POST http://localhost:3000/api/audio/transcriptions \
+  -F "file=@podcast.mp3" \
+  -F "model=gpt-4o-transcribe" \
+  -F "response_format=verbose_json" \
+  -F "timestamp_granularities=word" \
+  -F "timestamp_granularities=segment"
+```
+
+**Example Request (Speaker Diarization):**
+
+```bash
+curl -X POST http://localhost:3000/api/audio/transcriptions \
+  -F "file=@meeting.mp3" \
+  -F "model=gpt-4o-transcribe-diarize" \
+  -F "response_format=diarized_json"
+```
+
+**Example Response (JSON format):**
+
+```json
+{
+  "text": "This is the transcribed text from the audio file."
+}
+```
+
+**Example Response (Verbose JSON format):**
+
+```json
+{
+  "task": "transcribe",
+  "language": "en",
+  "duration": 12.5,
+  "text": "This is the transcribed text from the audio file.",
+  "words": [
+    {
+      "word": "This",
+      "start": 0.0,
+      "end": 0.3
+    }
+  ],
+  "segments": [
+    {
+      "id": 0,
+      "seek": 0,
+      "start": 0.0,
+      "end": 12.5,
+      "text": "This is the transcribed text from the audio file.",
+      "tokens": [1, 2, 3],
+      "temperature": 0.0,
+      "avg_logprob": -0.5,
+      "compression_ratio": 1.2,
+      "no_speech_prob": 0.01
+    }
+  ]
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Description | Required | Options/Range |
+|-----------|------|-------------|----------|---------------|
+| `file` | File | Audio file to transcribe | Yes | See supported formats below |
+| `model` | string | Transcription model | Yes | `whisper-1`, `gpt-4o-transcribe`, `gpt-4o-mini-transcribe`, `gpt-4o-transcribe-diarize` |
+| `language` | string | ISO-639-1 language code | No | `en`, `es`, `fr`, `de`, `ja`, `zh`, etc. |
+| `prompt` | string | Context or vocabulary hints | No | Any text |
+| `response_format` | string | Output format | No (default: `json`) | `json`, `text`, `srt`, `vtt`, `verbose_json`, `diarized_json` |
+| `temperature` | number | Sampling temperature | No (default: `0`) | 0.0-1.0 |
+| `timestamp_granularities` | array | Timestamp detail level | No | `['word']`, `['segment']`, `['word', 'segment']` |
+
+**Supported Audio Formats:**
+
+| Format | Extensions | Max Size | Notes |
+|--------|-----------|----------|-------|
+| FLAC | `.flac` | 25 MB | Lossless, best quality |
+| MP3 | `.mp3` | 25 MB | Most common, widely supported |
+| MP4 | `.mp4` | 25 MB | Video container with audio track |
+| MPEG | `.mpeg`, `.mpga` | 25 MB | MPEG audio formats |
+| M4A | `.m4a` | 25 MB | AAC audio (Apple/iTunes) |
+| OGG | `.ogg` | 25 MB | Ogg Vorbis |
+| WAV | `.wav` | 25 MB | Uncompressed, best compatibility |
+| WebM | `.webm` | 25 MB | Web-optimized container |
+
+**NOT Supported:**
+- `opus` format (only in open-source Whisper, not via OpenAI API)
+
+**Model Comparison:**
+
+| Model | Speed | Accuracy | Features | Pricing |
+|-------|-------|----------|----------|---------|
+| `whisper-1` | Fast | Good | General purpose | $0.006/minute (~$0.36/hour) |
+| `gpt-4o-transcribe` | Medium | Better | Handles accents, background noise | Token-based |
+| `gpt-4o-mini-transcribe` | Fastest | Good | Cost-effective | Token-based (lower cost) |
+| `gpt-4o-transcribe-diarize` | Medium | Better | Speaker identification (up to 4 speakers) | Token-based |
+
+**Response Format Options:**
+
+| Format | Description | Use Case | Timestamp Support |
+|--------|-------------|----------|-------------------|
+| `json` | Simple text response | Quick transcription | No |
+| `text` | Plain string | Copy-paste, simple integration | No |
+| `srt` | SubRip subtitle format | Video subtitles | Yes (segment-level) |
+| `vtt` | WebVTT subtitle format | Web video players | Yes (segment-level) |
+| `verbose_json` | Extended metadata | Analysis, editing | Yes (word/segment) |
+| `diarized_json` | Speaker identification | Meeting transcription | Yes (with speaker labels) |
+
+**Best Practices:**
+1. **Always provide language hint when known** - Improves accuracy and reduces latency
+2. **Use prompt for specialized vocabulary** - Medical, legal, technical terms
+3. **Choose appropriate model** - whisper-1 for speed, gpt-4o-transcribe for accuracy
+4. **Use verbose_json for editing workflows** - Provides word-level timestamps
+5. **Use diarized_json for meetings** - Identifies up to 4 speakers automatically
+6. **Split large files** - Keep under 25 MB, use chunking for longer audio
+
+#### Audio Translation to English
+
+**Endpoint:** `POST /api/audio/translations`
+
+**Content-Type:** `multipart/form-data`
+
+**Description:** Translate audio from any language to English text.
+
+**Example Request (Basic):**
+
+```bash
+curl -X POST http://localhost:3000/api/audio/translations \
+  -F "file=@spanish-audio.mp3" \
+  -F "model=whisper-1"
+```
+
+**Example Request (with Context):**
+
+```bash
+curl -X POST http://localhost:3000/api/audio/translations \
+  -F "file=@french-podcast.mp3" \
+  -F "model=whisper-1" \
+  -F "prompt=This is a medical conference discussion about cardiology." \
+  -F "response_format=verbose_json"
+```
+
+**Example Request (Subtitle Format):**
+
+```bash
+curl -X POST http://localhost:3000/api/audio/translations \
+  -F "file=@german-interview.mp3" \
+  -F "model=whisper-1" \
+  -F "response_format=srt"
+```
+
+**Example Response (JSON format):**
+
+```json
+{
+  "text": "This is the translated text in English."
+}
+```
+
+**Example Response (Verbose JSON format):**
+
+```json
+{
+  "task": "translate",
+  "language": "es",
+  "duration": 8.3,
+  "text": "This is the translated text in English.",
+  "segments": [
+    {
+      "id": 0,
+      "seek": 0,
+      "start": 0.0,
+      "end": 8.3,
+      "text": "This is the translated text in English.",
+      "tokens": [1, 2, 3, 4],
+      "temperature": 0.0,
+      "avg_logprob": -0.6,
+      "compression_ratio": 1.3,
+      "no_speech_prob": 0.02
+    }
+  ]
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Description | Required | Options/Range |
+|-----------|------|-------------|----------|---------------|
+| `file` | File | Audio file to translate | Yes | Same as transcription |
+| `model` | string | Translation model | Yes | `whisper-1` only |
+| `prompt` | string | Context or domain hints | No | Any text (any language or English) |
+| `response_format` | string | Output format | No (default: `json`) | `json`, `text`, `srt`, `vtt`, `verbose_json` |
+| `temperature` | number | Sampling temperature | No (default: `0`) | 0.0-1.0 |
+
+**Important Notes:**
+
+- **Translation Direction:** Only supports translation **TO English** (any language → English)
+- **Model Support:** Only `whisper-1` is recommended (whisper-turbo returns original language)
+- **No Language Parameter:** Language is auto-detected from audio
+- **Max File Size:** 25 MB (same as transcription)
+- **Supported Formats:** Same as transcription (flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, webm)
+
+**Response Format Options:**
+
+| Format | Description | Includes Source Language |
+|--------|-------------|-------------------------|
+| `json` | Simple English text | No |
+| `text` | Plain English string | No |
+| `srt` | SubRip subtitles | No |
+| `vtt` | WebVTT subtitles | No |
+| `verbose_json` | Extended metadata | Yes (in `language` field) |
+
+**NOT Supported:**
+- `diarized_json` format (transcription-only feature)
+
+**Best Practices:**
+1. **Use prompt for domain-specific content** - Medical, legal, technical terminology
+2. **Always use whisper-1 model** - Other models not supported for translation
+3. **Use verbose_json to see source language** - Helpful for debugging/verification
+4. **Consider transcription first for same-language content** - Translation is only for converting to English
+5. **Provide context in prompt** - Can be in any language or English
+
+**Translation vs Transcription:**
+
+| Feature | Transcription | Translation |
+|---------|--------------|-------------|
+| Output Language | Original language | Always English |
+| Model Options | 4 models | 1 model (whisper-1) |
+| Speaker Diarization | ✅ Yes (with gpt-4o-transcribe-diarize) | ❌ No |
+| Language Parameter | Optional hint | Not supported (auto-detected) |
+| Response Formats | 6 formats | 5 formats (no diarized_json) |
+
 ### Filters
 
 #### OpenAI Exception Filter
@@ -4556,6 +4947,21 @@ async function generateTextWithCircuitBreaker(prompt: string) {
 | `unsupported_format` | 400 | File format not supported | Check supported formats list |
 | `download_forbidden` | 403 | Download not allowed | Files with purpose=assistants cannot be downloaded |
 | `file_not_found` | 404 | File deleted or expired | Verify file ID and check expiration |
+
+#### Audio API Error Codes
+
+| Code | Status | Description | Solution |
+|------|--------|-------------|----------|
+| `invalid_tts_input_length` | 400 | Input exceeds 4096 characters | Split text into multiple requests (max 4096 chars per request) |
+| `invalid_voice_option` | 400 | Invalid voice selection | Use one of: alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, shimmer, verse, marin, cedar |
+| `invalid_speed_value` | 400 | Speed out of range | Use speed between 0.25 (slowest) and 4.0 (fastest) |
+| `audio_file_too_large` | 413 | File exceeds 25 MB | Compress file or split into smaller segments |
+| `unsupported_audio_format` | 400 | Invalid audio format | Use flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, or webm (opus not supported) |
+| `invalid_language_code` | 400 | Invalid language code | Use ISO-639-1 codes (en, es, fr, de, ja, zh, etc.) |
+| `transcription_failed` | 500 | Transcription error | Verify audio quality and format, retry request |
+| `translation_failed` | 500 | Translation error | Verify audio quality and format, retry request |
+| `translation_model_unsupported` | 400 | Model not supported | Use whisper-1 for translation (other models not supported) |
+| `audio_processing_error` | 500 | General processing error | Verify file is valid and not corrupted, retry request |
 
 ## Testing
 

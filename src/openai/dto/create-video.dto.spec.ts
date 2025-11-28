@@ -169,7 +169,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail when prompt is not a string (number)', async () => {
       const dto = createValidDto();
-      (dto as any).prompt = 12345;
+      (dto as unknown as Record<string, unknown>).prompt = 12345;
 
       const errors = await validateDto(dto);
 
@@ -181,7 +181,9 @@ describe('CreateVideoDto', () => {
 
     it('should fail when prompt is not a string (object)', async () => {
       const dto = createValidDto();
-      (dto as any).prompt = { text: 'video prompt' };
+      (dto as unknown as Record<string, unknown>).prompt = {
+        text: 'video prompt',
+      };
 
       const errors = await validateDto(dto);
 
@@ -193,7 +195,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail when prompt is not a string (array)', async () => {
       const dto = createValidDto();
-      (dto as any).prompt = ['video', 'prompt'];
+      (dto as unknown as Record<string, unknown>).prompt = ['video', 'prompt'];
 
       const errors = await validateDto(dto);
 
@@ -205,7 +207,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail when prompt is null', async () => {
       const dto = createValidDto();
-      (dto as any).prompt = null;
+      (dto as unknown as Record<string, unknown>).prompt = null;
 
       const errors = await validateDto(dto);
 
@@ -229,7 +231,7 @@ describe('CreateVideoDto', () => {
   describe('Invalid Model', () => {
     it('should fail with unsupported model name', async () => {
       const dto = createValidDto();
-      (dto as any).model = 'sora-3';
+      (dto as unknown as Record<string, unknown>).model = 'sora-3';
 
       const errors = await validateDto(dto);
 
@@ -241,7 +243,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail with wrong model format (typo)', async () => {
       const dto = createValidDto();
-      (dto as any).model = 'sora_2';
+      (dto as unknown as Record<string, unknown>).model = 'sora_2';
 
       const errors = await validateDto(dto);
 
@@ -253,7 +255,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail with model as number', async () => {
       const dto = createValidDto();
-      (dto as any).model = 2;
+      (dto as unknown as Record<string, unknown>).model = 2;
 
       const errors = await validateDto(dto);
 
@@ -265,7 +267,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail with model as object', async () => {
       const dto = createValidDto();
-      (dto as any).model = { name: 'sora-2' };
+      (dto as unknown as Record<string, unknown>).model = { name: 'sora-2' };
 
       const errors = await validateDto(dto);
 
@@ -277,7 +279,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail with empty string model', async () => {
       const dto = createValidDto();
-      (dto as any).model = '';
+      (dto as unknown as Record<string, unknown>).model = '';
 
       const errors = await validateDto(dto);
 
@@ -291,7 +293,7 @@ describe('CreateVideoDto', () => {
   describe('Invalid Seconds (Duration)', () => {
     it('should fail when seconds is a number instead of string', async () => {
       const dto = createValidDto();
-      (dto as any).seconds = 4; // Number, not string
+      (dto as unknown as Record<string, unknown>).seconds = 4; // Number, not string
 
       const errors = await validateDto(dto);
 
@@ -303,7 +305,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail with unsupported string duration', async () => {
       const dto = createValidDto();
-      (dto as any).seconds = '6';
+      (dto as unknown as Record<string, unknown>).seconds = '6';
 
       const errors = await validateDto(dto);
 
@@ -315,7 +317,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail with seconds as "10" (unsupported)', async () => {
       const dto = createValidDto();
-      (dto as any).seconds = '10';
+      (dto as unknown as Record<string, unknown>).seconds = '10';
 
       const errors = await validateDto(dto);
 
@@ -327,7 +329,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail with seconds as "0"', async () => {
       const dto = createValidDto();
-      (dto as any).seconds = '0';
+      (dto as unknown as Record<string, unknown>).seconds = '0';
 
       const errors = await validateDto(dto);
 
@@ -339,7 +341,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail with seconds as empty string', async () => {
       const dto = createValidDto();
-      (dto as any).seconds = '';
+      (dto as unknown as Record<string, unknown>).seconds = '';
 
       const errors = await validateDto(dto);
 
@@ -351,7 +353,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail with seconds as object', async () => {
       const dto = createValidDto();
-      (dto as any).seconds = { value: '4' };
+      (dto as unknown as Record<string, unknown>).seconds = { value: '4' };
 
       const errors = await validateDto(dto);
 
@@ -363,7 +365,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail with seconds as array', async () => {
       const dto = createValidDto();
-      (dto as any).seconds = ['4'];
+      (dto as unknown as Record<string, unknown>).seconds = ['4'];
 
       const errors = await validateDto(dto);
 
@@ -377,7 +379,7 @@ describe('CreateVideoDto', () => {
   describe('Invalid Size (Resolution)', () => {
     it('should fail with unsupported resolution', async () => {
       const dto = createValidDto();
-      (dto as any).size = '1920x1080';
+      (dto as unknown as Record<string, unknown>).size = '1920x1080';
 
       const errors = await validateDto(dto);
 
@@ -389,7 +391,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail with wrong resolution format (space)', async () => {
       const dto = createValidDto();
-      (dto as any).size = '720 x 1280';
+      (dto as unknown as Record<string, unknown>).size = '720 x 1280';
 
       const errors = await validateDto(dto);
 
@@ -401,7 +403,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail with reversed dimensions', async () => {
       const dto = createValidDto();
-      (dto as any).size = '1280x720p'; // Has 'p' suffix
+      (dto as unknown as Record<string, unknown>).size = '1280x720p'; // Has 'p' suffix
 
       const errors = await validateDto(dto);
 
@@ -413,7 +415,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail with size as number', async () => {
       const dto = createValidDto();
-      (dto as any).size = 720;
+      (dto as unknown as Record<string, unknown>).size = 720;
 
       const errors = await validateDto(dto);
 
@@ -425,7 +427,10 @@ describe('CreateVideoDto', () => {
 
     it('should fail with size as object', async () => {
       const dto = createValidDto();
-      (dto as any).size = { width: 720, height: 1280 };
+      (dto as unknown as Record<string, unknown>).size = {
+        width: 720,
+        height: 1280,
+      };
 
       const errors = await validateDto(dto);
 
@@ -437,7 +442,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail with size as array', async () => {
       const dto = createValidDto();
-      (dto as any).size = [720, 1280];
+      (dto as unknown as Record<string, unknown>).size = [720, 1280];
 
       const errors = await validateDto(dto);
 
@@ -449,7 +454,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail with empty string size', async () => {
       const dto = createValidDto();
-      (dto as any).size = '';
+      (dto as unknown as Record<string, unknown>).size = '';
 
       const errors = await validateDto(dto);
 
@@ -461,7 +466,7 @@ describe('CreateVideoDto', () => {
 
     it('should fail with case-sensitive resolution mismatch', async () => {
       const dto = createValidDto();
-      (dto as any).size = '720X1280'; // Uppercase X
+      (dto as unknown as Record<string, unknown>).size = '720X1280'; // Uppercase X
 
       const errors = await validateDto(dto);
 

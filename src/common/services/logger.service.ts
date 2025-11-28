@@ -172,7 +172,7 @@ export interface FileCountsMetadata {
  */
 export interface OpenAILogEntry {
   timestamp: string;
-  api: 'responses' | 'images' | 'videos' | 'files' | 'vector_stores';
+  api: 'responses' | 'images' | 'videos' | 'files' | 'vector_stores' | 'audio';
   endpoint: string;
   request: LoggableRequest;
   response?: unknown;
@@ -222,6 +222,18 @@ export interface OpenAILogEntry {
     image_size_bytes?: number;
     has_mask?: boolean;
     mask_size_bytes?: number;
+    // Audio API specific
+    voice?: string;
+    character_count?: number;
+    response_format?: string;
+    speed?: number;
+    file_size_mb?: string;
+    text_length?: number;
+    duration_seconds?: number;
+    detected_language?: string;
+    segment_count?: number;
+    word_count?: number;
+    average_confidence?: number;
   };
   streaming?: boolean;
   stream_events?: unknown[];

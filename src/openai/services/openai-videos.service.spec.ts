@@ -1,29 +1,24 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
 import { OpenAIVideosService } from './openai-videos.service';
+import { OPENAI_CLIENT } from '../providers/openai-client.provider';
 import { LoggerService } from '../../common/services/logger.service';
 import type { Videos } from 'openai/resources/videos';
 
-// Mock OpenAI client
-const mockOpenAIClient = {
-  videos: {
-    create: jest.fn(),
-    retrieve: jest.fn(),
-    list: jest.fn(),
-    delete: jest.fn(),
-    downloadContent: jest.fn(),
-    remix: jest.fn(),
-  },
-};
-
-jest.mock('openai', () => {
-  return jest.fn().mockImplementation(() => mockOpenAIClient);
-});
-
 describe('OpenAIVideosService', () => {
   let service: OpenAIVideosService;
-  let configService: ConfigService;
   let loggerService: LoggerService;
+
+  // Mock OpenAI client (singleton provider pattern)
+  const mockOpenAIClient = {
+    videos: {
+      create: jest.fn(),
+      retrieve: jest.fn(),
+      list: jest.fn(),
+      delete: jest.fn(),
+      downloadContent: jest.fn(),
+      remix: jest.fn(),
+    },
+  };
 
   const mockVideo: Videos.Video = {
     id: 'vid_abc123',
@@ -64,18 +59,8 @@ describe('OpenAIVideosService', () => {
       providers: [
         OpenAIVideosService,
         {
-          provide: ConfigService,
-          useValue: {
-            get: jest.fn((key: string) => {
-              const config: Record<string, unknown> = {
-                'openai.apiKey': 'test-api-key',
-                'openai.baseUrl': 'https://api.openai.com/v1',
-                'openai.timeout': 60000,
-                'openai.maxRetries': 3,
-              };
-              return config[key];
-            }),
-          },
+          provide: OPENAI_CLIENT,
+          useValue: mockOpenAIClient,
         },
         {
           provide: LoggerService,
@@ -87,7 +72,6 @@ describe('OpenAIVideosService', () => {
     }).compile();
 
     service = module.get<OpenAIVideosService>(OpenAIVideosService);
-    configService = module.get<ConfigService>(ConfigService);
     loggerService = module.get<LoggerService>(LoggerService);
 
     // Reset all mocks before each test
@@ -96,29 +80,6 @@ describe('OpenAIVideosService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
-  });
-
-  describe('constructor', () => {
-    it('should throw error if API key is not configured', () => {
-      jest.spyOn(configService, 'get').mockReturnValue(undefined);
-      expect(() => {
-        new OpenAIVideosService(configService, loggerService);
-      }).toThrow('OpenAI API key is not configured');
-    });
-
-    it('should initialize OpenAI client with correct config', () => {
-      // Create a spy before service instantiation
-      const getSpy = jest.spyOn(configService, 'get');
-
-      // Create new instance to capture config calls
-      new OpenAIVideosService(configService, loggerService);
-
-      // Verify config was accessed
-      expect(getSpy).toHaveBeenCalledWith('openai.apiKey');
-      expect(getSpy).toHaveBeenCalledWith('openai.baseUrl');
-      expect(getSpy).toHaveBeenCalledWith('openai.timeout');
-      expect(getSpy).toHaveBeenCalledWith('openai.maxRetries');
-    });
   });
 
   describe('createVideo', () => {
@@ -145,9 +106,11 @@ describe('OpenAIVideosService', () => {
         expect.objectContaining({
           api: 'videos',
           endpoint: '/v1/videos',
-          request: expect.objectContaining({ prompt: dto.prompt }),
+          request: expect.objectContaining({
+            prompt: dto.prompt,
+          }) as Record<string, unknown>,
           response: mockVideo,
-        }),
+        }) as Record<string, unknown>,
       );
     });
 
@@ -222,12 +185,12 @@ describe('OpenAIVideosService', () => {
       expect(loggerService.logOpenAIInteraction).toHaveBeenCalledWith(
         expect.objectContaining({
           metadata: expect.objectContaining({
-            latency_ms: expect.any(Number),
+            latency_ms: expect.any(Number) as number,
             video_id: 'vid_abc123',
             model: 'sora-2',
             status: 'queued',
-          }),
-        }),
+          }) as Record<string, unknown>,
+        }) as Record<string, unknown>,
       );
     });
 
@@ -336,7 +299,8 @@ describe('OpenAIVideosService', () => {
       const inProgressVideo = { ...mockVideo, status: 'in_progress' };
       mockOpenAIClient.videos.retrieve.mockResolvedValue(inProgressVideo);
 
-      const pollPromise = service.pollUntilComplete('vid_abc123', 30000);
+      // Start polling (don't await - testing polling behavior with fake timers)
+      void service.pollUntilComplete('vid_abc123', 30000);
 
       // First call is immediate
       await Promise.resolve();
@@ -513,7 +477,7 @@ describe('OpenAIVideosService', () => {
   describe('deleteVideo', () => {
     const mockDeleteResponse: Videos.VideoDeleteResponse = {
       id: 'vid_abc123',
-      object: 'video',
+      object: 'video.deleted',
       deleted: true,
     };
 
@@ -645,79 +609,6 @@ describe('OpenAIVideosService', () => {
       const metadata = service.extractVideoMetadata(videoWithoutPrompt);
 
       expect(metadata.prompt).toBeNull();
-    });
-  });
-
-  describe('estimateVideoCost', () => {
-    describe('sora-2 (standard model)', () => {
-      it('should calculate cost for 4 seconds', () => {
-        const cost = service.estimateVideoCost('sora-2', '4');
-        expect(cost).toBe(0.5); // 4 * 0.125
-      });
-
-      it('should calculate cost for 8 seconds', () => {
-        const cost = service.estimateVideoCost('sora-2', '8');
-        expect(cost).toBe(1.0); // 8 * 0.125
-      });
-
-      it('should calculate cost for 12 seconds', () => {
-        const cost = service.estimateVideoCost('sora-2', '12');
-        expect(cost).toBe(1.5); // 12 * 0.125
-      });
-    });
-
-    describe('sora-2-pro (professional model)', () => {
-      it('should calculate cost for 4 seconds', () => {
-        const cost = service.estimateVideoCost('sora-2-pro', '4');
-        expect(cost).toBe(1.6); // 4 * 0.4
-      });
-
-      it('should calculate cost for 8 seconds', () => {
-        const cost = service.estimateVideoCost('sora-2-pro', '8');
-        expect(cost).toBe(3.2); // 8 * 0.4
-      });
-
-      it('should calculate cost for 12 seconds', () => {
-        const cost = service.estimateVideoCost('sora-2-pro', '12');
-        expect(cost).toBeCloseTo(4.8, 2); // 12 * 0.4
-      });
-    });
-
-    describe('default model behavior', () => {
-      it('should use sora-2 pricing for unrecognized model', () => {
-        const cost = service.estimateVideoCost('unknown-model', '8');
-        expect(cost).toBe(1.0); // 8 * 0.125 (sora-2 default)
-      });
-
-      it('should use sora-2 pricing for empty string model', () => {
-        const cost = service.estimateVideoCost('', '4');
-        expect(cost).toBe(0.5); // 4 * 0.125 (sora-2 default)
-      });
-    });
-
-    describe('duration parsing', () => {
-      it('should parse duration string to number', () => {
-        const cost = service.estimateVideoCost('sora-2', '8');
-        expect(cost).toBe(1.0);
-        expect(typeof cost).toBe('number');
-      });
-
-      it('should handle duration with leading zeros', () => {
-        const cost = service.estimateVideoCost('sora-2', '04');
-        expect(cost).toBe(0.5); // Parses as 4
-      });
-    });
-
-    describe('cost accuracy', () => {
-      it('should match documented sora-2 pricing (~$0.50 for 4sec)', () => {
-        const cost = service.estimateVideoCost('sora-2', '4');
-        expect(cost).toBeCloseTo(0.5, 2);
-      });
-
-      it('should match documented sora-2-pro pricing (~$1.60 for 4sec)', () => {
-        const cost = service.estimateVideoCost('sora-2-pro', '4');
-        expect(cost).toBeCloseTo(1.6, 2);
-      });
     });
   });
 });
