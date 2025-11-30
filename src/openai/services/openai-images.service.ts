@@ -82,7 +82,10 @@ export class OpenAIImagesService {
         ...(dto.quality && { quality: dto.quality }),
         ...(dto.style && { style: dto.style }),
         // Note: gpt-image-1 doesn't accept response_format (only returns b64_json)
-        ...(dto.response_format && dto.model !== 'gpt-image-1' && { response_format: dto.response_format }),
+        ...(dto.response_format &&
+          dto.model !== 'gpt-image-1' && {
+            response_format: dto.response_format,
+          }),
         ...(dto.user && { user: dto.user }),
       };
 

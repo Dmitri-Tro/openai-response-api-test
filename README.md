@@ -6,7 +6,9 @@ This project serves as a **source of truth** for implementing OpenAI API capabil
 - **Responses API** (streaming & non-streaming text, image generation via gpt-image-1)
 - **Videos API** (async job management with polling)
 - **Files API** (file upload, listing, retrieval, download, deletion)
-- **Images API** - *Planned*
+- **Vector Stores API** (file indexing, semantic search, RAG workflows)
+- **Images API** (gpt-image-1, DALL-E 3, DALL-E 2 image generation)
+- **Audio API** (text-to-speech, transcription, translation)
 
 ## Table of Contents
 
@@ -60,7 +62,21 @@ This project serves as a **source of truth** for implementing OpenAI API capabil
   - Word and segment-level timestamps
   - Subtitle generation (SRT, VTT formats)
 
-- ⏳ **Images API** - Direct image generation *[Planned]*
+- ✅ **Images API** - Direct image generation with all models
+  - gpt-image-1 (GPT-4o-powered, released April 2025)
+  - DALL-E 3 (HD quality, style control, revised prompts)
+  - DALL-E 2 (budget-friendly, multiple images, variations)
+  - Image editing with masks (DALL-E 2 only)
+  - Image variations without prompts (DALL-E 2 only)
+  - Cost estimation across all models
+
+- ✅ **Vector Stores API** - File indexing and semantic search
+  - Create and manage vector stores for RAG workflows
+  - Chunking strategies (static, auto) with configurable parameters
+  - Semantic search with ranking options and score thresholds
+  - Batch file operations (upload, process, monitor)
+  - Expiration policies (1 hour - 365 days)
+  - Integration with file_search tool in Responses API
 
 ### Production Features
 
@@ -1003,9 +1019,196 @@ in_progress → generating → code.delta (×N) → code.done → interpreting �
 6. **Timeout Awareness:** Large datasets or complex calculations may timeout - consider breaking into smaller operations
 7. **Cost Monitoring:** Track container creation vs reuse to optimize costs
 
+---
+
+### Phase 7: Advanced Code Interpreter Features
+
+**Status:** ✅ **Complete** (Phase 7.1-7.4)
+
+Phase 7 introduces production-grade code interpreter capabilities with advanced configuration, enhanced error handling, and comprehensive testing.
+
+#### Advanced Configuration Options
+
+**Memory Limit Configuration**
+
+Control container memory allocation for resource-intensive computations:
+
+```typescript
+{
+  "input": "Analyze large dataset with complex statistical operations",
+  "tools": [{
+    "type": "code_interpreter",
+    "container": { "type": "auto" }
+  }],
+  "memory_limit": "16g"  // Options: "1g", "4g", "16g", "64g"
+}
+```
+
+**Memory Limit Options:**
+
+| Value | RAM | Use Case | Additional Cost |
+|-------|-----|----------|-----------------|
+| `1g` | 1 GB | Light data processing, simple calculations | Standard |
+| `4g` | 4 GB | Standard data analysis, pandas operations (default) | Standard |
+| `16g` | 16 GB | Large dataset processing, complex visualizations | Higher tier |
+| `64g` | 64 GB | Intensive computations, machine learning tasks | Premium tier |
+
+**Container ID Reuse**
+
+Directly reference a container ID to maintain session state and avoid $0.03 creation charges:
+
+```typescript
+{
+  "input": "Continue previous analysis",
+  "tools": [{
+    "type": "code_interpreter",
+    "container": "container_abc123xyz789"  // Direct container ID
+  }],
+  "container_id": "container_abc123xyz789"  // Alternative: root-level parameter
+}
+```
+
+**Complete Advanced Example:**
+
+```bash
+curl -X POST http://localhost:3000/api/responses/text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5",
+    "input": "Process the 50 MB dataset and generate statistical report",
+    "tools": [{
+      "type": "code_interpreter",
+      "container": {
+        "type": "auto",
+        "file_ids": ["file-dataset123"]
+      }
+    }],
+    "memory_limit": "64g",
+    "container_id": "container_reuse123",
+    "include": ["code_interpreter_call.outputs"]
+  }'
+```
+
+#### Error Codes (Phase 7.2)
+
+Code Interpreter introduces 10 specialized error codes:
+
+**Code Execution Errors:**
+
+| Code | Status | Description | Solution |
+|------|--------|-------------|----------|
+| `code_syntax_error` | 400 | Python syntax error | Review error line number and fix code generation prompt |
+| `code_runtime_error` | 400 | Python runtime error (ZeroDivisionError, TypeError, etc.) | Check traceback and adjust input to guide correct code |
+| `code_timeout_error` | 504 | Execution exceeded time limit (30-60s) | Simplify code, reduce data size, or optimize algorithms |
+| `code_resource_limit_error` | 507 | Exceeded memory/disk limits | Use higher memory tier or process in smaller chunks |
+| `code_security_violation` | 403 | Attempted restricted operations (network, subprocess) | Code runs in sandbox with limited permissions |
+
+**Container Errors:**
+
+| Code | Status | Description | Solution |
+|------|--------|-------------|----------|
+| `container_creation_failed` | 500 | Failed to create container | Retry request or contact support |
+| `container_not_found` | 404 | Container ID doesn't exist or expired | Create new request with auto-container |
+| `container_expired` | 410 | Container expired (1 hour max, 20 min idle) | Start fresh container session |
+
+**File & Output Errors:**
+
+| Code | Status | Description | Solution |
+|------|--------|-------------|----------|
+| `file_not_accessible` | 404 | File ID not found or not attached to container | Verify file_ids in container configuration |
+| `output_too_large` | 413 | Output exceeds size limit | Reduce output volume or write to files |
+| `code_execution_failed` | 500 | Unknown execution error | Retry or contact support |
+
+#### Helper Methods (Phase 7.1)
+
+Service layer provides 5 helper methods for advanced code interpreter operations:
+
+**1. parseCodeInterpreterOutputs()**
+```typescript
+// Categorizes outputs by type for easier processing
+const outputs = service.parseCodeInterpreterOutputs(response.output);
+// Returns: { logs: [...], images: [...], files: [...], errors: [...] }
+```
+
+**2. extractImageData()**
+```typescript
+// Extracts image metadata and determines format (data_url vs file_id)
+const imageInfo = service.extractImageData(imageOutput);
+// Returns: { format: 'data_url' | 'file_id', data, mimeType, filename }
+```
+
+**3. uploadFilesForCodeInterpreter()**
+```typescript
+// Uploads files and returns file IDs for container attachment
+const fileIds = await service.uploadFilesForCodeInterpreter([file1, file2]);
+// Returns: ['file-abc123', 'file-def456']
+```
+
+**4. createCodeInterpreterResponse()**
+```typescript
+// Orchestrates file uploads + response creation with code interpreter
+const response = await service.createCodeInterpreterResponse(dto, files);
+// Handles file upload → container configuration → API call
+```
+
+**5. formatCodeInterpreterError()**
+```typescript
+// Formats execution errors with enhanced context
+const errorDetails = service.formatCodeInterpreterError(error, code);
+// Returns: { type, message, line, traceback, hint }
+```
+
+#### Security Scanning (Phase 7.2)
+
+Optional static analysis for code security:
+
+```typescript
+import { CodeSecurityService } from './openai/services/code-security.service';
+
+const securityService = new CodeSecurityService();
+const result = securityService.scanForSecurityIssues(pythonCode);
+
+if (!result.safe && result.risk_level === 'critical') {
+  throw new Error('Code contains critical security issues');
+}
+```
+
+**Detected Patterns:**
+- File system access (open, os.path, shutil)
+- Network access (requests, urllib, socket)
+- Subprocess execution (subprocess, os.system)
+- Dynamic code execution (eval, exec)
+- Unsafe serialization (pickle, marshal)
+- Sensitive data patterns (passwords, API keys)
+
+**Risk Levels:** `none` | `low` | `medium` | `high` | `critical`
+
+**Note:** This is a basic heuristic tool, not a complete security solution. Code interpreter runs in a sandboxed environment with restricted permissions.
+
+#### Testing (Phase 7.3)
+
+Comprehensive test coverage for production readiness:
+
+- **Unit Tests:** 133 tests (40 validator + 33 DTO + 60 service)
+- **E2E Tests:** 11 real API tests (conditional on OPENAI_API_KEY)
+- **Load Tests:** 3 stress tests (concurrent, sequential, error recovery)
+- **Total:** 147 tests covering all Phase 7 features
+
+**Run Tests:**
+```bash
+# Unit tests (mocked, fast)
+npm run test
+
+# E2E tests (requires API key)
+OPENAI_API_KEY=sk-... npm run test:e2e -- code-interpreter
+
+# Load tests (use with caution - may hit rate limits)
+OPENAI_API_KEY=sk-... npm run test:e2e -- code-interpreter.load
+```
+
 #### See Also
 
-- [Files API Documentation](#) (Phase 4 - Planned for file upload support)
+- [Files API Documentation](#files-api) - Upload files for code interpreter
 - [Streaming Events Documentation](#streaming-events)
 - [Tool Calling Events](#tool-calling-15)
 - [Code Interpreter TypeScript Interfaces](src/openai/interfaces/code-interpreter-tool.interface.ts)
@@ -1019,14 +1222,15 @@ in_progress → generating → code.delta (×N) → code.done → interpreting �
 **Purpose:** Search through uploaded files using semantic vector search within Responses API.
 
 **Prerequisites:**
-- Files must be uploaded via Files API (Phase 4 - Planned)
-- Vector stores must be created via Vector Stores API (Phase 5 - Planned)
+- Files must be uploaded via [Files API](#files-api)
+- Vector stores must be created via [Vector Stores API](#vector-stores-api)
 
-**Current Status:**
+**Status:**
 - ✅ Tool configuration and validation implemented
 - ✅ File search event handlers ready (3 events: `in_progress`, `searching`, `completed`)
 - ✅ Full type safety with TypeScript interfaces
-- ⏳ Requires Phases 4 & 5 for end-to-end functionality
+- ✅ Complete end-to-end RAG workflow support
+- ✅ Integration with Files API and Vector Stores API
 
 #### Configuration Structure
 
@@ -1169,7 +1373,7 @@ For current pricing, see [OpenAI Pricing](https://openai.com/pricing).
   "message": "Vector store not found",
   "request_id": "req_abc123",
   "parameter": "tools[0].vector_store_ids[0]",
-  "hint": "Create vector store via Vector Stores API first (Phase 5)"
+  "hint": "Create vector store via Vector Stores API first. See Vector Stores API documentation."
 }
 ```
 
@@ -1185,9 +1389,10 @@ For current pricing, see [OpenAI Pricing](https://openai.com/pricing).
 
 #### See Also
 
-- [Files API Documentation](#) (Phase 4 - Planned)
-- [Vector Stores API Documentation](#) (Phase 5 - Planned)
+- [Files API Documentation](#files-api) - Upload and manage files for vector search
+- [Vector Stores API Documentation](#vector-stores-api) - Create and manage vector stores
 - [Tool Calling Events](#tool-calling-15)
+- [RAG Workflow Example](#rag-workflow-example)
 
 ### Advanced Parameters
 

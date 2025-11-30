@@ -4722,4 +4722,823 @@ describe('OpenAIResponsesService', () => {
       });
     });
   });
+
+  describe('Code Interpreter Helper Methods (Phase 7.1)', () => {
+    describe('parseCodeInterpreterOutputs', () => {
+      it('should parse logs output correctly', () => {
+        const outputs = [
+          {
+            type: 'logs',
+            logs: 'Processing data...\nCalculating...\nDone!',
+          },
+        ];
+
+        const result = service.parseCodeInterpreterOutputs(outputs);
+
+        expect(result.logs).toHaveLength(1);
+        expect(result.logs[0].logs).toBe(
+          'Processing data...\nCalculating...\nDone!',
+        );
+        expect(result.images).toHaveLength(0);
+        expect(result.files).toHaveLength(0);
+        expect(result.errors).toHaveLength(0);
+      });
+
+      it('should parse image output correctly', () => {
+        const outputs = [
+          {
+            type: 'image',
+            image: 'data:image/png;base64,iVBORw0KGgoAAAANS',
+            filename: 'plot.png',
+          },
+        ];
+
+        const result = service.parseCodeInterpreterOutputs(outputs);
+
+        expect(result.images).toHaveLength(1);
+        expect(result.images[0].image).toBe(
+          'data:image/png;base64,iVBORw0KGgoAAAANS',
+        );
+        expect(result.images[0].filename).toBe('plot.png');
+        expect(result.logs).toHaveLength(0);
+        expect(result.files).toHaveLength(0);
+        expect(result.errors).toHaveLength(0);
+      });
+
+      it('should parse file output correctly', () => {
+        const outputs = [
+          {
+            type: 'file',
+            file_id: 'file-abc123',
+            filename: 'results.csv',
+            size: 1024,
+            mime_type: 'text/csv',
+          },
+        ];
+
+        const result = service.parseCodeInterpreterOutputs(outputs);
+
+        expect(result.files).toHaveLength(1);
+        expect(result.files[0].file_id).toBe('file-abc123');
+        expect(result.files[0].filename).toBe('results.csv');
+        expect(result.files[0].size).toBe(1024);
+        expect(result.files[0].mime_type).toBe('text/csv');
+        expect(result.logs).toHaveLength(0);
+        expect(result.images).toHaveLength(0);
+        expect(result.errors).toHaveLength(0);
+      });
+
+      it('should parse error output correctly', () => {
+        const outputs = [
+          {
+            type: 'error',
+            error_type: 'ZeroDivisionError',
+            message: 'division by zero',
+            line: 5,
+            traceback: 'Traceback (most recent call last):\n  File ...',
+          },
+        ];
+
+        const result = service.parseCodeInterpreterOutputs(outputs);
+
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0].error_type).toBe('ZeroDivisionError');
+        expect(result.errors[0].message).toBe('division by zero');
+        expect(result.errors[0].line).toBe(5);
+        expect(result.errors[0].traceback).toContain('Traceback');
+        expect(result.logs).toHaveLength(0);
+        expect(result.images).toHaveLength(0);
+        expect(result.files).toHaveLength(0);
+      });
+
+      it('should parse multiple outputs of different types', () => {
+        const outputs = [
+          { type: 'logs', logs: 'Starting calculation' },
+          {
+            type: 'image',
+            image: 'data:image/png;base64,abc123',
+            filename: 'chart.png',
+          },
+          {
+            type: 'file',
+            file_id: 'file-xyz789',
+            filename: 'output.csv',
+          },
+          { type: 'logs', logs: 'Finished' },
+        ];
+
+        const result = service.parseCodeInterpreterOutputs(outputs);
+
+        expect(result.logs).toHaveLength(2);
+        expect(result.images).toHaveLength(1);
+        expect(result.files).toHaveLength(1);
+        expect(result.errors).toHaveLength(0);
+      });
+
+      it('should handle empty outputs array', () => {
+        const result = service.parseCodeInterpreterOutputs([]);
+
+        expect(result.logs).toHaveLength(0);
+        expect(result.images).toHaveLength(0);
+        expect(result.files).toHaveLength(0);
+        expect(result.errors).toHaveLength(0);
+      });
+
+      it('should handle non-array input gracefully', () => {
+        const result = service.parseCodeInterpreterOutputs(null as never);
+
+        expect(result.logs).toHaveLength(0);
+        expect(result.images).toHaveLength(0);
+        expect(result.files).toHaveLength(0);
+        expect(result.errors).toHaveLength(0);
+      });
+
+      it('should skip outputs without type field', () => {
+        const outputs = [
+          { logs: 'No type field' },
+          { type: 'logs', logs: 'Valid output' },
+        ];
+
+        const result = service.parseCodeInterpreterOutputs(
+          outputs as unknown[],
+        );
+
+        expect(result.logs).toHaveLength(1);
+        expect(result.logs[0].logs).toBe('Valid output');
+      });
+
+      it('should skip outputs with unknown type', () => {
+        const outputs = [
+          { type: 'unknown_type', data: 'something' },
+          { type: 'logs', logs: 'Valid output' },
+        ];
+
+        const result = service.parseCodeInterpreterOutputs(
+          outputs as unknown[],
+        );
+
+        expect(result.logs).toHaveLength(1);
+      });
+
+      it('should handle outputs with missing optional fields', () => {
+        const outputs = [
+          {
+            type: 'image',
+            image: 'file-abc123',
+            // filename is missing
+          },
+          {
+            type: 'file',
+            file_id: 'file-xyz789',
+            filename: 'data.csv',
+            // size and mime_type are missing
+          },
+        ];
+
+        const result = service.parseCodeInterpreterOutputs(outputs);
+
+        expect(result.images).toHaveLength(1);
+        expect(result.images[0].filename).toBeUndefined();
+        expect(result.files).toHaveLength(1);
+        expect(result.files[0].size).toBeUndefined();
+        expect(result.files[0].mime_type).toBeUndefined();
+      });
+    });
+
+    describe('extractImageData', () => {
+      it('should extract data URL format correctly', () => {
+        const imageOutput = {
+          image: 'data:image/png;base64,iVBORw0KGgoAAAANS',
+          filename: 'chart.png',
+        };
+
+        const result = service.extractImageData(imageOutput);
+
+        expect(result.format).toBe('data_url');
+        expect(result.data).toBe('data:image/png;base64,iVBORw0KGgoAAAANS');
+        expect(result.mimeType).toBe('image/png');
+        expect(result.filename).toBe('chart.png');
+      });
+
+      it('should extract JPEG data URL format correctly', () => {
+        const imageOutput = {
+          image: 'data:image/jpeg;base64,/9j/4AAQSkZJRg',
+        };
+
+        const result = service.extractImageData(imageOutput);
+
+        expect(result.format).toBe('data_url');
+        expect(result.mimeType).toBe('image/jpeg');
+      });
+
+      it('should extract file ID format correctly', () => {
+        const imageOutput = {
+          image: 'file-abc123xyz789',
+          filename: 'plot.png',
+        };
+
+        const result = service.extractImageData(imageOutput);
+
+        expect(result.format).toBe('file_id');
+        expect(result.data).toBe('file-abc123xyz789');
+        expect(result.file_id).toBe('file-abc123xyz789');
+        expect(result.filename).toBe('plot.png');
+      });
+
+      it('should use file_id field if present', () => {
+        const imageOutput = {
+          image: 'some_value',
+          file_id: 'file-xyz789',
+          filename: 'image.jpg',
+        };
+
+        const result = service.extractImageData(imageOutput);
+
+        expect(result.format).toBe('file_id');
+        expect(result.file_id).toBe('file-xyz789');
+      });
+
+      it('should extract raw base64 format correctly', () => {
+        const imageOutput = {
+          image: 'iVBORw0KGgoAAAANSUhEUgAA',
+        };
+
+        const result = service.extractImageData(imageOutput);
+
+        expect(result.format).toBe('base64');
+        expect(result.data).toBe(
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA',
+        );
+        expect(result.mimeType).toBe('image/png');
+      });
+
+      it('should handle missing optional fields', () => {
+        const imageOutput = {
+          image: 'data:image/png;base64,abc123',
+        };
+
+        const result = service.extractImageData(imageOutput);
+
+        expect(result.filename).toBeUndefined();
+        expect(result.file_id).toBeUndefined();
+      });
+
+      it('should preserve all fields in result', () => {
+        const imageOutput = {
+          image: 'file-abc123',
+          filename: 'test.png',
+          file_id: 'file-abc123',
+        };
+
+        const result = service.extractImageData(imageOutput);
+
+        expect(result).toHaveProperty('format');
+        expect(result).toHaveProperty('data');
+        expect(result).toHaveProperty('filename');
+        expect(result).toHaveProperty('file_id');
+      });
+    });
+
+    describe('extractFileDownloadUrls', () => {
+      it('should generate download URLs for single file', () => {
+        const fileOutputs = [
+          {
+            file_id: 'file-abc123',
+            filename: 'results.csv',
+            size: 2048,
+            mime_type: 'text/csv',
+          },
+        ];
+
+        const result = service.extractFileDownloadUrls(fileOutputs);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].file_id).toBe('file-abc123');
+        expect(result[0].filename).toBe('results.csv');
+        expect(result[0].download_url).toBe(
+          'https://api.openai.com/v1/files/file-abc123/content',
+        );
+        expect(result[0].size).toBe(2048);
+        expect(result[0].mime_type).toBe('text/csv');
+      });
+
+      it('should generate download URLs for multiple files', () => {
+        const fileOutputs = [
+          { file_id: 'file-abc123', filename: 'data1.csv' },
+          { file_id: 'file-xyz789', filename: 'data2.json' },
+          { file_id: 'file-def456', filename: 'report.pdf' },
+        ];
+
+        const result = service.extractFileDownloadUrls(fileOutputs);
+
+        expect(result).toHaveLength(3);
+        expect(result[0].download_url).toBe(
+          'https://api.openai.com/v1/files/file-abc123/content',
+        );
+        expect(result[1].download_url).toBe(
+          'https://api.openai.com/v1/files/file-xyz789/content',
+        );
+        expect(result[2].download_url).toBe(
+          'https://api.openai.com/v1/files/file-def456/content',
+        );
+      });
+
+      it('should handle empty array', () => {
+        const result = service.extractFileDownloadUrls([]);
+
+        expect(result).toHaveLength(0);
+      });
+
+      it('should use custom base URL if provided', () => {
+        const fileOutputs = [{ file_id: 'file-abc123', filename: 'test.csv' }];
+
+        const result = service.extractFileDownloadUrls(
+          fileOutputs,
+          'https://custom-api.example.com',
+        );
+
+        expect(result[0].download_url).toBe(
+          'https://custom-api.example.com/files/file-abc123/content',
+        );
+      });
+
+      it('should preserve optional fields (size, mime_type)', () => {
+        const fileOutputs = [
+          {
+            file_id: 'file-abc123',
+            filename: 'data.csv',
+            size: 4096,
+            mime_type: 'text/csv',
+          },
+        ];
+
+        const result = service.extractFileDownloadUrls(fileOutputs);
+
+        expect(result[0].size).toBe(4096);
+        expect(result[0].mime_type).toBe('text/csv');
+      });
+
+      it('should handle files without optional fields', () => {
+        const fileOutputs = [
+          { file_id: 'file-abc123', filename: 'minimal.txt' },
+        ];
+
+        const result = service.extractFileDownloadUrls(fileOutputs);
+
+        expect(result[0].file_id).toBe('file-abc123');
+        expect(result[0].filename).toBe('minimal.txt');
+        expect(result[0].download_url).toBeDefined();
+        expect(result[0].size).toBeUndefined();
+        expect(result[0].mime_type).toBeUndefined();
+      });
+    });
+
+    describe('uploadFilesForCodeInterpreter', () => {
+      it('should upload single file successfully', async () => {
+        const mockFile: Express.Multer.File = {
+          buffer: Buffer.from('test file content'),
+          originalname: 'test.csv',
+          mimetype: 'text/csv',
+          fieldname: 'files',
+          encoding: '7bit',
+          size: 17,
+          stream: null as never,
+          destination: '',
+          filename: '',
+          path: '',
+        };
+
+        const mockUploadedFile = {
+          id: 'file-abc123',
+          object: 'file' as const,
+          bytes: 17,
+          created_at: Date.now(),
+          filename: 'test.csv',
+          purpose: 'user_data' as const,
+        };
+
+        mockOpenAIClient.files.create = jest
+          .fn()
+          .mockResolvedValue(mockUploadedFile);
+
+        const result = await service['uploadFilesForCodeInterpreter']([
+          mockFile,
+        ]);
+
+        expect(result).toHaveLength(1);
+        expect(result[0]).toBe('file-abc123');
+        expect(mockOpenAIClient.files.create).toHaveBeenCalledWith({
+          file: expect.any(File) as File,
+          purpose: 'user_data',
+        });
+        expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalled();
+      });
+
+      it('should upload multiple files successfully', async () => {
+        const mockFiles: Express.Multer.File[] = [
+          {
+            buffer: Buffer.from('file1 content'),
+            originalname: 'file1.csv',
+            mimetype: 'text/csv',
+            fieldname: 'files',
+            encoding: '7bit',
+            size: 13,
+            stream: null as never,
+            destination: '',
+            filename: '',
+            path: '',
+          },
+          {
+            buffer: Buffer.from('file2 content'),
+            originalname: 'file2.json',
+            mimetype: 'application/json',
+            fieldname: 'files',
+            encoding: '7bit',
+            size: 13,
+            stream: null as never,
+            destination: '',
+            filename: '',
+            path: '',
+          },
+        ];
+
+        mockOpenAIClient.files.create = jest
+          .fn()
+          .mockResolvedValueOnce({
+            id: 'file-abc123',
+            object: 'file' as const,
+            bytes: 13,
+            created_at: Date.now(),
+            filename: 'file1.csv',
+            purpose: 'user_data' as const,
+          })
+          .mockResolvedValueOnce({
+            id: 'file-xyz789',
+            object: 'file' as const,
+            bytes: 13,
+            created_at: Date.now(),
+            filename: 'file2.json',
+            purpose: 'user_data' as const,
+          });
+
+        const result =
+          await service['uploadFilesForCodeInterpreter'](mockFiles);
+
+        expect(result).toHaveLength(2);
+        expect(result[0]).toBe('file-abc123');
+        expect(result[1]).toBe('file-xyz789');
+        expect(mockOpenAIClient.files.create).toHaveBeenCalledTimes(2);
+      });
+
+      it('should handle empty files array', async () => {
+        const result = await service['uploadFilesForCodeInterpreter']([]);
+
+        expect(result).toHaveLength(0);
+        expect(mockOpenAIClient.files.create).not.toHaveBeenCalled();
+      });
+
+      it('should log upload errors and rethrow', async () => {
+        const mockFile: Express.Multer.File = {
+          buffer: Buffer.from('test'),
+          originalname: 'test.csv',
+          mimetype: 'text/csv',
+          fieldname: 'files',
+          encoding: '7bit',
+          size: 4,
+          stream: null as never,
+          destination: '',
+          filename: '',
+          path: '',
+        };
+
+        const uploadError = new Error('Upload failed');
+        mockOpenAIClient.files.create = jest
+          .fn()
+          .mockRejectedValue(uploadError);
+
+        await expect(
+          service['uploadFilesForCodeInterpreter']([mockFile]),
+        ).rejects.toThrow('Upload failed');
+      });
+
+      it('should convert Buffer to Uint8Array before creating File', async () => {
+        const mockFile: Express.Multer.File = {
+          buffer: Buffer.from('test content'),
+          originalname: 'test.txt',
+          mimetype: 'text/plain',
+          fieldname: 'files',
+          encoding: '7bit',
+          size: 12,
+          stream: null as never,
+          destination: '',
+          filename: '',
+          path: '',
+        };
+
+        mockOpenAIClient.files.create = jest.fn().mockResolvedValue({
+          id: 'file-test',
+          object: 'file' as const,
+          bytes: 12,
+          created_at: Date.now(),
+          filename: 'test.txt',
+          purpose: 'user_data' as const,
+        });
+
+        await service['uploadFilesForCodeInterpreter']([mockFile]);
+
+        expect(mockOpenAIClient.files.create).toHaveBeenCalledWith({
+          file: expect.any(File) as File,
+          purpose: 'user_data',
+        });
+      });
+    });
+
+    describe('createCodeInterpreterResponse', () => {
+      it('should create response without file uploads', async () => {
+        const dto = {
+          input: 'Calculate factorial of 10',
+          model: 'gpt-5',
+          tools: [
+            {
+              type: 'code_interpreter' as const,
+              container: { type: 'auto' as const },
+            },
+          ],
+        } as unknown as CreateTextResponseDto & {
+          memory_limit?: string;
+          container_id?: string;
+        };
+
+        const mockResponse = createMockOpenAIResponse({
+          output_text: 'The factorial of 10 is 3,628,800',
+          status: 'completed',
+        });
+
+        mockOpenAIClient.responses.create = jest
+          .fn()
+          .mockResolvedValue(mockResponse);
+
+        const result = await service.createCodeInterpreterResponse(dto);
+
+        expect(result).toBe(mockResponse);
+        expect(mockOpenAIClient.responses.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            model: 'gpt-5',
+            input: 'Calculate factorial of 10',
+            stream: false,
+            include: ['code_interpreter_call.outputs'],
+          }),
+        );
+      });
+
+      it('should upload files and include file_ids in container config', async () => {
+        const dto = {
+          input: 'Analyze data.csv',
+          tools: [
+            {
+              type: 'code_interpreter' as const,
+              container: { type: 'auto' as const },
+            },
+          ],
+        } as unknown as CreateTextResponseDto & {
+          memory_limit?: string;
+          container_id?: string;
+        };
+
+        const mockFiles: Express.Multer.File[] = [
+          {
+            buffer: Buffer.from('csv data'),
+            originalname: 'data.csv',
+            mimetype: 'text/csv',
+            fieldname: 'files',
+            encoding: '7bit',
+            size: 8,
+            stream: null as never,
+            destination: '',
+            filename: '',
+            path: '',
+          },
+        ];
+
+        mockOpenAIClient.files.create = jest.fn().mockResolvedValue({
+          id: 'file-abc123',
+          object: 'file' as const,
+          bytes: 8,
+          created_at: Date.now(),
+          filename: 'data.csv',
+          purpose: 'user_data' as const,
+        });
+
+        const mockResponse = createMockOpenAIResponse({
+          output_text: 'Data analyzed',
+          status: 'completed',
+        });
+
+        mockOpenAIClient.responses.create = jest
+          .fn()
+          .mockResolvedValue(mockResponse);
+
+        const result = await service.createCodeInterpreterResponse(
+          dto,
+          mockFiles,
+        );
+
+        expect(result).toBe(mockResponse);
+        expect(mockOpenAIClient.files.create).toHaveBeenCalled();
+        expect(mockOpenAIClient.responses.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tools: [
+              {
+                type: 'code_interpreter',
+                container: { type: 'auto', file_ids: ['file-abc123'] },
+              },
+            ],
+          }),
+        );
+      });
+
+      it('should use container_id if provided', async () => {
+        const dto = {
+          input: 'Continue analysis',
+          tools: [
+            {
+              type: 'code_interpreter' as const,
+              container: { type: 'auto' as const },
+            },
+          ],
+          container_id: 'container_reuse123',
+        } as unknown as CreateTextResponseDto & {
+          memory_limit?: string;
+          container_id?: string;
+        };
+
+        const mockResponse = createMockOpenAIResponse({
+          output_text: 'Analysis continued',
+          status: 'completed',
+        });
+
+        mockOpenAIClient.responses.create = jest
+          .fn()
+          .mockResolvedValue(mockResponse);
+
+        const result = await service.createCodeInterpreterResponse(dto);
+
+        expect(result).toBe(mockResponse);
+        expect(mockOpenAIClient.responses.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tools: [
+              {
+                type: 'code_interpreter',
+                container: 'container_reuse123',
+              },
+            ],
+          }),
+        );
+      });
+
+      it('should preserve non-code_interpreter tools unchanged', async () => {
+        const dto = {
+          input: 'Search and calculate',
+          tools: [
+            { type: 'web_search' as const },
+            {
+              type: 'code_interpreter' as const,
+              container: { type: 'auto' as const },
+            },
+          ],
+        } as unknown as CreateTextResponseDto & {
+          memory_limit?: string;
+          container_id?: string;
+        };
+
+        const mockResponse = createMockOpenAIResponse({
+          output_text: 'Results',
+          status: 'completed',
+        });
+
+        mockOpenAIClient.responses.create = jest
+          .fn()
+          .mockResolvedValue(mockResponse);
+
+        const result = await service.createCodeInterpreterResponse(dto);
+
+        expect(result).toBe(mockResponse);
+        expect(mockOpenAIClient.responses.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tools: expect.arrayContaining([
+              expect.objectContaining({ type: 'web_search' }),
+              expect.objectContaining({ type: 'code_interpreter' }),
+            ]) as unknown[],
+          }),
+        );
+      });
+
+      it('should log interaction with proper metadata', async () => {
+        const dto = {
+          input: 'Test',
+          tools: [
+            {
+              type: 'code_interpreter' as const,
+              container: { type: 'auto' as const },
+            },
+          ],
+        } as unknown as CreateTextResponseDto & {
+          memory_limit?: string;
+          container_id?: string;
+        };
+
+        const mockResponse = createMockOpenAIResponse({
+          output_text: 'Result',
+          status: 'completed',
+          usage: {
+            input_tokens: 50,
+            output_tokens: 100,
+            total_tokens: 150,
+            input_tokens_details: { cached_tokens: 0 },
+            output_tokens_details: { reasoning_tokens: 0 },
+          },
+        });
+
+        mockOpenAIClient.responses.create = jest
+          .fn()
+          .mockResolvedValue(mockResponse);
+
+        await service.createCodeInterpreterResponse(dto);
+
+        expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+          expect.objectContaining({
+            api: 'responses',
+            endpoint: '/v1/responses',
+            metadata: expect.objectContaining({
+              tokens_used: 150,
+            }) as Record<string, unknown>,
+          }) as Record<string, unknown>,
+        );
+      });
+
+      it('should handle errors during API call', async () => {
+        const dto = {
+          input: 'Test',
+          tools: [
+            {
+              type: 'code_interpreter' as const,
+              container: { type: 'auto' as const },
+            },
+          ],
+        } as unknown as CreateTextResponseDto & {
+          memory_limit?: string;
+          container_id?: string;
+        };
+
+        const apiError = new Error('Invalid request');
+
+        mockOpenAIClient.responses.create = jest
+          .fn()
+          .mockRejectedValue(apiError);
+
+        await expect(
+          service.createCodeInterpreterResponse(dto),
+        ).rejects.toThrow();
+
+        expect(mockLoggerService.logOpenAIInteraction).toHaveBeenCalledWith(
+          expect.objectContaining({
+            response: expect.objectContaining({
+              error: 'Invalid request',
+            }) as Record<string, unknown>,
+            metadata: expect.objectContaining({
+              error: true,
+            }) as Record<string, unknown>,
+          }) as Record<string, unknown>,
+        );
+      });
+
+      it('should use default model if not provided', async () => {
+        const dto = {
+          input: 'Test',
+          tools: [
+            {
+              type: 'code_interpreter' as const,
+              container: { type: 'auto' as const },
+            },
+          ],
+        } as unknown as CreateTextResponseDto & {
+          memory_limit?: string;
+          container_id?: string;
+        };
+
+        const mockResponse = createMockOpenAIResponse({});
+        mockOpenAIClient.responses.create = jest
+          .fn()
+          .mockResolvedValue(mockResponse);
+
+        await service.createCodeInterpreterResponse(dto);
+
+        expect(mockOpenAIClient.responses.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            model: 'gpt-5', // default model from config
+          }),
+        );
+      });
+    });
+  });
 });

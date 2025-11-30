@@ -92,7 +92,8 @@ describe('Code Interpreter E2E (Real API)', () => {
 
         // Code interpreter specific checks
         // The output should contain or reference the calculation result (120)
-        const output = result.output_text.toLowerCase();
+        const outputText = String(result.output_text || '');
+        const output = outputText.toLowerCase();
         expect(
           output.includes('120') ||
             output.includes('factorial') ||
@@ -100,7 +101,7 @@ describe('Code Interpreter E2E (Real API)', () => {
         ).toBe(true);
 
         console.log(
-          `✅ Code execution successful: "${result.output_text.substring(0, 100)}..."`,
+          `✅ Code execution successful: "${outputText.substring(0, 100)}..."`,
         );
         console.log(`   Tokens used: ${result.usage?.total_tokens}`);
       },
@@ -134,8 +135,9 @@ describe('Code Interpreter E2E (Real API)', () => {
         expect(result).toHaveProperty('output_text');
         expect(result.output_text).toBeTruthy();
 
+        const outputText = String(result.output_text || '');
         console.log(`✅ Auto container test passed`);
-        console.log(`   Output: "${result.output_text.substring(0, 100)}..."`);
+        console.log(`   Output: "${outputText.substring(0, 100)}..."`);
       },
       60000,
     );
@@ -226,9 +228,8 @@ describe('Code Interpreter E2E (Real API)', () => {
 
         console.log(`✅ Multi-tool test passed (code_interpreter + function)`);
         if (result.output_text) {
-          console.log(
-            `   Output: "${result.output_text.substring(0, 100)}..."`,
-          );
+          const outputText = String(result.output_text);
+          console.log(`   Output: "${outputText.substring(0, 100)}..."`);
         } else {
           console.log(`   Output: (empty - function tool response)`);
         }
@@ -369,8 +370,7 @@ describe('Code Interpreter E2E (Real API)', () => {
           })
           .expect(400); // Expect validation error
 
-        const error = response.body as { message: string };
-        expect(error).toHaveProperty('message');
+        expect(response.body).toHaveProperty('message');
         // Error message format may vary between validation and API
 
         console.log(`✅ Validation rejection test passed`);
@@ -398,8 +398,7 @@ describe('Code Interpreter E2E (Real API)', () => {
           })
           .expect(400);
 
-        const error = response.body as { message: string };
-        expect(error).toHaveProperty('message');
+        expect(response.body).toHaveProperty('message');
         // Error message format may vary between validation and API
 
         console.log(`✅ Empty file_ids validation test passed`);
@@ -427,8 +426,7 @@ describe('Code Interpreter E2E (Real API)', () => {
           })
           .expect(400);
 
-        const error = response.body as { message: string };
-        expect(error).toHaveProperty('message');
+        expect(response.body).toHaveProperty('message');
 
         console.log(`✅ Invalid file_id format validation test passed`);
       },
@@ -469,8 +467,9 @@ describe('Code Interpreter E2E (Real API)', () => {
         expect(result).toHaveProperty('id');
         expect(result).toHaveProperty('output_text');
 
+        const outputText = String(result.output_text || '');
         console.log(`✅ Multiple code_interpreter tools test passed`);
-        console.log(`   Output: "${result.output_text.substring(0, 100)}..."`);
+        console.log(`   Output: "${outputText.substring(0, 100)}..."`);
       },
       60000,
     );
@@ -502,7 +501,8 @@ describe('Code Interpreter E2E (Real API)', () => {
         expect(result).toHaveProperty('id');
         expect(result).toHaveProperty('output_text');
 
-        const output = result.output_text.toLowerCase();
+        const outputText = String(result.output_text || '');
+        const output = outputText.toLowerCase();
 
         // Should mention statistical terms
         const hasStats =
@@ -515,7 +515,7 @@ describe('Code Interpreter E2E (Real API)', () => {
 
         console.log(`✅ Complex calculation test passed`);
         console.log(
-          `   Statistical analysis: "${result.output_text.substring(0, 150)}..."`,
+          `   Statistical analysis: "${outputText.substring(0, 150)}..."`,
         );
       },
       60000,

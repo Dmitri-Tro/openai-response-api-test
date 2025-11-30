@@ -223,7 +223,9 @@ describe('Videos API (E2E)', () => {
         } catch (error) {
           // Supertest timeout is expected if video takes longer than maxWaitMs
           if (error && typeof error === 'object' && 'timeout' in error) {
-            console.log(`⏱️  Request timeout (expected for slow video generation)`);
+            console.log(
+              `⏱️  Request timeout (expected for slow video generation)`,
+            );
             return; // Test passes - timeout is acceptable
           }
           throw error;
@@ -268,7 +270,9 @@ describe('Videos API (E2E)', () => {
         } catch (error) {
           // Supertest timeout can occur if service doesn't respond quickly enough
           if (error && typeof error === 'object' && 'timeout' in error) {
-            console.log(`⏱️  Supertest timeout (polling took longer than expected)`);
+            console.log(
+              `⏱️  Supertest timeout (polling took longer than expected)`,
+            );
             return; // Test passes - timeout is acceptable
           }
           throw error;
@@ -348,8 +352,9 @@ describe('Videos API (E2E)', () => {
 
         // Delete video
         // Note: OpenAI may return 400/404 if video is in certain states or not accessible
-        const deleteResponse = await request(app.getHttpServer() as Server)
-          .delete(`/api/videos/${videoId}`);
+        const deleteResponse = await request(
+          app.getHttpServer() as Server,
+        ).delete(`/api/videos/${videoId}`);
 
         // Accept both success and error responses (API behavior varies by video state)
         if (deleteResponse.status === 200) {
@@ -450,8 +455,9 @@ describe('Videos API (E2E)', () => {
 
         // Try to download immediately (should fail)
         // Note: OpenAI returns 404 "Video is not ready yet" instead of 409 for incomplete videos
-        const response = await request(app.getHttpServer() as Server)
-          .get(`/api/videos/${videoId}/download`);
+        const response = await request(app.getHttpServer() as Server).get(
+          `/api/videos/${videoId}/download`,
+        );
 
         expect([404, 409]).toContain(response.status);
       },

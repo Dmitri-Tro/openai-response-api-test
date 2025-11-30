@@ -165,6 +165,27 @@ export type AudioErrorCode =
   | 'audio_processing_error';
 
 /**
+ * Code Interpreter-specific error codes
+ * Phase 7: Code Interpreter Advanced Features
+ */
+export type CodeInterpreterErrorCode =
+  // Code Errors
+  | 'code_syntax_error'
+  | 'code_runtime_error'
+  | 'code_timeout_error'
+  | 'code_resource_limit_error'
+  | 'code_security_violation'
+  // Container Errors
+  | 'container_creation_failed'
+  | 'container_not_found'
+  | 'container_expired'
+  // File Access Errors
+  | 'file_not_accessible'
+  // Output Errors
+  | 'output_too_large'
+  | 'code_execution_failed';
+
+/**
  * Network error codes (Node.js)
  */
 export type NetworkErrorCode =
@@ -197,6 +218,7 @@ export type ErrorCode =
   | ImagesAPIErrorCode
   | VideoErrorCode
   | AudioErrorCode
+  | CodeInterpreterErrorCode
   | NetworkErrorCode
   | OpenAIAPIErrorCode;
 
@@ -859,5 +881,81 @@ export const AUDIO_ERROR_CODE_MAPPINGS: Record<
     status: 500,
     message: 'Audio processing error',
     hint: 'An error occurred while processing the audio file. Verify the file is valid, not corrupted, and retry. Contact support if the issue persists.',
+  },
+};
+
+/**
+ * Mapping of Code Interpreter error codes to HTTP status codes and user-friendly messages
+ * Phase 7: Code Interpreter Advanced Features
+ */
+export const CODE_INTERPRETER_ERROR_CODE_MAPPINGS: Record<
+  CodeInterpreterErrorCode,
+  {
+    status: number;
+    message: string;
+    hint: string;
+  }
+> = {
+  // Code Errors
+  code_syntax_error: {
+    status: 400,
+    message: 'Python syntax error in generated code',
+    hint: 'The generated Python code contains syntax errors. Review the error line number and message, then modify your input to guide correct code generation.',
+  },
+  code_runtime_error: {
+    status: 400,
+    message: 'Python runtime error during execution',
+    hint: 'The code executed but encountered a runtime error (e.g., ZeroDivisionError, NameError, TypeError). Check the traceback for details and adjust your input.',
+  },
+  code_timeout_error: {
+    status: 504,
+    message: 'Code execution timed out',
+    hint: 'The code took too long to execute (typically 30-60 seconds limit). Simplify your code, reduce data size, or optimize algorithms to complete faster.',
+  },
+  code_resource_limit_error: {
+    status: 507,
+    message: 'Code exceeded resource limits',
+    hint: 'The code exceeded memory or disk space limits. Reduce data size, use generators for large datasets, or process data in smaller chunks.',
+  },
+  code_security_violation: {
+    status: 403,
+    message: 'Code contains potentially unsafe operations',
+    hint: 'The code attempted restricted operations (e.g., network access, subprocess execution). Code interpreter runs in a sandbox with limited permissions.',
+  },
+
+  // Container Errors
+  container_creation_failed: {
+    status: 500,
+    message: 'Failed to create code interpreter container',
+    hint: 'Container creation failed. Retry the request or contact support if the issue persists. Note: Container creation costs $0.03 per container.',
+  },
+  container_not_found: {
+    status: 404,
+    message: 'Code interpreter container not found',
+    hint: 'The container ID does not exist or has expired. Containers remain active for up to 1 hour or 20 minutes of idle time. Create a new request with auto-container.',
+  },
+  container_expired: {
+    status: 410,
+    message: 'Code interpreter container has expired',
+    hint: 'The container expired after 1 hour or 20 minutes of inactivity. Create a new request to start a fresh container session.',
+  },
+
+  // File Access Errors
+  file_not_accessible: {
+    status: 404,
+    message: 'File not accessible in code interpreter',
+    hint: 'The file ID does not exist, was deleted, or is not attached to the container. Verify file_ids in the container configuration and ensure files are uploaded first.',
+  },
+
+  // Output Errors
+  output_too_large: {
+    status: 413,
+    message: 'Code interpreter output exceeds size limit',
+    hint: 'The output (logs, images, files) is too large to return. Reduce output volume, summarize results, or write large outputs to files for later download.',
+  },
+  code_execution_failed: {
+    status: 500,
+    message: 'Code execution failed',
+    hint: 'An unknown error occurred during code execution. Retry the request or contact support if the issue persists.',
   },
 };

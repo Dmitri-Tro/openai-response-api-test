@@ -763,4 +763,130 @@ export class OpenAIExceptionFilter implements ExceptionFilter {
     }
     return undefined;
   }
+
+  /**
+   * Parse Python error from code interpreter output
+   *
+   * Extracts error type, message, line number, and traceback from Python error output.
+   *
+   * @param errorOutput - Code interpreter error output
+   * @returns Parsed error details
+   * @private
+   *
+   * @example
+   * ```typescript
+   * const parsed = this.parsePythonError({
+   *   type: 'error',
+   *   error_type: 'runtime',
+   *   message: 'ZeroDivisionError: division by zero',
+   *   line: 5,
+   *   traceback: 'Traceback (most recent call last):\n  File "<string>", line 5...'
+   * });
+   * ```
+   */
+  private parsePythonError(errorOutput: {
+    error_type: string;
+    message: string;
+    line?: number;
+    traceback?: string;
+  }): {
+    python_error_type: string;
+    error_message: string;
+    line_number?: number;
+    traceback?: string;
+    category: 'syntax' | 'runtime' | 'timeout' | 'resource_limit' | 'unknown';
+  } {
+    const { error_type, message, line, traceback } = errorOutput;
+
+    // Extract Python error type from message (e.g., "ZeroDivisionError: division by zero")
+    const errorTypeMatch = message.match(/^(\w+Error):\s*(.+)/);
+    const pythonErrorType = errorTypeMatch ? errorTypeMatch[1] : error_type;
+    const cleanMessage = errorTypeMatch ? errorTypeMatch[2] : message;
+
+    // Categorize error based on error_type from OpenAI or Python error type
+    let category:
+      | 'syntax'
+      | 'runtime'
+      | 'timeout'
+      | 'resource_limit'
+      | 'unknown' = 'unknown';
+
+    if (
+      error_type === 'syntax' ||
+      pythonErrorType.includes('SyntaxError') ||
+      pythonErrorType.includes('IndentationError')
+    ) {
+      category = 'syntax';
+    } else if (
+      error_type === 'timeout' ||
+      pythonErrorType.includes('TimeoutError')
+    ) {
+      category = 'timeout';
+    } else if (
+      error_type === 'resource_limit' ||
+      pythonErrorType.includes('MemoryError') ||
+      pythonErrorType.includes('RecursionError')
+    ) {
+      category = 'resource_limit';
+    } else if (error_type === 'runtime') {
+      category = 'runtime';
+    }
+
+    return {
+      python_error_type: pythonErrorType,
+      error_message: cleanMessage,
+      line_number: line,
+      traceback,
+      category,
+    };
+  }
+
+  /**
+   * Get actionable hint for Python error
+   *
+   * Returns user-friendly hints based on Python error type.
+   *
+   * @param errorType - Python error type (e.g., "NameError", "ZeroDivisionError")
+   * @returns Actionable hint for the user
+   * @private
+   */
+  private getErrorHint(errorType: string): string {
+    const hints: Record<string, string> = {
+      SyntaxError:
+        'Check for missing colons, unmatched brackets/parentheses, or invalid Python syntax.',
+      IndentationError:
+        'Ensure consistent indentation (use either spaces or tabs, not both). Python requires proper indentation for code blocks.',
+      NameError:
+        'The variable or function name is not defined. Check for typos or ensure the variable is defined before use.',
+      ValueError:
+        'The function received a value of correct type but inappropriate value. Check input ranges and formats.',
+      TypeError:
+        'Operation attempted on incompatible types. Verify data types match the required operation.',
+      AttributeError:
+        'The object does not have the specified attribute or method. Check object type and available methods.',
+      KeyError:
+        'Dictionary key does not exist. Use .get() method with default value or check key existence with "in" operator.',
+      IndexError:
+        'List index out of range. Verify array/list length before accessing elements.',
+      ZeroDivisionError:
+        'Division by zero attempted. Add conditional check to prevent dividing by zero.',
+      ImportError:
+        'Module could not be imported. The module may not be available in the code interpreter environment.',
+      ModuleNotFoundError:
+        'The specified module is not installed. Code interpreter includes pandas, numpy, matplotlib, but not all packages.',
+      MemoryError:
+        'Insufficient memory for operation. Reduce data size, use generators, or process in smaller chunks.',
+      RecursionError:
+        'Maximum recursion depth exceeded. Add base case to recursive function or use iterative approach.',
+      FileNotFoundError:
+        'File not found in container. Ensure file is uploaded via file_ids in container configuration.',
+      TimeoutError:
+        'Code execution exceeded time limit (30-60 seconds). Optimize algorithms or reduce data size.',
+    };
+
+    return (
+      hints[errorType] ||
+      'An error occurred during code execution. Review the error message and traceback for details.'
+    );
+  }
 }

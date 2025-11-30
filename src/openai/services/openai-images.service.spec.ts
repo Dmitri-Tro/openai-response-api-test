@@ -354,7 +354,7 @@ describe('OpenAIImagesService', () => {
           model: 'dall-e-2',
           n: 3,
           size: '1024x1024',
-          response_format: 'url',
+          // response_format omitted - OpenAI API rejects this parameter for edits
           user: 'user-456',
         }),
       );
@@ -448,7 +448,7 @@ describe('OpenAIImagesService', () => {
           model: 'dall-e-2',
           n: 1,
           size: '512x512',
-          response_format: 'b64_json',
+          // response_format omitted - OpenAI API rejects this parameter for variations
           user: 'user-789',
         }),
       );

@@ -6,12 +6,21 @@ import {
   Delete,
   Param,
   Res,
+  UploadedFiles,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiConsumes,
+} from '@nestjs/swagger';
 import type { Response } from 'express';
 import { OpenAIResponsesService } from '../services/openai-responses.service';
 import { CreateTextResponseDto } from '../dto/create-text-response.dto';
 import { CreateImageResponseDto } from '../dto/create-image-response.dto';
+import { CreateCodeInterpreterResponseDto } from '../dto/code-interpreter/create-code-interpreter-response.dto';
 
 @ApiTags('Responses API')
 @Controller('api/responses')
@@ -362,5 +371,77 @@ export class ResponsesController {
   })
   async cancelResponse(@Param('id') id: string) {
     return this.responsesService.cancel(id);
+  }
+
+  @Post('code-interpreter')
+  @UseInterceptors(FilesInterceptor('files'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Create code interpreter response with file upload',
+    description:
+      'Execute Python code with optional file uploads. Supports data analysis, visualizations, and file generation.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Code execution successful',
+    schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', example: 'resp_abc123' },
+        output_text: {
+          type: 'string',
+          example: 'The factorial of 10 is 3,628,800',
+        },
+        output_tool_call: {
+          type: 'object',
+          properties: {
+            type: { type: 'string', example: 'code_interpreter' },
+            call_id: { type: 'string', example: 'call_xyz789' },
+            container_id: { type: 'string', example: 'container_def456' },
+            code: {
+              type: 'string',
+              example:
+                'import math\\nresult = math.factorial(10)\\nprint(result)',
+            },
+            output: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', example: 'logs' },
+                  logs: { type: 'string', example: '3628800\\n' },
+                },
+              },
+            },
+          },
+        },
+        usage: {
+          type: 'object',
+          properties: {
+            input_tokens: { type: 'number', example: 20 },
+            output_tokens: { type: 'number', example: 95 },
+            total_tokens: { type: 'number', example: 115 },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid parameters or code execution error',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Invalid OpenAI API key',
+  })
+  @ApiResponse({
+    status: 429,
+    description: 'Rate limit exceeded',
+  })
+  async createCodeInterpreterResponse(
+    @Body() dto: CreateCodeInterpreterResponseDto,
+    @UploadedFiles() files?: Express.Multer.File[],
+  ) {
+    return this.responsesService.createCodeInterpreterResponse(dto, files);
   }
 }

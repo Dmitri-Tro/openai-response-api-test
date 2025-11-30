@@ -402,7 +402,9 @@ describe('OpenAI Images E2E (Real API)', () => {
         if (!imageDone) throw new Error('imageDone is undefined');
 
         // Should have response completion
-        const responseDone = events.find((e) => e.event === 'response_completed');
+        const responseDone = events.find(
+          (e) => e.event === 'response_completed',
+        );
         expect(responseDone).toBeDefined();
 
         console.log(
@@ -429,7 +431,9 @@ describe('OpenAI Images E2E (Real API)', () => {
         const events = parseSSEEvents(response.text);
 
         // Should have partial image events
-        const partialEvents = events.filter((e) => e.event === 'image_gen_partial');
+        const partialEvents = events.filter(
+          (e) => e.event === 'image_gen_partial',
+        );
 
         // May have 0-3 partial images depending on generation speed
         console.log(
@@ -469,7 +473,8 @@ describe('OpenAI Images E2E (Real API)', () => {
           .send({
             model: 'gpt-5', // gpt-5 automatically uses gpt-image-1 for images
             input: 'Add a red door to the front of the house',
-            instructions: 'Modify the previous image by adding the requested element',
+            instructions:
+              'Modify the previous image by adding the requested element',
             previous_response_id: responseId,
           })
           .expect(201);

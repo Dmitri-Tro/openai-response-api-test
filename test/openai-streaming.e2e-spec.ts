@@ -134,7 +134,9 @@ describe('OpenAI Streaming E2E (Real API)', () => {
         expect(textDone?.data).toHaveProperty('output_text');
 
         // Should end with response_completed
-        const responseDone = events.find((e) => e.event === 'response_completed');
+        const responseDone = events.find(
+          (e) => e.event === 'response_completed',
+        );
         expect(responseDone).toBeDefined();
 
         // Reconstruct text
@@ -160,7 +162,9 @@ describe('OpenAI Streaming E2E (Real API)', () => {
           .expect(201); // Streaming returns 201;
 
         const events = parseSSEEvents(response.text);
-        const responseDone = events.find((e) => e.event === 'response_completed');
+        const responseDone = events.find(
+          (e) => e.event === 'response_completed',
+        );
 
         expect(responseDone).toBeDefined();
         expect(responseDone?.data.usage).toHaveProperty('input_tokens');
@@ -233,7 +237,7 @@ describe('OpenAI Streaming E2E (Real API)', () => {
 
         const events = parseSSEEvents(response.text);
 
-        console.log(`All events: ${events.map(e => e.event).join(', ')}`);
+        console.log(`All events: ${events.map((e) => e.event).join(', ')}`);
 
         // Should have output_item.added for function call
         const itemAdded = events.find((e) => e.event === 'output_item.added');
@@ -256,7 +260,9 @@ describe('OpenAI Streaming E2E (Real API)', () => {
           );
         } else {
           console.log(`⚠️ Function calling streaming not working as expected`);
-          console.log(`  - output_item.added: ${itemAdded ? 'found' : 'NOT FOUND'}`);
+          console.log(
+            `  - output_item.added: ${itemAdded ? 'found' : 'NOT FOUND'}`,
+          );
           console.log(`  - arg deltas: ${argDeltas.length}`);
           console.log(`  - args_done: ${argsDone ? 'found' : 'NOT FOUND'}`);
           console.log(`  This may be an API limitation or unsupported feature`);
@@ -292,7 +298,7 @@ describe('OpenAI Streaming E2E (Real API)', () => {
         const textDone = events.find((e) => e.event === 'text_done');
 
         console.log(`Delta events: ${deltaEvents.length}`);
-        console.log(`All events: ${events.map(e => e.event).join(', ')}`);
+        console.log(`All events: ${events.map((e) => e.event).join(', ')}`);
 
         // JSON may be returned in one chunk or streamed deltas
         if (textDone && (deltaEvents.length > 0 || textDone.data.output_text)) {
@@ -341,7 +347,9 @@ describe('OpenAI Streaming E2E (Real API)', () => {
           .expect(201); // Streaming returns 201;
 
         const firstEvents = parseSSEEvents(firstResponse.text);
-        const firstDone = firstEvents.find((e) => e.event === 'response_completed');
+        const firstDone = firstEvents.find(
+          (e) => e.event === 'response_completed',
+        );
         const responseId = firstDone?.data.response_id;
 
         // Second request - continue conversation
@@ -362,7 +370,8 @@ describe('OpenAI Streaming E2E (Real API)', () => {
         );
 
         // Should mention Alice in the response (note: conversation context may not always be preserved)
-        const outputText = secondTextDone?.data.output_text?.toLowerCase() || '';
+        const outputText =
+          secondTextDone?.data.output_text?.toLowerCase() || '';
         const hasAlice = outputText.includes('alice');
 
         console.log(`Response ID: ${responseId}`);
@@ -371,7 +380,9 @@ describe('OpenAI Streaming E2E (Real API)', () => {
         if (hasAlice) {
           console.log(`✅ Multi-turn: Conversation context preserved`);
         } else {
-          console.log(`⚠️ Multi-turn: Conversation context NOT preserved (may be API limitation)`);
+          console.log(
+            `⚠️ Multi-turn: Conversation context NOT preserved (may be API limitation)`,
+          );
         }
 
         // Make test pass but log the issue
@@ -426,7 +437,9 @@ describe('OpenAI Streaming E2E (Real API)', () => {
 
         // Parse initial stream to get response ID
         const initialEvents = parseSSEEvents(createResponse.text);
-        const createdEvent = initialEvents.find((e) => e.event === 'response_created');
+        const createdEvent = initialEvents.find(
+          (e) => e.event === 'response_created',
+        );
         const responseId = createdEvent?.data.response_id;
 
         expect(responseId).toBeDefined();
@@ -446,11 +459,15 @@ describe('OpenAI Streaming E2E (Real API)', () => {
 
         // Should have at least text_done and response_completed
         const textDone = events.find((e) => e.event === 'text_done');
-        const responseDone = events.find((e) => e.event === 'response_completed');
+        const responseDone = events.find(
+          (e) => e.event === 'response_completed',
+        );
 
         expect(textDone || responseDone).toBeDefined();
 
-        console.log(`✅ Resumed stream for: ${responseId} with ${events.length} events`);
+        console.log(
+          `✅ Resumed stream for: ${responseId} with ${events.length} events`,
+        );
       },
       60000,
     ); // Longer timeout for background processing

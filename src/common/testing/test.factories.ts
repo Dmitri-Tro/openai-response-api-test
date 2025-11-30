@@ -27,7 +27,7 @@ export const createMockLoggerService = (): jest.Mocked<LoggerService> => {
 };
 
 /**
- * Creates a mock OpenAI client with responses methods
+ * Creates a mock OpenAI client with responses and files methods
  */
 export const createMockOpenAIClient = (): jest.Mocked<OpenAI> => {
   return {
@@ -36,6 +36,13 @@ export const createMockOpenAIClient = (): jest.Mocked<OpenAI> => {
       retrieve: jest.fn(),
       delete: jest.fn(),
       cancel: jest.fn(),
+    },
+    files: {
+      create: jest.fn(),
+      retrieve: jest.fn(),
+      list: jest.fn(),
+      del: jest.fn(),
+      retrieveContent: jest.fn(),
     },
   } as unknown as jest.Mocked<OpenAI>;
 };

@@ -2552,4 +2552,461 @@ export class OpenAIResponsesService {
       typeof (error as Record<string, unknown>).status === 'number'
     );
   }
+
+  /**
+   * Create a code interpreter response with enhanced file handling
+   *
+   * This method provides advanced code interpreter capabilities with:
+   * - File upload integration with Files API
+   * - Memory limit configuration (1g, 4g, 16g, 64g)
+   * - Container reuse for cost optimization
+   * - Enhanced output parsing
+   *
+   * @param dto - Code interpreter configuration including model, input, tools, memory_limit
+   * @param files - Optional files to upload before code execution
+   * @returns Promise resolving to OpenAI Response with code interpreter outputs
+   *
+   * @example
+   * ```typescript
+   * const response = await service.createCodeInterpreterResponse({
+   *   model: 'gpt-4o',
+   *   input: 'Analyze this CSV file',
+   *   tools: [{ type: 'code_interpreter', container: { type: 'auto' } }],
+   *   memory_limit: '4g'
+   * }, [csvFileBuffer]);
+   * ```
+   */
+  async createCodeInterpreterResponse(
+    dto: CreateTextResponseDto & {
+      memory_limit?: string;
+      container_id?: string;
+    },
+    files?: Express.Multer.File[],
+  ): Promise<Responses.Response> {
+    const startTime = Date.now();
+
+    try {
+      // Upload files if provided
+      let file_ids: string[] | undefined;
+      if (files && files.length > 0) {
+        file_ids = await this.uploadFilesForCodeInterpreter(files);
+      }
+
+      // Build request parameters
+      const params: ExtendedResponseCreateParamsNonStreaming = {
+        model: dto.model || this.defaultModel,
+        input: dto.input,
+        stream: false,
+      };
+
+      // Add optional parameters
+      if (dto.instructions) params.instructions = dto.instructions;
+      if (dto.temperature !== undefined) params.temperature = dto.temperature;
+      if (dto.max_output_tokens !== undefined)
+        params.max_output_tokens = dto.max_output_tokens;
+
+      // Configure code interpreter tool with uploaded files or container reuse
+      if (dto.tools) {
+        params.tools = dto.tools.map((tool) => {
+          if (
+            typeof tool === 'object' &&
+            tool !== null &&
+            'type' in tool &&
+            tool.type === 'code_interpreter'
+          ) {
+            // Apply container_id if provided (cost optimization)
+            if (dto.container_id) {
+              return {
+                type: 'code_interpreter' as const,
+                container: dto.container_id,
+              };
+            }
+
+            // Add uploaded files to auto container
+            if (file_ids && file_ids.length > 0) {
+              return {
+                type: 'code_interpreter' as const,
+                container: {
+                  type: 'auto' as const,
+                  file_ids,
+                },
+              };
+            }
+          }
+          return tool;
+        }) as Responses.ResponseCreateParamsNonStreaming['tools'];
+      }
+
+      // Add include parameter for detailed outputs
+      if (dto.include) {
+        params.include = dto.include;
+      } else {
+        // Default: include code interpreter outputs
+        params.include = ['code_interpreter_call.outputs'];
+      }
+
+      // Note: memory_limit is not directly supported by OpenAI API as of SDK 6.8.1
+      // It's documented here for future API support
+      // Currently, memory is auto-managed by OpenAI
+
+      // Create response
+      const response: Responses.Response =
+        await this.client.responses.create(params);
+
+      // Extract usage and metadata
+      const usage = this.extractUsage(response);
+      const metadata = this.extractResponseMetadata(response);
+      const cost = this.estimateCost(usage, dto.model || this.defaultModel);
+
+      // Log interaction
+      this.loggerService.logOpenAIInteraction({
+        timestamp: new Date().toISOString(),
+        api: 'responses',
+        endpoint: '/v1/responses',
+        request: params as unknown as Record<string, unknown>,
+        response: response as unknown as Record<string, unknown>,
+        metadata: {
+          ...(metadata as unknown as Record<string, unknown>),
+          latency_ms: Date.now() - startTime,
+          tokens_used: usage?.total_tokens || 0,
+          cached_tokens: usage?.input_tokens_details?.cached_tokens || 0,
+          reasoning_tokens: usage?.output_tokens_details?.reasoning_tokens || 0,
+          cost_estimate: cost,
+          uploaded_files: file_ids?.length || 0,
+        } as unknown as Record<string, unknown>,
+      });
+
+      return response;
+    } catch (error) {
+      // Log error
+      this.loggerService.logOpenAIInteraction({
+        timestamp: new Date().toISOString(),
+        api: 'responses',
+        endpoint: '/v1/responses',
+        request: { input: dto.input } as unknown as Record<string, unknown>,
+        response: {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+        metadata: {
+          latency_ms: Date.now() - startTime,
+          error: true,
+        } as unknown as Record<string, unknown>,
+      });
+
+      throw error;
+    }
+  }
+
+  /**
+   * Upload files for code interpreter using Files API
+   *
+   * Integrates with OpenAI Files API to upload files that will be
+   * accessible within the code interpreter container.
+   *
+   * @param files - Array of multer file objects to upload
+   * @returns Promise resolving to array of file IDs
+   * @private
+   *
+   * @example
+   * ```typescript
+   * const file_ids = await this.uploadFilesForCodeInterpreter([csvFile, jsonFile]);
+   * // Returns: ['file-abc123...', 'file-def456...']
+   * ```
+   */
+  private async uploadFilesForCodeInterpreter(
+    files: Express.Multer.File[],
+  ): Promise<string[]> {
+    const file_ids: string[] = [];
+
+    for (const file of files) {
+      try {
+        // Convert Buffer to Uint8Array for File constructor
+        const uint8Array = new Uint8Array(file.buffer);
+
+        // Create File object from Uint8Array
+        const fileBlob = new File([uint8Array], file.originalname, {
+          type: file.mimetype,
+        });
+
+        // Upload to OpenAI Files API
+        const uploadedFile = await this.client.files.create({
+          file: fileBlob,
+          purpose: 'user_data',
+        });
+
+        file_ids.push(uploadedFile.id);
+
+        this.loggerService.logOpenAIInteraction({
+          timestamp: new Date().toISOString(),
+          api: 'files',
+          endpoint: '/v1/files',
+          request: {
+            filename: file.originalname,
+            size: file.size,
+            purpose: 'user_data',
+          } as unknown as Record<string, unknown>,
+          response: { id: uploadedFile.id } as unknown as Record<
+            string,
+            unknown
+          >,
+          metadata: {
+            file_id: uploadedFile.id,
+            bytes: uploadedFile.bytes,
+          } as unknown as Record<string, unknown>,
+        });
+      } catch (error) {
+        this.loggerService.logOpenAIInteraction({
+          timestamp: new Date().toISOString(),
+          api: 'files',
+          endpoint: '/v1/files',
+          request: {
+            filename: file.originalname,
+          } as unknown as Record<string, unknown>,
+          response: {
+            error: error instanceof Error ? error.message : 'Unknown error',
+          },
+          metadata: { error: true } as unknown as Record<string, unknown>,
+        });
+        throw error;
+      }
+    }
+
+    return file_ids;
+  }
+
+  /**
+   * Parse and categorize code interpreter outputs
+   *
+   * Analyzes code interpreter output array and categorizes by type:
+   * logs, images, files, errors.
+   *
+   * @param outputs - Array of code interpreter outputs from response
+   * @returns Categorized outputs object
+   *
+   * @example
+   * ```typescript
+   * const categorized = this.parseCodeInterpreterOutputs(response.output_tool_call?.output);
+   * // Returns: { logs: [...], images: [...], files: [...], errors: [...] }
+   * ```
+   */
+  parseCodeInterpreterOutputs(outputs: unknown[]): {
+    logs: Array<{ logs: string }>;
+    images: Array<{ image: string; filename?: string; file_id?: string }>;
+    files: Array<{
+      file_id: string;
+      filename: string;
+      size?: number;
+      mime_type?: string;
+    }>;
+    errors: Array<{
+      error_type: string;
+      message: string;
+      line?: number;
+      traceback?: string;
+    }>;
+  } {
+    const categorized = {
+      logs: [] as Array<{ logs: string }>,
+      images: [] as Array<{
+        image: string;
+        filename?: string;
+        file_id?: string;
+      }>,
+      files: [] as Array<{
+        file_id: string;
+        filename: string;
+        size?: number;
+        mime_type?: string;
+      }>,
+      errors: [] as Array<{
+        error_type: string;
+        message: string;
+        line?: number;
+        traceback?: string;
+      }>,
+    };
+
+    if (!Array.isArray(outputs)) {
+      return categorized;
+    }
+
+    for (const output of outputs) {
+      if (typeof output === 'object' && output !== null && 'type' in output) {
+        const typedOutput = output as { type: string };
+
+        switch (typedOutput.type) {
+          case 'logs':
+            if ('logs' in output && typeof output.logs === 'string') {
+              categorized.logs.push({ logs: output.logs });
+            }
+            break;
+
+          case 'image':
+            if ('image' in output && typeof output.image === 'string') {
+              categorized.images.push({
+                image: output.image,
+                filename:
+                  'filename' in output && typeof output.filename === 'string'
+                    ? output.filename
+                    : undefined,
+                file_id:
+                  'file_id' in output && typeof output.file_id === 'string'
+                    ? output.file_id
+                    : undefined,
+              });
+            }
+            break;
+
+          case 'file':
+            if (
+              'file_id' in output &&
+              typeof output.file_id === 'string' &&
+              'filename' in output &&
+              typeof output.filename === 'string'
+            ) {
+              categorized.files.push({
+                file_id: output.file_id,
+                filename: output.filename,
+                size:
+                  'size' in output && typeof output.size === 'number'
+                    ? output.size
+                    : undefined,
+                mime_type:
+                  'mime_type' in output && typeof output.mime_type === 'string'
+                    ? output.mime_type
+                    : undefined,
+              });
+            }
+            break;
+
+          case 'error':
+            if (
+              'error_type' in output &&
+              typeof output.error_type === 'string' &&
+              'message' in output &&
+              typeof output.message === 'string'
+            ) {
+              categorized.errors.push({
+                error_type: output.error_type,
+                message: output.message,
+                line:
+                  'line' in output && typeof output.line === 'number'
+                    ? output.line
+                    : undefined,
+                traceback:
+                  'traceback' in output && typeof output.traceback === 'string'
+                    ? output.traceback
+                    : undefined,
+              });
+            }
+            break;
+        }
+      }
+    }
+
+    return categorized;
+  }
+
+  /**
+   * Extract and decode image data from code interpreter output
+   *
+   * Handles three image formats:
+   * 1. Base64 data URLs (data:image/png;base64,...)
+   * 2. File IDs (file-abc123...)
+   * 3. Raw base64 strings
+   *
+   * @param imageOutput - Image output object with image string
+   * @returns Processed image data with format information
+   *
+   * @example
+   * ```typescript
+   * const imageData = this.extractImageData({ image: 'data:image/png;base64,...' });
+   * // Returns: { format: 'data_url', data: 'data:image/png;base64,...', mimeType: 'image/png' }
+   * ```
+   */
+  extractImageData(imageOutput: {
+    image: string;
+    filename?: string;
+    file_id?: string;
+  }): {
+    format: 'data_url' | 'file_id' | 'base64';
+    data: string;
+    mimeType?: string;
+    filename?: string;
+    file_id?: string;
+  } {
+    const { image, filename, file_id } = imageOutput;
+
+    // Case 1: Data URL format (data:image/png;base64,...)
+    if (image.startsWith('data:')) {
+      const mimeMatch = image.match(/^data:([^;]+);base64,/);
+      return {
+        format: 'data_url',
+        data: image,
+        mimeType: mimeMatch ? mimeMatch[1] : undefined,
+        filename,
+        file_id,
+      };
+    }
+
+    // Case 2: File ID format (file-...)
+    if (image.startsWith('file-') || file_id) {
+      return {
+        format: 'file_id',
+        data: image,
+        filename,
+        file_id: file_id || image,
+      };
+    }
+
+    // Case 3: Raw base64 string
+    // Generate data URL for browser compatibility
+    const dataUrl = `data:image/png;base64,${image}`;
+    return {
+      format: 'base64',
+      data: dataUrl,
+      mimeType: 'image/png',
+      filename,
+      file_id,
+    };
+  }
+
+  /**
+   * Generate download URLs for file outputs
+   *
+   * Creates download URLs for files generated by code interpreter.
+   * Uses Files API endpoint pattern: GET /v1/files/{file_id}/content
+   *
+   * @param fileOutputs - Array of file output objects
+   * @param baseUrl - Optional base URL for API (defaults to OpenAI API)
+   * @returns Array of download URL objects
+   *
+   * @example
+   * ```typescript
+   * const urls = this.extractFileDownloadUrls([
+   *   { file_id: 'file-abc123', filename: 'results.csv' }
+   * ]);
+   * // Returns: [{ file_id: 'file-abc123', filename: 'results.csv', download_url: 'https://...' }]
+   * ```
+   */
+  extractFileDownloadUrls(
+    fileOutputs: Array<{
+      file_id: string;
+      filename: string;
+      size?: number;
+      mime_type?: string;
+    }>,
+    baseUrl = 'https://api.openai.com/v1',
+  ): Array<{
+    file_id: string;
+    filename: string;
+    download_url: string;
+    size?: number;
+    mime_type?: string;
+  }> {
+    return fileOutputs.map((file) => ({
+      ...file,
+      download_url: `${baseUrl}/files/${file.file_id}/content`,
+    }));
+  }
 }
