@@ -313,7 +313,7 @@ curl -X POST http://localhost:3000/api/audio/transcriptions \
 
 - **[Full API Documentation](../README.md)** - Complete reference for all endpoints
 - **[Architecture Overview](../README.md#architecture-overview)** - Module organization and request flow
-- **[Code Interpreter Guide](./code-interpreter-guide.md)** - Production deployment
+- **[Responses API Guide](./RESPONSES_API.md)** - Code Interpreter, tool calling, streaming
 - **[Error Handling](../README.md#error-handling)** - Error codes and solutions
 
 ### 🧪 Try Advanced Features
@@ -338,13 +338,13 @@ npm run format           # Format code
 npm run start:dev        # Auto-reload on changes
 ```
 
-### 🚀 Production Deployment
+### 🚀 Advanced Documentation
 
-See [Code Interpreter Production Guide](./code-interpreter-guide.md) for:
-- Container management
-- Security best practices
-- Performance optimization
-- Error recovery strategies
+See the detailed API documentation:
+- **[Responses API](./RESPONSES_API.md)** - Text generation, tool calling, streaming
+- **[Streaming Guide](./STREAMING.md)** - 63+ event types, SSE implementation
+- **[Architecture](./ARCHITECTURE.md)** - Module structure, request flow
+- **[Data Flow](./DATA_FLOW.md)** - Request/response transformations
 
 ---
 
@@ -394,7 +394,7 @@ taskkill /PID <PID> /F
 
 - [Full Troubleshooting Guide](./TROUBLESHOOTING.md)
 - [Common Issues](../README.md#error-handling)
-- [GitHub Issues](https://github.com/anthropics/claude-code/issues)
+- [Architecture Overview](./ARCHITECTURE.md)
 
 ---
 
@@ -415,4 +415,4 @@ taskkill /PID <PID> /F
 
 **Need Help?** See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) or open an issue.
 
-**Ready for Production?** Read [code-interpreter-guide.md](./code-interpreter-guide.md).
+**Ready for More?** Explore [RESPONSES_API.md](./RESPONSES_API.md) and [STREAMING.md](./STREAMING.md).
